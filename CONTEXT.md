@@ -192,8 +192,35 @@ _Avoid_: Token 计数器、tiktoken
 
 ---
 
+## 系统范式（Paradigm）
+
+本节记录系统最核心的认知框架，用于指导所有设计决策和对外表述。
+
+**Workflow Emergence（工作流涌现）**：
+系统不包含 Workflow 层。不存在 Workflow 定义语言、DAG 设计、Pipeline 配置。所谓"工作流"是执行图积累到一定规模后从历史轨迹中统计涌现出的模式，由 TemplateProposalWorker 提取后存入 procedural_memory。Workflow 是副产品，不是产品。
+_Avoid_: 工作流引擎、流程定义、Pipeline 配置
+
+**Cross-Domain Topology Pattern（跨域拓扑模式）**：
+在人类看来完全不同的任务类型（竞品调研、生产事故调试、API 设计、PRD 撰写）可能共享相同的图拓扑阶段序列（如：探索 → 假设 → 验证 → 收敛）。这类结构在单个任务层面不可见，只有在执行图积累足够多的 Scope 后才能在聚合视图中显现。Cross-Domain Topology Pattern 是 Workflow Emergence 的最高价值形式。
+_Avoid_: 通用工作流、模板复用、流程迁移
+
+**Context as Projection（上下文即投影）**：
+Context Window 不是系统状态，而是执行图在当前 LLM 调用时刻的因果投影。系统状态永远存在于图中，Context Window 是按 Token 预算从图的因果血缘向上追溯构建的瞬时视图。关系：`Graph（永久状态）→ Context Window（投影）`，不可逆转。
+_Avoid_: Context 即状态、上下文管理、Prompt 即记忆
+
+**Cognitive Trace（认知轨迹）**：
+一个 Scope 完整执行期间所有 Worker 在执行图中留下的事件序列，包括成功路径、偏离路径、冲突节点及孤岛节点。Cognitive Trace 是 Workflow Emergence 的原材料。LLM 的每一次偏离和创新本身也是 Cognitive Trace 的一部分，会反哺未来的模式发现。
+_Avoid_: 执行历史、日志、操作记录
+
+**LLM as Graph Navigator（图导航者）**：
+LLM 在本系统中的角色不是"执行预定义工作流"，而是"在执行图的积累轨迹中导航"。系统向 LLM 注入历史上已验证有效的结构作为参考（Skeleton Graph + 反思记忆），但 LLM 保持偏离自由。偏离本身若产生更优路径，将通过 TemplateProposalWorker 更新模式库，形成闭环。
+
+---
+
 ## 标记歧义
 
 **「节点」（node）**：文档中同时指代 Entity 的某个 Version（图节点）和 Scope 容器节点。统一规范：图节点 = Version，宏观容器 = Scope。
 
 **「冲突」（conflict）**：可能指 OCC 并发写冲突（触发 `conflict_detected`），也可能指 ConflictResolverWorker 的语义合并对象。前者是数据库层事件，后者是控制流阶段，两者不同。
+
+**「工作流」（workflow）**：在本系统中永远指涌现出的模式，不指预定义的流程。对外介绍时明确区分：本系统发现工作流，不执行工作流。

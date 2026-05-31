@@ -2,14 +2,16 @@
 
 ## Vision
 
-A graph-native agent runtime where an immutable event graph serves as the single source of truth. Decentralized event bus drives multi-agent collaboration. Blockchain-ledger philosophy ensures tamper-proof state and adaptive evolution.
+A system for discovering reusable workflows from execution graphs — not designing them. There is no workflow layer. Memory, workflow, context, and state are all views of the same append-only event graph. The context window is a projection of the graph; the graph is the permanent state. Workflows emerge as statistical patterns from accumulated cognitive traces, including cross-domain structures that are invisible at the level of individual tasks.
 
 ## Goals
 
-- Immutable, append-only execution graph stored in PostgreSQL
-- Cryptographic version hashing (SHA-256 via pgcrypto)
-- Multi-agent coordination over a decentralized event bus
-- Full auditability via predecessor hash chains
+- Append-only execution graph (PostgreSQL) as single source of truth for all state
+- Context assembly as causal projection from graph lineage, not prompt engineering
+- Workflow pattern discovery from execution history — across task types, not just within them
+- Multi-agent coordination with automatic conflict resolution (no exceptions, no lost work)
+- Long-term memory as emergent graph views (episodic, semantic, procedural) — not a separate product
+- Full causal auditability: every outcome traceable to the event that caused it
 
 ## Status
 
