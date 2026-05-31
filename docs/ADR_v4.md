@@ -210,8 +210,8 @@
   | 事件类型 | 触发场景 | 变更受体 |
   |---|---|---|
   | `plan_created` | 新意图启动，Scope 首个事件 | 触发控制面筑巢，创建 Scope 根节点 N_root |
-  | `task_spawned` | 大模型将宏观任务拆解为具体子任务 | 创建待执行任务节点，声明强依赖前驱边 |
-  | `memory_updated` | Worker 执行成功写入新事实，或合并收敛 | 产生新 version_hash，向后推进正统版本链 |
+  | `task_spawned` | 大模型将宏观任务拆解为具体子任务 | 创建待执行任务节点（初始 payload 含 `"status": "pending"`），声明强依赖前驱边 |
+  | `memory_updated` | Worker 执行成功写入新事实、合并收敛、或标记任务完成 | 产生新 version_hash，向后推进正统版本链；当 payload 含 `"status": "completed"` 且 `entity_id` 指向 `task_spawned` 节点时，看门狗计数 `completed_tasks++` |
   | `conflict_detected` | 并发抢占 OCC 锁失败，触发原子因果倒置 | 强行产生分叉行并落盘，唤醒合并器 |
   | `scope_closed` | 看门狗终审判定当前 Scope 拓扑完美闭环 | 终止 Scope 生命周期，触发冷归档与模板审计 |
 
@@ -380,20 +380,37 @@
 
   **第三级：数据库 B-Tree 强一致性终审**
   ```sql
-  SELECT COUNT(*)
-  FROM execution_event_log_scope_{id} AS e
-  WHERE (e.event_type = 'task_spawned' AND e.payload->>'status' != 'completed')
-     OR (e.event_type = 'conflict_detected' AND NOT EXISTS (
-         SELECT 1
-         FROM execution_event_log_scope_{id} AS m
-         WHERE m.event_type = 'memory_updated'
-           AND m.payload->'_meta'->'convergence_gate'->>'conflicted_basis_hash'
-               = e.version_hash
-     ));
+  SELECT COUNT(*) FROM (
+    -- 条件1：已 spawned 但尚无对应 memory_updated(status=completed) 的任务
+    SELECT t.id
+    FROM execution_event_log_scope_{id} AS t
+    WHERE t.event_type = 'task_spawned'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_event_log_scope_{id} AS m
+        WHERE m.event_type = 'memory_updated'
+          AND m.entity_id = t.entity_id
+          AND m.payload->>'status' = 'completed'
+      )
+    UNION ALL
+    -- 条件2：conflict_detected 尚无对应 convergence_gate memory_updated
+    SELECT e.id
+    FROM execution_event_log_scope_{id} AS e
+    WHERE e.event_type = 'conflict_detected'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_event_log_scope_{id} AS m
+        WHERE m.event_type = 'memory_updated'
+          AND m.payload->'_meta'->'convergence_gate'->>'conflicted_basis_hash'
+              = e.version_hash
+      )
+  ) AS blockers;
   ```
   COUNT = 0 → 投递 `scope_closed`；COUNT > 0 → 拒绝，内存状态对齐自愈。
 
-  **⚠️ SQL 修正（2026-05-31）**：原版使用 `NOT IN` 子查询，当子查询结果集含 NULL（绝大多数 `memory_updated` 行不含 `convergence_gate`，路径表达式返回 NULL）时，`NOT IN` 整体为 NULL 而非 TRUE，导致 COUNT 错误归零、看门狗误判收敛。修正为 `NOT EXISTS`，对空集返回 TRUE，含 NULL 行不受影响，行为确定性恢复。
+  **⚠️ SQL 修正 v1（2026-05-31）**：原版 `NOT IN` 子查询改为 `NOT EXISTS`，防止含 NULL 的 `convergence_gate` 路径表达式导致看门狗误判。
+
+  **⚠️ SQL 修正 v2（2026-06-01）**：原版条件1直接判断 `task_spawned` 行自身 `payload->>'status' != 'completed'`——在 append-only 系统中，`task_spawned` 事件写入后永不变更，该条件恒为真，看门狗永远无法触发 `scope_closed`。修正为 `NOT EXISTS` 子查询，检查是否存在同一 `entity_id` 的 `memory_updated(status=completed)` 事件（任务完成信号），与第一级内存计数语义对齐。
 
   **附加规范**:
   - 看门狗是系统内唯一有权产生 `scope_closed` 事件的合法源头
@@ -529,7 +546,7 @@
   - `m=16, ef_construction=64` 是 pgvector HNSW 的内置默认值，与不写 WITH 子句行为相同，参数选择正确。
   - 查询时默认 `hnsw.ef_search=40`。当过滤后候选集较小（< 100 条）时，建议 `SET hnsw.ef_search = 100` 提升召回率。
   - 上述查询为单路向量 + 四信号线性加权（无 BM25）。加入 BM25 后须改用双路 RRF（见 P0-A/P0-B 研究），结构变为：RRF(vector_rank, bm25_rank) × 0.5 + quality × 0.25 + recency × 0.1 + diversity × 0.15。
-  - `last_used_at` 初始为 NULL 时，recency_score 公式 `1.0 - EXTRACT(EPOCH FROM (NOW() - last_used_at)) / (86400.0 * 30)` 会产生 NULL，需在查询中用 `COALESCE(last_used_at, created_at)` 保护。
+  - `last_used_at` 初始为 NULL 时（新模板从未使用），用 `COALESCE(last_used_at, NOW())` 保护（见上方 SQL）：fallback 为 NOW() 使 recency_score = 1.0，赋予新模板最高时效分，参与候选竞争。**不用 `created_at` 做 fallback**——模板提炼时间早晚不代表"多久未使用"。
 
 - **后果**: 四层记忆全部统一在 PostgreSQL 内，SSOT 原则不破坏，向量写入与事件写入原子同生共死，记忆系统具备完整的版本链、强化衰减、矛盾检测能力。
 
@@ -605,4 +622,16 @@
 - `scope_lineage` 元数据冷表 + 三步火炬传递：子 `scope_closed` → 控制面直写 `sub_scope_resolved` → SubScopeResultWorker 语义合并 → 父 `memory_updated`
 - 控制面保持纯基础设施角色，业务语义合成在 Worker 层（ADR 12 五大枚举不变）
 
-**共 23 条 ADR（含 2 条补充），七层架构全部覆盖。**
+**ADR 24｜Agent 接入协议：HTTP Gateway**（`docs/adr/0026-adr24-agent-entry-point-protocol.md`）
+- Phase 1 阻断缺口：所有 ADR 01-23 从 `plan_created` 之后定义，外部 Agent 如何提交任务未定义
+- **决策**：HTTP REST Gateway（Hono/Fastify），3 个端点：`POST /v1/scopes`、`POST /v1/scopes/{id}/events`、`GET /v1/scopes/{id}`
+- 每次 event POST 后 Gateway 同步组装 Knapsack 上下文并返回，`scope_closed` 时 context=null 通知 Agent 终止
+- Phase 2：MCP Adapter 作为 HTTP Gateway 上层薄包装，Claude Code 原生工具调用体验（不阻塞 Phase 1）
+
+**ADR 25｜跨域拓扑模式发现算法：WL 图核 + 拓扑嵌入**（`docs/adr/0027-adr25-cross-domain-topology-algorithm.md`）
+- 核心价值承诺的算法实现：识别表面无关任务（调试/研究/规划）中相同的底层执行拓扑
+- **算法**：Weisfeiler-Lehman (WL) 图核（h=3 迭代，event_type 为节点标签，O(n×d)，无需训练）
+- **Phase 1**：`procedural_memory` 新增 `topology_embedding vector(64)` 字段，TemplateProposalWorker 在模板提炼后计算 WL 嵌入写入（schema stub）
+- **Phase 2**：CrossScopePatternDiscoveryWorker 定期查询余弦相似度 > 0.90 但意图语义差异大的跨域模板对，写入 `cross_domain_cluster_id`，冷启动扩展跨域骨架推荐
+
+**共 25 条 ADR（含 2 条补充），七层架构 + 接入协议 + 跨域发现算法全部覆盖。**

@@ -1,15 +1,51 @@
 {
   "gsd": {
     "issue_tracker": "github",
-    "github_repo": "ClydeShen/graph-enginerring",
+    "github_repo": "ClydeShen/graph-engineering",
     "labels": "canonical",
     "docs_strategy": "single-context",
-    "context_file": "Graph Engineering/CONTEXT.md"
+    "context_file": "Graph Engineering/CONTEXT.md",
+    "project_board": {
+      "provider": "github-projects-v2",
+      "name": "Graph-Native Agent Runtime",
+      "project_id": "PVT_kwHOAPZRDM4BZVRo",
+      "project_number": 4,
+      "url": "https://github.com/users/ClydeShen/projects/4",
+      "columns": ["Triage", "Needs PRD", "Needs Review", "Ready for Agent", "In Progress", "Done"],
+      "milestones": ["Design", "MVP", "v1.0"]
+    }
   },
   "harness": {
     "state_file": ".harness/state.json",
     "phases_dir": ".harness/phases",
     "project_file": ".harness/PROJECT.md",
     "roadmap_file": ".harness/ROADMAP.md"
+  },
+  "project_fields": {
+    "status": {
+      "field_id": "PVTSSF_lAHOAPZRDM4BZVRozhUUoeU",
+      "options": {
+        "Triage": "3ffb3945",
+        "Needs PRD": "f6ab4b03",
+        "Needs Review": "d955a1d7",
+        "Ready for Agent": "467257fc",
+        "In Progress": "70d660b0",
+        "Done": "44b8bd73"
+      }
+    },
+    "effort": {
+      "field_id": "PVTF_lAHOAPZRDM4BZVRozhUUoj4",
+      "type": "number"
+    },
+    "size": {
+      "field_id": "PVTSSF_lAHOAPZRDM4BZVRozhUUokw",
+      "options": {
+        "XS": "5cc8da1d",
+        "S": "1b97d26d",
+        "M": "6de49fd4",
+        "L": "a3a875b0",
+        "XL": "1be4a5ba"
+      }
+    }
   }
 }

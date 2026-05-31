@@ -15,7 +15,9 @@
 
 ### 1.2 项目愿景
 
-本项目旨在构建一个基于 Pi Agent 框架与 iii-engine 通用异步事件总线的去中心化、图原生 (Graph-Native) Agent 运行时系统。本系统借鉴了区块链 (Blockchain) 的账本与共识哲学，将系统的控制流、长期记忆与资产演进完全融合在一张不可变的"执行图 (Execution Graph)"中。
+本项目旨在构建一个以 **iii-engine 通用异步事件总线**为运行时基础设施的去中心化、图原生 (Graph-Native) Agent 运行时系统，面向 Claude Code、Pi 等外部 Agent 提供执行运行时服务。本系统借鉴了区块链 (Blockchain) 的账本与共识哲学，将系统的控制流、长期记忆与资产演进完全融合在一张不可变的"执行图 (Execution Graph)"中。系统不包含工作流层，工作流是从积累的执行历史中涌现的统计模式，而非预先设计或编排的组件。
+
+> **注意**：Pi Agent（pi.dev）是一个外部 Agent 框架，是本系统的潜在消费者而非内置依赖。Pi Agent 原生 SDK 集成（`runtime.fork()` 沙箱）规划于 Phase 4，Phase 1 通过通用 Agent 接入协议支持任意 Agent 连接。
 
 系统的最终目标是实现**工具彻底解耦**、**多上下文窗口物理群组化**以及**工作流无代码自适应进化**。
 
@@ -163,7 +165,7 @@ iii-engine 重连后读取 `bus_state.last_processed_event_id`，补发所有 `e
 
 **上下文隔离结构**:
 ```
-[SYSTEM PROMPT]:    Core Schema Rules & tRPC Contracts
+[SYSTEM PROMPT]:    Core Schema Rules & Dynamic Domain Contracts
 [EXECUTION CONTEXT]: Immutable Graph Lineage（确定性轨道，Knapsack 切片）
 [REFLECTION MEMORY]: Procedural + Episodic + Semantic（发散性轨道，按需注入）
 ```
@@ -190,9 +192,9 @@ W_max = W_physical - W_system_prompt - △_padding
 - **事件类型约束**: 必须属于系统五大法定认知事件集（`plan_created`, `task_spawned`, `memory_updated`, `conflict_detected`, `scope_closed`）
 - **Scope 盐化哈希**: 任何 `digest()` 调用前必须将 `scope_id` 作为第一要素压入字节流，系统拒绝接收未经 Scope 盐化处理的裸载荷哈希
 
-### 5.2 动态业务类型契约 (tRPC-like Domain Contract)
+### 5.2 动态业务类型契约 (Dynamic Domain Contract)
 
-针对多变具体的业务场景，系统引入类似 tRPC 强类型接口契约的概念：
+针对多变具体的业务场景，系统引入强类型接口契约机制（概念上类似 tRPC 的类型安全 API 契约，但本系统**不依赖 tRPC 框架**——契约存储于 `procedural_memory` 表，通过 iii-engine 总线注入 Worker 上下文）：
 
 - 当系统在大模型运行过程中自适应地涌现并固化出某种特定业务类型的节点时，其类型规范会被注册到系统的程序记忆（`procedural_memory` 表）中
 - 任何 Worker 在试图消费或处理该类型节点前，总线会强制将该业务契约转换为前置 Prompt 约束注入其 Context Window
