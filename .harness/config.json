@@ -1,0 +1,15 @@
+{
+  "gsd": {
+    "issue_tracker": "github",
+    "github_repo": "ClydeShen/graph-enginerring",
+    "labels": "canonical",
+    "docs_strategy": "single-context",
+    "context_file": "Graph Engineering/CONTEXT.md"
+  },
+  "harness": {
+    "state_file": ".harness/state.json",
+    "phases_dir": ".harness/phases",
+    "project_file": ".harness/PROJECT.md",
+    "roadmap_file": ".harness/ROADMAP.md"
+  }
+}
