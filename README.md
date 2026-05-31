@@ -1,88 +1,174 @@
 # Graph-Native Agent Runtime
 
-> A tamper-proof, self-learning runtime for multi-agent AI systems — where every decision is permanent, every mistake is a lesson, and the system gets smarter every time it runs.
+> Stop rebuilding agent infrastructure. Build on a graph that thinks, remembers, and evolves.
 
 ---
 
-## The Vision
+## The Problem Every Team Hits
 
-AI agents today are powerful but fragile. They think, act, and forget. When something goes wrong — a tool crashes, two agents disagree, the context fills up — there's no reliable audit trail, no way to recover gracefully, and no mechanism to learn from the failure.
+Whether you are building a coding agent, a research pipeline, a knowledge assistant, or an enterprise automation — your team eventually builds the same things:
 
-This project sets out to build a runtime where **AI agents operate like a decentralized, self-healing organism**: every thought, every action, and every failure is recorded as an immutable fact in a shared graph. The system never forgets, never lies, and gets better with every task it completes.
+```
+memory/          ← user preferences, project context, decisions
+context/         ← summarization, retrieval, injection
+workflow/        ← plan → execute → review → fix
+adapters/        ← Claude, Codex, MCP, GitHub, Slack ...
+```
+
+Different names. Same architecture. Built from scratch. Again.
+
+This is not a productivity problem. It is a missing abstraction problem.
 
 ---
 
-## The Problem
+## Seven Pain Points
 
-Modern AI agent frameworks suffer from three fundamental flaws:
+### 1. Tool Lock-In
 
-**1. Brittle tool coupling**
-Agent logic is hardwired to specific tools. If a tool fails, the whole pipeline breaks — there's no graceful fallback, no self-healing.
+Most workflows are built *around* tools, not *above* them:
 
-**2. Non-reusable workflows**
-Every new task starts from scratch. Even if the agent has solved the same class of problem a hundred times, that knowledge is lost when the context window closes.
+```
+Tool → Workflow        ← what most teams build
+Intent → Execution → Tool   ← what they should build
+```
 
-**3. "Lost in the Middle" hallucination**
-As tasks grow complex, dumping raw history into the LLM causes it to lose track of what matters. The agent starts contradicting itself, repeating work, or fabricating answers.
+When Claude changes its API, the MCP spec shifts, or pricing breaks your budget — the workflow breaks with it. The entire control flow is coupled to a tool that you don't control.
+
+### 2. Workflows Cannot Be Reused
+
+A coding workflow — read, analyze, plan, modify — cannot become a research workflow without rewriting prompts, tools, and orchestration logic. Every project ends up creating another workflow engine instead of reusing one.
+
+### 3. Memory Is Treated As Storage
+
+Most systems think memory means a vector database or an embedding store. But memory is not storage. Memory is:
+
+- **Identity** — is this the same thing we saw before?
+- **History** — how did we get here?
+- **Evolution** — has this fact changed?
+- **Contradiction** — does this conflict with what we know?
+
+Without those properties, memory is just a large, searchable cache. It cannot tell you whether a fact has been superseded, how a conclusion was reached, or whether two pieces of knowledge contradict each other.
+
+### 4. Context Window Becomes System State
+
+Most agent frameworks encode state inside the LLM prompt:
+
+```
+Conversation history + injected context + prompt engineering = system state
+```
+
+This is expensive, fragile, model-dependent, and impossible to replay accurately. Change the model and the behavior changes. The entire "state" is hidden inside tokens you can't inspect or audit.
+
+### 5. No Unified Representation
+
+Memory, workflow, tasks, agents, tools, and knowledge are implemented as separate systems — vector databases, workflow engines, task queues, memory layers, agent runtimes — all with their own representations of the same underlying concepts: dependencies, state transitions, ownership, history, relationships.
+
+The result is duplicated logic everywhere, with no shared language between systems.
+
+### 6. No Replayability
+
+Most systems cannot answer:
+
+- *Why did the agent make this decision?*
+- *What was the state of the system at 2pm yesterday?*
+- *Can we reproduce this exact outcome?*
+
+Because prompts, context, memory, and tool outputs all changed — and nothing was recorded immutably. There is no audit trail.
+
+### 7. Agents Are Service-Centric
+
+Most systems are built as `Agent → Tool → Result`. Control flow belongs to services. This creates hidden state, hidden decisions, poor observability, and components that are nearly impossible to swap out.
 
 ---
 
-## The Solution
+## The Fundamental Observation
 
-The core insight is borrowed from **blockchain ledger philosophy**: instead of letting agents mutate shared state and argue about what's true, every action becomes an immutable **append-only event** in a cryptographically linked graph.
+Memory, workflow, agents, tools, tasks, and knowledge are not separate concerns.
 
-Think of it like a **Git repository for agent cognition**:
-- Every decision is a commit with a hash, a parent pointer, and a payload.
-- You can never rewrite history — only add to it.
-- Conflicts are resolved by merging, not by one agent overwriting another.
-- The full lineage of every outcome is always traceable.
+**They are all different views of the same underlying structure.**
 
-But unlike Git, this system is **alive**: it learns from each completed task, extracts reusable workflow templates, and injects them into future runs automatically. No human re-writes the code. The system evolves itself.
+Every one of them is an entity that changes over time, has a history, participates in relationships, and needs to be traced back to the intent that caused it.
 
 ---
 
-## How It Works — A Simple Example
+## The Solution: A Graph Runtime
 
-Imagine you ask the system: *"Research competitors and draft a positioning report."*
+Instead of building another agent framework, this project builds a **graph runtime** — the missing layer that agent frameworks should sit on top of.
 
-### Step 1 — A new Scope is born
-The system creates a **Scope** — a logical container for this entire task. A root event (`plan_created`) is written to the database, with no predecessor. This is the genesis block.
+The design is borrowed from **blockchain ledger philosophy**:
 
-```
-plan_created  ←  "Research competitors and draft a positioning report"
-    hash: 0xabc123...
-    predecessor: null  (the root)
-```
+- Every action is an **immutable event** appended to a shared graph.
+- Every event has a cryptographic hash of its content and a pointer to its predecessor — forming an unbreakable chain.
+- Nothing is ever overwritten. History is permanent.
+- The graph is the single source of truth. Tools, models, and services are replaceable.
 
-### Step 2 — Workers fan out
-Specialized **Workers** subscribe to events on the event bus. The `plan_created` event wakes up a planning Worker, which breaks the task into subtasks and writes them to the graph:
+Think of it as **Git for agent cognition**: every decision is a commit with a hash, a parent, and a payload. You can trace any outcome back to the intent that created it.
 
 ```
-task_spawned  ←  "Search for top 5 competitors"      hash: 0xdef456...  predecessor: 0xabc123
-task_spawned  ←  "Extract their pricing pages"        hash: 0x789abc...  predecessor: 0xabc123
-task_spawned  ←  "Summarize differentiators"          hash: 0x321fed...  predecessor: 0xabc123
+Intent
+  │
+  ▼  plan_created (genesis — no predecessor)
+  │
+  ▼  task_spawned  hash: 0x1a2b...  ← predecessor: genesis
+  │
+  ▼  memory_updated  hash: 0x3c4d...  ← predecessor: 0x1a2b
+  │
+  ▼  scope_closed  hash: 0x5e6f...  ← predecessor: 0x3c4d
 ```
 
-Each Worker only has `SELECT` and `INSERT` access — they can only read the graph and append new facts. They cannot delete or overwrite anything.
+**Workers** — stateless executors — subscribe to events on a shared bus, do one job, and write results back to the graph. They have only `SELECT` and `INSERT` access. They cannot mutate history. They are destroyed after each use.
 
-### Step 3 — Two Workers race and conflict
-Two Workers finish at the same moment and both try to advance the same node. The database's unique constraint acts as a referee:
+When two Workers conflict — both writing to the same node simultaneously — the database constraint picks a winner atomically. The loser is not discarded; it is reframed as a `conflict_detected` event. A dedicated resolver merges both versions semantically and writes a reconciled node. **No work is lost. No exception propagates.**
+
+When a task completes, the system mines the graph for patterns: efficient paths become reusable templates; failed paths become anti-patterns to avoid. The next similar task starts with a pre-built skeleton. **No human writes the workflow. The system evolves it.**
+
+---
+
+## A Concrete Example
+
+You ask the system: *"Research our top 5 competitors and draft a positioning report."*
+
+**1 — Scope is born**
+
+A root event is written. This is the genesis block for this task.
 
 ```
-Worker A wins  → memory_updated  (the canonical chain advances)
-Worker B loses → conflict_detected  (demoted, but NOT discarded)
-                 predecessor forced to point at Worker A's result
+plan_created
+  hash: 0xabc123
+  predecessor: null
+  payload: { intent: "Research competitors and draft positioning report" }
 ```
 
-A dedicated `ConflictResolverWorker` wakes up, reads both versions, calls the LLM to semantically merge them, and writes a single reconciled `v_merged` node. **No work is lost. No exception is thrown.**
+**2 — Workers fan out**
 
-### Step 4 — The Scope closes and learns
-When all tasks converge, a Watchdog checks the graph topology. Once it confirms nothing is pending, it writes `scope_closed`. This triggers a `TemplateProposalWorker` which:
-- Extracts the most efficient paths as **reusable workflow templates**
-- Archives failed branches as **anti-patterns to avoid**
-- Writes a summary to long-term memory
+A planning Worker reads the root event and breaks the task into subtasks, each written as a new event:
 
-**The next time someone asks a similar question, the system already knows a good path to take — without any human writing new code.**
+```
+task_spawned  "Find top 5 competitors"      predecessor: 0xabc123
+task_spawned  "Extract pricing pages"        predecessor: 0xabc123
+task_spawned  "Summarize differentiators"    predecessor: 0xabc123
+```
+
+**3 — Two Workers race**
+
+Two Workers finish at the same moment and both try to advance the same node. The database is the referee:
+
+```
+Worker A → memory_updated  (wins — chain advances)
+Worker B → conflict_detected  (demoted — predecessor forced to point at Worker A's result)
+```
+
+A `ConflictResolverWorker` wakes up, reads both sides, merges them semantically, and writes a single reconciled result. The conflict becomes part of the permanent record — evidence of what happened and how it was resolved.
+
+**4 — The Scope closes and learns**
+
+A Watchdog monitors graph topology. When all branches converge, it writes `scope_closed`. A `TemplateProposalWorker` then:
+
+- Extracts the lowest-conflict paths as **reusable templates**
+- Archives failed branches as **anti-patterns to avoid next time**
+- Writes summaries to long-term memory
+
+The next time someone asks a similar question, the system injects a pre-built skeleton into the new task's graph. Workers start working immediately rather than planning from scratch.
 
 ---
 
@@ -90,72 +176,81 @@ When all tasks converge, a Watchdog checks the graph topology. Once it confirms 
 
 | Concept | What it means |
 |---|---|
-| **Execution Graph** | The single source of truth. An append-only event log in PostgreSQL — everything the system has ever done or decided lives here. |
-| **Version** | An immutable snapshot of a piece of work, identified by a SHA-256 hash of its content and lineage. |
+| **Execution Graph** | The single source of truth. An append-only event log in PostgreSQL — everything ever decided or done lives here permanently. |
+| **Entity / Version** | An entity is a stable logical object (UUID). A Version is one immutable snapshot of it, identified by a SHA-256 hash of its content and full lineage. |
 | **Scope** | A container for one top-level task, spanning multiple AI context windows. Like a process group in an OS. |
-| **Worker** | A stateless executor that subscribes to one event type, does one job, and writes the result back to the graph. It is destroyed after each use. |
-| **Topological Horizon** | The precise slice of the graph fed to the LLM — traced backwards along predecessor hashes to the root, trimmed to fit the token budget. No random summarization; pure causal lineage. |
-| **OCC** | Optimistic Concurrency Control — concurrent Workers race to write; the database constraint picks the winner atomically; the loser is reframed as a conflict, not discarded. |
+| **Worker** | A stateless executor: subscribes to one event type, does one job, writes the result back to the graph. Destroyed after use. |
+| **Topological Horizon** | The precise graph slice fed to the LLM — traced backwards along predecessor hashes, trimmed to fit the token budget. Pure causal lineage, no lossy summarization. |
+| **OCC** | Optimistic Concurrency Control — concurrent Workers race; the database constraint picks the winner atomically; the loser is reframed as a `conflict_detected` event, not discarded. |
 
 ---
 
-## Architecture at a Glance
+## Architecture Overview
 
 ```
 User Intent
     │
     ▼
-┌─────────────────────────────────────────────────────────┐
-│  Control Plane (TypeScript)                              │
-│  • Creates the Scope (DDL: partition + HNSW index)      │
-│  • Bridges DB notifications → event bus (iii-engine)    │
-│  • Runs the Convergence Watchdog                        │
-└──────────────────────────┬──────────────────────────────┘
-                           │  WebSocket events
-                ┌──────────▼──────────┐
-                │  iii-engine (binary) │
-                │  Routes events to   │
-                │  matching Workers   │
-                └──────────┬──────────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         ▼                 ▼                 ▼
-    [Worker A]        [Worker B]    [ConflictResolverWorker]
-    SELECT/INSERT     SELECT/INSERT  reads both forks, merges
-         │                 │                 │
-         └─────────────────┴─────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│  PostgreSQL — Single Source of Truth                     │
-│                                                          │
-│  execution_event_log   ← the living graph               │
-│  episodic_memory       ← "what happened last time"      │
-│  semantic_memory       ← "what we know to be true"      │
-│  procedural_memory     ← "how to do it well"            │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│  Control Plane  (TypeScript)                        │
+│  • Creates Scope (DDL: partition + vector index)    │
+│  • Bridges DB notifications → event bus             │
+│  • Runs Convergence Watchdog                        │
+└──────────────────────┬─────────────────────────────┘
+                       │
+               ┌───────▼────────┐
+               │  iii-engine    │  ← pre-installed Rust binary
+               │  Routes events │    WebSocket to matching Workers
+               └───────┬────────┘
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+     [Worker A]   [Worker B]   [ConflictResolverWorker]
+     SELECT only  SELECT only   reads forks, merges, writes v_merged
+          │            │            │
+          └────────────┴────────────┘
+                       │
+                       ▼
+┌────────────────────────────────────────────────────┐
+│  PostgreSQL  —  Single Source of Truth              │
+│                                                     │
+│  execution_event_log   ← the living graph           │
+│  episodic_memory       ← "what happened last time"  │
+│  semantic_memory       ← "what we know to be true"  │
+│  procedural_memory     ← "how to do it well"        │
+└────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Why This Works
+## Why Three Properties Make This Work
 
-Three properties that make the system trustworthy:
+**Tamper-proof state** — Each node's hash is computed from its content plus its parent's hash. You cannot change a past event without invalidating every node that follows. The entire chain is always verifiable.
 
-**Tamper-proof state** — Every node's hash is computed from its content *plus* its parent's hash. You cannot change a past event without invalidating every node that comes after it. The full chain is always verifiable.
+**Decentralized control flow** — There is no central orchestrator. Workers subscribe to events and react independently. The graph conducts; Workers execute. Swap any Worker, any tool, any model — the graph stays intact.
 
-**Decentralized control flow** — There is no central orchestrator. Workers subscribe to events and react independently. The graph is the conductor; Workers are the musicians.
+**Self-evolving workflows** — After every completed task, the system mines its own execution history. Efficient paths become templates; failed paths become warnings. The system gets smarter every run without anyone writing new code.
 
-**Self-evolving workflows** — After every completed Scope, the system mines its own execution history for patterns. Efficient paths become templates. Failed paths become warnings. Future runs start smarter.
+---
+
+## What This Is Not
+
+This is not another agent framework.  
+This is not a replacement for Claude, Codex, or Cursor.  
+This is not an opinionated workflow engine.
+
+It is the **runtime layer** that those systems should operate on top of — so that memory persists, workflows transfer, tools stay replaceable, and every outcome can be traced, audited, and replayed.
 
 ---
 
 ## Tech Stack
 
-- **Runtime**: TypeScript (Control Plane + Workers)
-- **Event Bus**: [iii-engine](https://github.com/iii-hq/iii) — high-performance Rust async bus
-- **Database**: PostgreSQL with `pgcrypto` (SHA-256 hashing), `pgvector` (HNSW semantic search), `pg_partman` (Scope partitioning)
-- **LLM Interface**: OpenAI-compatible REST (`/v1/`) — works with OpenAI, Ollama, llama.cpp
+| Component | Technology |
+|---|---|
+| Runtime | TypeScript (Control Plane + Workers) |
+| Event Bus | [iii-engine](https://github.com/iii-hq/iii) — Rust async bus |
+| Database | PostgreSQL — `pgcrypto` (SHA-256), `pgvector` (HNSW search), list partitioning |
+| LLM Interface | OpenAI-compatible REST (`/v1/`) — works with OpenAI, Ollama, llama.cpp |
 
 ---
 
@@ -164,7 +259,6 @@ Three properties that make the system trustworthy:
 | Document | Description |
 |---|---|
 | [`CONTEXT.md`](CONTEXT.md) | Canonical domain glossary — precise definitions for all system terms |
-| [`docs/RFC_v4.md`](docs/RFC_v4.md) | Full system RFC — the complete design rationale and specification |
+| [`docs/RFC_v4.md`](docs/RFC_v4.md) | Full system RFC — complete design rationale and specification |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture deep-dive with Mermaid sequence diagrams |
 | [`docs/ADR_v4.md`](docs/ADR_v4.md) | All 23 Architectural Decision Records |
-| [`docs/adr/`](docs/adr/) | Individual ADR files for specific subsystems |
