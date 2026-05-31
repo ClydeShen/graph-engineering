@@ -1,8 +1,6 @@
 # Graph-Native Agent Runtime
 
-> Workflows are not designed. They emerge from execution graphs.
-
-**Not a memory system. Not a workflow engine. A system for discovering workflows from execution.**
+> A system where workflows are not designed or executed, but discovered as emergent structures from a shared execution graph.
 
 ---
 
@@ -79,11 +77,21 @@ A shared graph eliminates those integration points entirely.
 
 ---
 
+## There Is No Workflow Layer
+
+This system does not contain a workflow engine.
+
+There is no workflow definition language.  
+There are no DAGs to design.  
+There are no pipelines to author.
+
+What appears as a "workflow" is not a system component. It is a statistical pattern that emerges from execution history in the graph. The workflow was never written by anyone. It surfaced from accumulated execution.
+
+---
+
 ## Workflows Are Not Written. They Are Discovered.
 
-This is the claim that separates this project from all existing workflow tools.
-
-The most powerful property of recording every execution in a shared graph is not that individual workflows improve over time. It is that the system can **discover recurring structures across workflows that appear completely unrelated to humans**.
+The most powerful property of recording every execution in a shared graph is not that individual workflows improve over time. It is that the system can discover **recurring structures across workflows that appear completely unrelated to humans**.
 
 Consider:
 
@@ -101,37 +109,26 @@ Converge on answer          Converge on root cause
 
 To a human, these are different kinds of work. To the graph, they share the same topology.
 
-The same is likely true of designing an API, writing a PRD, investigating a security incident, and planning a migration. Across many executions, the same phases — exploration, hypothesis, validation, convergence — surface repeatedly in different domains.
+The same underlying structure likely appears in designing an API, writing a PRD, investigating a security incident, and planning a migration. Across many executions, the same phases — exploration, hypothesis formation, validation, convergence — surface repeatedly in entirely different domains.
 
-Because every task is recorded in the same graph, those structures become visible across task boundaries. The system can surface cognitive patterns that no human designer would have thought to encode.
+Because every task is recorded in the same graph, those structures become visible across task boundaries.
 
-The result is not workflow optimization. It is **workflow discovery**.
+The goal is not to optimize known workflows.  
+**The goal is to surface workflows that were never explicitly designed** — cross-domain structures that are invisible at the level of individual tasks, discoverable only when execution traces accumulate at sufficient scale.
 
 ---
 
-## Patterns Influence, Not Constrain
+## What LLMs Are Actually Doing
 
-When a discovered pattern is applied to a new task, it does not lock the agent into a fixed execution path.
+LLMs in this system are not executing workflows.
 
-The graph suggests likely next steps based on what has worked before. The agent remains free to diverge — and if it finds a better path, that path becomes part of the accumulated record too.
+They are **navigating a graph of accumulated execution traces**.
 
-This creates a different kind of reuse than template injection:
+The system does not instruct them on how to solve tasks. It provides them with structures that have already proven useful in similar contexts — and then leaves them free to follow, adapt, or diverge from those structures.
 
-```
-Pattern
-  ↓
-Suggested structure    ←  agent can follow or deviate
-  ↓
-Execution
-  ↓
-New trace added to graph
-  ↓
-Pattern updated
-```
+When an LLM deviates from a known pattern and finds a better path, that path becomes part of the accumulated record. The discovered pattern updates. Future runs inherit it.
 
-The system is not a workflow engine that you configure once. It is a structure that continuously learns what good execution looks like — across task types, projects, and teams — and uses that knowledge to make every future run start smarter.
-
-LLMs today are capable enough to self-organize around discovered patterns. They do not need a human to hand-code the right workflow for each domain. They need a system that can surface the structures that emerge from accumulated execution.
+This means the system improves not by being programmed, but by being used. The LLM's own judgment — expressed as graph evolution — is what the system learns from.
 
 ---
 
@@ -147,7 +144,7 @@ A runtime where execution is the input and workflow discovery is the output.
 
 **Causal context assembly.** Before each LLM call, the system traces backwards through the graph's event lineage and assembles a precise projection within the token budget. Pure causal context — no arbitrary truncation.
 
-**Emergent memory.** Working, episodic, semantic, and procedural memory are all stored in the same database. They are not a separate product — they are query interfaces over the graph the workflow already produced.
+**Emergent memory.** Working, episodic, semantic, and procedural memory are all stored in the same database — query interfaces over the graph the workflow already produced, not a separate product.
 
 ---
 
@@ -164,15 +161,19 @@ Because the graph — not the tool — is the state:
 
 ---
 
-## This Is Not
+## Common Misconceptions
 
-**Not a memory system** — memory is one view of the graph, not the product
+**"This is a memory system."**  
+Memory is one view of the graph. It is not the product. A memory system stores what you know. This system records how you arrived at what you know — and surfaces structural patterns from that record.
 
-**Not a workflow engine** — workflows emerge from execution history, not from definitions written in advance
+**"This is workflow optimization, like LangGraph with learning."**  
+LangGraph executes workflows you define. This system has no workflow layer. Patterns emerge from execution; they are not derived from existing workflows.
 
-**Not LangGraph or Temporal** — those tools execute workflows you define; this system discovers workflows from the cognitive traces agents leave behind
+**"This is like Temporal or Durable Execution."**  
+Temporal ensures that defined workflows run to completion, reliably. This system does not define workflows. It discovers them. The scope is different: reliability of execution vs. emergence of structure.
 
-**Not a replacement for Claude, Codex, or Cursor** — it is the runtime layer those systems should operate on top of
+**"This is event sourcing."**  
+Event sourcing is a storage pattern. This system uses append-only events as storage, but the purpose is not auditability or replay. The purpose is to accumulate a graph dense enough that cross-task cognitive patterns become visible.
 
 ---
 
