@@ -58,17 +58,27 @@
   ```
 
   ```typescript
-  // TypeScript：递归 key 排序
-  function canonicalJson(payload: unknown): string {
-      if (Array.isArray(payload)) return JSON.stringify(payload.map(canonicalJson));
+  // TypeScript：sortedValue 单次遍历（返回 JS 值树，修正原版数组双编码 bug）
+  // 原版 payload.map(canonicalJson) 返回 string[]，JSON.stringify 再将每个 string 加引号，
+  // 导致数组元素被双重序列化为字符串字面量，哈希结果与 Rust 版本不一致。
+  function sortedValue(payload: unknown): unknown {
+      if (Array.isArray(payload)) return payload.map(sortedValue);
       if (payload && typeof payload === 'object') {
-          const sorted = Object.fromEntries(
+          return Object.fromEntries(
               Object.keys(payload as object).sort()
-                  .map(k => [k, JSON.parse(canonicalJson((payload as Record<string,unknown>)[k]))])
+                  .map(k => [k, sortedValue((payload as Record<string, unknown>)[k])])
           );
-          return JSON.stringify(sorted);
       }
-      return JSON.stringify(payload);
+      return payload;
+  }
+  function canonicalJson(payload: unknown): string {
+      return JSON.stringify(sortedValue(payload));
+  }
+  // 哈希预像剥离：_meta（系统保留命名空间）与 schema_version 不参与哈希计算
+  // hashable domain = payload 减去 _meta 减去 schema_version
+  function hashablePayload(payload: Record<string, unknown>): string {
+      const { _meta, schema_version, ...rest } = payload;
+      return canonicalJson(rest);
   }
   ```
 
@@ -82,6 +92,37 @@
   | 阶段二：哈希计算与重算 | PostgreSQL 事务内核 | 将应用层传入的 `canonical_json_text`（TEXT）与 `scope_id`、`entity_id`、`predecessor_hash`、`event_type` 拼接后执行 `digest()`。Writable CTE 因果倒置路径中，`predecessor_hash` 改写为胜者哈希后，PostgreSQL 用**同一份 `canonical_json_text` 字符串**重新拼接并 `digest()`，不回调应用层，不做 `::jsonb` 转换 |
 
   核心不变量：**canonical_json_text 一旦离开应用层即为字面量常数，任何后续哈希重算均在 PostgreSQL 内用此常数直接参与字符串拼接。**
+
+  **ZERO_HASH 哨兵（Genesis Block 协议）**：
+
+  `plan_created` 事件是每个 Scope 的根节点，无前驱版本。其 `predecessor_hash` 使用 64 位全零 SHA-256 字面量作为哨兵值：
+
+  ```
+  ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
+  ```
+
+  哨兵选择依据：
+  - 64 位全零是不可能被任何真实内容哈希命中的字面量（SHA-256 碰撞概率 = 2⁻²⁵⁶）
+  - Gateway Zod 校验器的 `/^[0-9a-f]{64}$/` 正则接受它，无需特殊分支
+  - 数据库层借助 ZERO_HASH 实现单 Scope 根节点唯一性保障（见 ADR 04 偏函数唯一索引）
+
+  **Schema 注册表与 Payload 追加不变量（Schema Registry）**：
+
+  Payload 字段演化遵循三条铁律，保障跨版本哈希的可重放性：
+
+  | 铁律 | 规则 | 违禁示例 |
+  |------|------|---------|
+  | **① Required 永不降级** | 已标记 Required 的字段不得在新版本中变为 Optional 或删除 | `status: string` → `status?: string` ❌ |
+  | **② 新增字段只允许 Optional** | 任何新增字段必须为 Optional，不设默认值注入 | 新增 `priority: string` ❌（必须为 `priority?: string`） |
+  | **③ 禁止重命名或删除字段** | 字段一旦写入历史账本即永久存在，需改名须新增字段并标注 `deprecated` | `task_name` → `title` ❌ |
+
+  **Hashable Domain 边界**：
+  - `payload` 对象去除 `_meta` 和 `schema_version` 后的剩余内容 = hashable domain
+  - `_meta`：系统保留命名空间，由 Gateway Wasm Tokenizer 和 ConflictResolverWorker 写入，哈希预像中剥离
+  - `schema_version`：版本标记字段，哈希预像中剥离，确保同一业务内容在不同 schema 版本下哈希相同
+  - 应用层禁止在存储时注入默认值——hashable domain 必须是 Agent 原始提交内容的忠实镜像
+
+  **类型安全规范**：使用判别联合类型（Discriminated Union），禁止 `Partial<EventPayload>`——Partial 会在编译期抹去 Required 约束，为非法 payload 的静默写入开口。
 
 - **后果**: scope_id 盐值将跨 Scope 哈希碰撞的物理概率降至 SHA-256 碰撞概率级别，实现密码学层与数据库物理层的双重防脏写。图运行中产生的死胡同分支作为"孤岛节点（Orphan Nodes）"留在历史中，成为系统反思避免再次踩坑的证据。
 
@@ -118,7 +159,17 @@
   USING hnsw (embedding vector_cosine_ops);
   ```
 
-- **后果**: 查询复杂度锁死在单分区子表内，跨 Scope 哈希碰撞在数理上被消灭。
+  **ZERO_HASH Genesis Block 单一性保障**：在父表（全局分区路由层）追加偏函数唯一索引，物理阻断单 Scope 重复初始化：
+
+  ```sql
+  CREATE UNIQUE INDEX idx_scope_genesis_sole_lock
+  ON execution_event_log (scope_id, predecessor_hash)
+  WHERE predecessor_hash = '0000000000000000000000000000000000000000000000000000000000000000';
+  ```
+
+  该索引仅覆盖 `predecessor_hash = ZERO_HASH` 的行（即 `plan_created` 根节点），不干扰正常事件的 OCC 约束。同一 Scope 如果已存在根节点再次尝试写入 `plan_created` 时，数据库直接拒绝，Gateway 返回 409 Conflict。
+
+- **后果**: 查询复杂度锁死在单分区子表内，跨 Scope 哈希碰撞在数理上被消灭；ZERO_HASH 偏函数索引消灭 Scope 双初始化竞态窗口。
 
 ---
 
@@ -136,16 +187,40 @@
   - 高频长周期任务允许开启预创建缓冲池，低谷期预物化未来 N 个空白分区
   - `CREATE TABLE IF NOT EXISTS` 保证控制面操作幂等
 
-- **后果**: 热路径永远只见 DML，DDL 锁污染从架构层彻底消灭。
+  **筑巢 DDL 事务同步创建待处理节点查询索引**：
+
+  看门狗第三级终审 SQL（ADR 19）和 Knapsack 横轴扫描（ADR 13）共用以下复合索引，必须在筑巢阶段与子表同步创建：
+
+  ```sql
+  CREATE INDEX idx_scope_{id}_pending_lookup
+  ON execution_event_log_scope_{id} (entity_id, event_type)
+  WHERE event_type IN ('task_spawned', 'memory_updated');
+  ```
+
+  该索引将 NOT EXISTS 子查询的复杂度从全表扫描降至 B-Tree 点查，在 Scope 内任务数超过 100 后效果显著。索引随子表一同在控制面独占 DDL 事务中创建，热路径 Worker 无感知。
+
+- **后果**: 热路径永远只见 DML，DDL 锁污染从架构层彻底消灭；复合索引使看门狗终审查询始终为 O(log n)。
 
 ---
 
 ### ADR 06｜冷热分表归档策略
 - **状态**: 已通过 (Approved)
-- **上下文**: 热表需要永远维持轻量身段以保证 OCC 性能，但历史数据需要保留。
-- **决策**: 热表 `execution_event_log` 永远只维持活跃状态的 Scope 分区，身段控制在百万级。当接收到 `scope_closed` 协同事件时，后台归档进程执行 `ALTER TABLE ... DETACH PARTITION` 卸载，随后批量迁移至无唯一约束的冷表 `archived_event_log`，确保核心热表零物理碎片、零 Vacuum 负担。冷表可单独按时间做声明式分区，不影响热表 OCC。
+- **上下文**: 热表需要永远维持轻量身段以保证 OCC 性能，但历史数据需要保留。归档触发时序存在竞态风险：若归档发生在 TemplateProposalWorker 读取模板数据之前，数据将从热表消失导致模板提炼失败。
+- **决策**: 热表 `execution_event_log` 永远只维持活跃状态的 Scope 分区，身段控制在百万级。
 
-- **后果**: 系统长期运行后热表始终保持高性能，历史数据完整保留在冷表供审计和反思。
+  **归档触发时序规范（防竞态）**：
+
+  `scope_closed` 触发后的正确操作顺序：
+
+  1. **TemplateProposalWorker 先读后触发**：订阅 `scope_closed` 事件的 TemplateProposalWorker 完成完整的模板提炼流程（读取热表 DAG、计算 WL 嵌入、写入 `procedural_memory`），**最后**投递 `archive_scope` 内部控制指令
+  2. **ArchiveWorker 订阅 `archive_scope`**：接收到 `archive_scope` 指令后，执行 `ALTER TABLE ... DETACH PARTITION` + 批量迁移至冷表 `archived_event_log`
+  3. **控制面 5 分钟巡逻定时器（Crash Fallback）**：若 TemplateProposalWorker 崩溃未能投递 `archive_scope`，控制面定时器独立检测已 `scope_closed` 但未归档的 Scope，补发 `archive_scope` 指令，防止热表永久积压孤立分区
+
+  TemplateProposalWorker 是"谁读数据，谁释放数据"原则的执行者：它是最后一个需要热表数据的消费者，由它触发归档可从架构层消灭竞态窗口。
+
+  冷表可单独按时间做声明式分区，不影响热表 OCC。
+
+- **后果**: 系统长期运行后热表始终保持高性能，历史数据完整保留在冷表供审计和反思；归档竞态窗口从架构层消灭，控制面定时器提供崩溃容错。
 
 ---
 
@@ -250,6 +325,58 @@
 
 - **后果**: Worker 既能一眼看到最初用户意图（N_root），又能精准看到直接前驱，还能横向瞥见并行兄弟任务状态。Context Window 永远压在安全线以下。
 
+  **§13.2｜动态 W_max 与 model_fingerprint 隔离**
+
+  `W_max` 不是固定常数，而是从 `worker_profiles` 表按 `(worker_type, model_fingerprint)` 复合键实时读取的动态值：
+
+  ```
+  W_max = W_physical(model) - W_system_prompt - △_padding(worker_type, model_fingerprint)
+  ```
+
+  `model_fingerprint` 是模型标识字符串（如 `"claude-3-5-sonnet-20241022"` / `"gpt-4o-2024-11-20"`），在多设备（公司/家庭）或混合模型场景下，不同 Tokenizer 族的 △_padding 彼此物理隔离，互不污染。
+
+  `worker_profiles` 表 UPSERT 语义（GREATEST 策略）：
+
+  ```sql
+  INSERT INTO worker_profiles (worker_type, model_fingerprint, adaptive_padding)
+  VALUES ($1, $2, $3)
+  ON CONFLICT (worker_type, model_fingerprint)
+  DO UPDATE SET adaptive_padding = GREATEST(
+      worker_profiles.adaptive_padding,
+      EXCLUDED.adaptive_padding
+  );
+  ```
+
+  GREATEST 保证 △_padding 只增不减（防止因偶发低消耗拉低安全边际）。初始值通过 `iii-config.yaml` 的 `initial_delta_padding` 字段按 Tokenizer 族配置（默认 4096 tokens），运行期由 ADR 16 的惩罚公式动态增长。
+
+  **§13.3｜Knapsack B3 去重 + 双层优先填充算法**
+
+  原版算法中横轴兄弟节点与纵轴祖先节点存在重叠（`conflict_detected` 节点既在冲突状态集，又可能出现在祖先链），导致 budget 双重计费。修正后的 B3 算法：
+
+  ```typescript
+  // 第一步：水平层（横轴）—— conflict_detected + pending task_spawned，全量优先
+  const horizontal = getPendingAndConflicts(scopeId);    // Set<NodeId>
+
+  // 第二步：垂直层（纵轴）—— 祖先链排除已在水平层的节点
+  const vertical = getAncestorChain(N_current, N_root)
+                     .filter(n => !horizontal.has(n.id)); // 去重
+
+  // 第三步：合并候选集（水平层全量 first，垂直层按时序倒序 second）
+  const candidates = [...horizontal, ...vertical];
+
+  // 第四步：Knapsack 贪心填充
+  let budget = W_max - tokens(N_root) - tokens(N_current);
+  const selected: Node[] = [];
+  for (const node of candidates) {
+    if (budget >= tokens(node)) {
+      selected.push(node);
+      budget -= tokens(node);
+    }
+  }
+  ```
+
+  B3 语义保证：水平层（冲突+待处理）全量先入，垂直层（历史祖先）按时效性填满剩余 budget，N_root 和 N_current 不占 candidates 的 budget（已预扣）。
+
 ---
 
 ### ADR 14｜Context Window 安全容量公式
@@ -287,9 +414,23 @@
   △_padding_new = △_padding + (实际 prompt_tokens - 估算 tokens) × 1.5
   ```
 
-  每个 Worker 通道维护独立垫片，互不干扰。
+  **`worker_profiles` 物理 Schema（含 model_fingerprint 复合键）**：
 
-- **后果**: 在 1-2 次交互内自适应闭环，Context OOM 物理概率降归为零。
+  ```sql
+  CREATE TABLE worker_profiles (
+      worker_type        VARCHAR(50)  NOT NULL,
+      model_fingerprint  VARCHAR(100) NOT NULL,   -- 如 "claude-3-5-sonnet-20241022"
+      adaptive_padding   INT          NOT NULL DEFAULT 4096,
+      updated_at         TIMESTAMPTZ  DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (worker_type, model_fingerprint)
+  );
+  ```
+
+  `(worker_type, model_fingerprint)` 复合主键保证同一 Worker 类型在不同 Tokenizer 族下维护独立的 △_padding，物理隔离，GREATEST UPSERT 语义（详见 ADR 13 §13.2）。`initial_delta_padding` 初始值在 `iii-config.yaml` 中按 Tokenizer 族配置。
+
+  每个 Worker 通道维护独立垫片，多设备/混合模型场景下互不污染。
+
+- **后果**: 在 1-2 次交互内自适应闭环，Context OOM 物理概率降归为零；model_fingerprint 复合键使多 Tokenizer 族并存时 △_padding 不互相污染。
 
 ---
 
@@ -328,16 +469,30 @@
 - **上下文**: 处理冲突合并（热路径）与处理模板提案（冷路径）职责完全不同，必须物理隔离。v_merged 的 predecessor_hash 指向错误会导致图环路死锁或历史断裂。
 - **决策**: ConflictResolverWorker 与 TemplateProposalWorker 在物理、部署、Context Window 上完全独立解耦。
 
-  收敛节点 v_merged 写回规范：
-  - `event_type` 刚性标记为 `memory_updated`，重归正统版本链
-  - `predecessor_hash` 必须刚性指向分叉末端行 v_2（conflict_detected 节点），不得越过任何历史节点
-  - Payload 必须强制内嵌 `convergence_gate` 双向锚定矩阵：
+  收敛节点 v_merged 完整结构规范：
+
+  | 字段 | 值 | 说明 |
+  |------|----|------|
+  | `entity_id` | 与冲突双方相同的 entity_id | v_merged 代表同一实体的新版本，不是新实体 |
+  | `event_type` | `"memory_updated"` | 刚性标记，重归正统版本链 |
+  | `predecessor_hash` | v_2（conflict_detected 节点）的 version_hash | 必须指向分叉末端行，不得越过任何历史节点 |
+  | `payload.status` | 条件继承（见下方规则） | 不强制覆写，由冲突内容决定 |
+  | `payload._meta.convergence_gate` | 双向锚定矩阵（见下方） | 系统写入，不参与哈希 |
+
+  **`payload.status` 条件继承规则**：
+  - 若冲突双方的业务逻辑表明任务已完成（如合并结果代表最终事实）→ `"completed"`
+  - 若合并结果仍需后续处理 → 保留 `"pending"` 或其他原始状态
+  - ConflictResolverWorker 基于业务语义判断，不强制
+
+  **`convergence_gate` 完整结构**：
 
   ```json
   {
     "event_type": "memory_updated",
+    "entity_id": "<same-entity-id-as-conflicting-parties>",
     "payload": {
       "business_fact": "...",
+      "status": "completed",
       "_meta": {
         "tokens": { "model_x": 120 },
         "convergence_gate": {
@@ -349,6 +504,8 @@
     }
   }
   ```
+
+  `conflicted_basis_hash` 与 ADR 19 看门狗第三级 SQL 的 `m.entity_id = e.entity_id` + `version_hash` 双条件联动，精确匹配对应的 `conflict_detected` 事件（防止跨实体误解除）。
 
   **附加规范**:
   - 总线连接层强行校验 predecessor_hash 不得逆向越过冲突行，违者直接拒绝提交
@@ -401,6 +558,7 @@
         SELECT 1
         FROM execution_event_log_scope_{id} AS m
         WHERE m.event_type = 'memory_updated'
+          AND m.entity_id = e.entity_id
           AND m.payload->'_meta'->'convergence_gate'->>'conflicted_basis_hash'
               = e.version_hash
       )
@@ -411,6 +569,8 @@
   **⚠️ SQL 修正 v1（2026-05-31）**：原版 `NOT IN` 子查询改为 `NOT EXISTS`，防止含 NULL 的 `convergence_gate` 路径表达式导致看门狗误判。
 
   **⚠️ SQL 修正 v2（2026-06-01）**：原版条件1直接判断 `task_spawned` 行自身 `payload->>'status' != 'completed'`——在 append-only 系统中，`task_spawned` 事件写入后永不变更，该条件恒为真，看门狗永远无法触发 `scope_closed`。修正为 `NOT EXISTS` 子查询，检查是否存在同一 `entity_id` 的 `memory_updated(status=completed)` 事件（任务完成信号），与第一级内存计数语义对齐。
+
+  **⚠️ SQL 修正 v3（2026-06-01）**：条件2的 NOT EXISTS 子查询追加 `m.entity_id = e.entity_id` 约束。原版仅匹配 `conflicted_basis_hash = e.version_hash`——理论上同一 Scope 内不同实体的 version_hash 不会碰撞（SHA-256），但缺少 entity_id 约束使得同实体的多次冲突场景下查询意图不够明确，且无法利用复合索引 `(entity_id, event_type)` 加速。修正后双条件联动与 ADR 18 `convergence_gate.conflicted_basis_hash` 的实体关联语义严格对齐。
 
   **附加规范**:
   - 看门狗是系统内唯一有权产生 `scope_closed` 事件的合法源头
@@ -548,6 +708,20 @@
   - 上述查询为单路向量 + 四信号线性加权（无 BM25）。加入 BM25 后须改用双路 RRF（见 P0-A/P0-B 研究），结构变为：RRF(vector_rank, bm25_rank) × 0.5 + quality × 0.25 + recency × 0.1 + diversity × 0.15。
   - `last_used_at` 初始为 NULL 时（新模板从未使用），用 `COALESCE(last_used_at, NOW())` 保护（见上方 SQL）：fallback 为 NOW() 使 recency_score = 1.0，赋予新模板最高时效分，参与候选竞争。**不用 `created_at` 做 fallback**——模板提炼时间早晚不代表"多久未使用"。
 
+  **冷启动骨架拍入规范（Skeleton Injection Protocol）**：
+
+  冷启动时（`procedural_memory` 首次查询，无历史记录或 `final_score < 0.72`），采用 B+C 联合降级链：
+
+  | 阶段 | 条件 | 注入内容 | 标记 |
+  |------|------|---------|------|
+  | **A（正常路径）** | `final_score ≥ 0.72` | 骨架模板 JSON（`template_graph`）+ episodic + semantic | 无 |
+  | **B（降级路径）** | `final_score < 0.72`（含 `procedural_memory` 为空） | episodic + semantic 上下文（无骨架 JSON） | `cold_start: true` |
+  | **C（极端降级）** | episodic + semantic 均为空 | 仅注入 null 占位 | `cold_start: true` |
+
+  **B+C 联合执行**：当 `final_score < 0.72` 时，系统不只注入 B 层——同时将 episodic 和 semantic 上下文一并注入，并在 Context Window 写入 `cold_start: true` 标记。Agent 可感知冷启动状态并调整自己的初始探索策略（更谨慎，更多确认步骤）。
+
+  **0.72 阈值来源**：相似度 × 0.5（权重）对应的原始余弦相似度 ≥ 0.44 时，`final_score` 一般能越过 0.72（考虑质量/时效/多样性加分）。低于此阈值意味着语义相关性不足以保证骨架可靠性，强行注入会引导 Agent 走向错误的执行拓扑。Phase 1 固定初值 0.72，后续基于实测调整。
+
 - **后果**: 四层记忆全部统一在 PostgreSQL 内，SSOT 原则不破坏，向量写入与事件写入原子同生共死，记忆系统具备完整的版本链、强化衰减、矛盾检测能力。
 
 ---
@@ -622,16 +796,18 @@
 - `scope_lineage` 元数据冷表 + 三步火炬传递：子 `scope_closed` → 控制面直写 `sub_scope_resolved` → SubScopeResultWorker 语义合并 → 父 `memory_updated`
 - 控制面保持纯基础设施角色，业务语义合成在 Worker 层（ADR 12 五大枚举不变）
 
-**ADR 24｜Agent 接入协议：HTTP Gateway**（`docs/adr/0026-adr24-agent-entry-point-protocol.md`）
+**ADR 24｜Agent 接入协议：HTTP Gateway（控制面 HTTP 层）**（`docs/adr/0026-adr24-agent-entry-point-protocol.md`）
 - Phase 1 阻断缺口：所有 ADR 01-23 从 `plan_created` 之后定义，外部 Agent 如何提交任务未定义
 - **决策**：HTTP REST Gateway（Hono/Fastify），3 个端点：`POST /v1/scopes`、`POST /v1/scopes/{id}/events`、`GET /v1/scopes/{id}`
+- **Gateway = 控制面 HTTP 层**：非无状态代理。Gateway 内联看门狗 SQL，持有基础设施事件直写权限（`scope_closed`、`context_oom_throttled`），与控制面守护线程的 DDL 权限互补（DDL 权限归守护线程专属）
 - 每次 event POST 后 Gateway 同步组装 Knapsack 上下文并返回，`scope_closed` 时 context=null 通知 Agent 终止
-- Phase 2：MCP Adapter 作为 HTTP Gateway 上层薄包装，Claude Code 原生工具调用体验（不阻塞 Phase 1）
+- 输入安全：Zod/Regex 铁闸强制校验所有 Gateway 入口（UUID v4 regex + `/^[0-9a-f]{64}$/` 哈希格式），校验失败直接 400，不触碰数据库
+- Phase 2：MCP Adapter 按事件类型拆分认知转译工具（`spawn_task`/`complete_task` 等），Claude Code 原生工具调用体验（不阻塞 Phase 1）
 
 **ADR 25｜跨域拓扑模式发现算法：WL 图核 + 拓扑嵌入**（`docs/adr/0027-adr25-cross-domain-topology-algorithm.md`）
 - 核心价值承诺的算法实现：识别表面无关任务（调试/研究/规划）中相同的底层执行拓扑
 - **算法**：Weisfeiler-Lehman (WL) 图核（h=3 迭代，event_type 为节点标签，O(n×d)，无需训练）
-- **Phase 1**：`procedural_memory` 新增 `topology_embedding vector(64)` 字段，TemplateProposalWorker 在模板提炼后计算 WL 嵌入写入（schema stub）
+- **Phase 1**：`procedural_memory` 新增 `topology_embedding vector(128)` 字段（32 字节多段投影，充分利用 SHA-256 全部 256 bit），HNSW 索引 `m=16, ef_construction=64`，TemplateProposalWorker 在模板提炼后计算 WL 嵌入写入（schema stub）
 - **Phase 2**：CrossScopePatternDiscoveryWorker 定期查询余弦相似度 > 0.90 但意图语义差异大的跨域模板对，写入 `cross_domain_cluster_id`，冷启动扩展跨域骨架推荐
 
 **共 25 条 ADR（含 2 条补充），七层架构 + 接入协议 + 跨域发现算法全部覆盖。**

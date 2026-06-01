@@ -17,7 +17,7 @@ Entity 在某一时刻内容的不可变快照，以 SHA-256 内容哈希（Vers
 _Avoid_: 快照、状态、记录
 
 **Version Hash（版本哈希）**：
-通过密码学拼接矩阵 `{scope_id}|{entity_id}|{predecessor_hash}|{event_type}|{canonical_json(payload)}` 在 PostgreSQL 内核（pgcrypto）计算的 SHA-256 摘要。scope_id 作为密码学盐值灌入首位。
+通过密码学拼接矩阵 `{scope_id}|{entity_id}|{predecessor_hash}|{event_type}|{canonical_json(hashable_payload)}` 在 PostgreSQL 内核（pgcrypto）计算的 SHA-256 摘要。scope_id 作为密码学盐值灌入首位。**Hashable domain** = `payload` 减去 `_meta` 减去 `schema_version`（两者均由应用层在哈希前剥离）。
 _Avoid_: 内容哈希、摘要、指纹
 
 **Hyper-edge（事件不可变边）**：
@@ -25,7 +25,7 @@ _Avoid_: 内容哈希、摘要、指纹
 _Avoid_: 边、关系、事件记录
 
 **Predecessor Hash（前驱哈希）**：
-当前节点显式携带的前一版本的 version_hash，构成区块链式版本进化链条。图根节点（plan_created）无前驱。
+当前节点显式携带的前一版本的 version_hash，构成区块链式版本进化链条。图根节点（`plan_created`）使用 ZERO_HASH 哨兵值作为 predecessor_hash，标识无前驱。
 _Avoid_: 父哈希、上一版本
 
 **Orphan Node（孤岛节点）**：
@@ -150,8 +150,15 @@ iii-engine 在 `bus_state` 表中异步维护的 `last_processed_event_id`。断
 _Avoid_: 偏移量、游标、检查点
 
 **Control Plane（控制面）**：
-iii-engine 内部专职守护线程，独占 DDL 权限。执行三阶段筑巢协议（拦截意图 → 独占 DDL → 开闸放水）。数据面 Worker 账户权限硬限缩为纯 `SELECT/INSERT`。
-_Avoid_: 管理面、DDL 执行器
+iii-engine 内部的基础设施管理层，包含两个组件，权限不同：
+
+| 组件 | 权限 | 职责 |
+|------|------|------|
+| 控制面守护线程（Control Plane Daemon） | **DDL 权限**（独占，1-2 个连接） | 三阶段筑巢协议：建表 + 复合唯一约束 + HNSW 索引 |
+| Gateway HTTP 层（HTTP Gateway） | **基础设施事件直写权限** | 内联看门狗 SQL，原子写入 `scope_closed`；Context OOM 时写入 `context_oom_throttled` |
+
+数据面 Worker 账户权限硬限缩为纯 `SELECT/INSERT`，DDL 权限和基础设施事件直写权限均不对 Worker 开放。
+_Avoid_: 管理面、DDL 执行器、单一守护线程
 
 **Worker**：
 挂载在 iii-engine 总线上的去中心化执行单元。声明 JSON Schema 订阅契约，监听匹配事件，调用外部工具或 LLM，将标准产物写回执行图。处理完即销毁独立 Context Window。
@@ -167,8 +174,20 @@ _Avoid_: Agent、服务、进程
 连接网关层挂载的 WebAssembly 旁路插件，<1ms 内计算精确 Token 数，结果写入 `payload._meta.tokens[model_fingerprint]`，作为 Knapsack 算法数理依据。
 _Avoid_: Token 计数器、tiktoken
 
+**`_meta`（系统保留命名空间）**：
+Payload 对象中以 `_meta` 为 key 的系统专属字段。写入权限归控制面层（Wasm Tokenizer 写 `_meta.tokens`；ConflictResolverWorker 写 `_meta.convergence_gate`），Agent 提交的 payload 中如含 `_meta` 会被 Gateway Zod 层强制剥离。`_meta` 内容不参与版本哈希计算（从哈希预像中剥离），防止系统元数据污染内容寻址模型。
+_Avoid_: 系统字段、元数据字段、内置字段
+
+**ZERO_HASH（根节点哨兵值）**：
+64 位全零 SHA-256 字面量 `"0000000000000000000000000000000000000000000000000000000000000000"`，作为 `plan_created`（Scope 根节点）的 `predecessor_hash`。因任何真实内容哈希碰撞 ZERO_HASH 的概率为 2⁻²⁵⁶，可安全用于偏函数唯一索引以阻断 Scope 重复初始化。
+_Avoid_: 空哈希、零值哈希、初始哈希
+
+**model_fingerprint（模型指纹）**：
+模型标识字符串（如 `"claude-3-5-sonnet-20241022"`），作为 `worker_profiles` 表的复合主键之一，为不同 Tokenizer 族的 △_padding 提供物理隔离。多设备或混合模型环境下各自维护独立垫片，互不污染。
+_Avoid_: 模型名、模型 ID、版本号
+
 **△_padding（动态安全垫片）**：
-每个 Worker 通道独立维护的弹性 Token 缓冲（初始值 4096）。总线拦截模型响应真实 `usage.prompt_tokens`，若发生估算漏损，以 1.5 倍惩罚性加权自适应撑大。
+每个 `(Worker 类型, model_fingerprint)` 通道独立维护的弹性 Token 缓冲（初始值通过 `iii-config.yaml` 按 Tokenizer 族配置，默认 4096）。总线拦截模型响应真实 `usage.prompt_tokens`，若发生估算漏损，以 1.5 倍惩罚性加权自适应撑大（GREATEST 语义：只增不减）。
 
 ---
 

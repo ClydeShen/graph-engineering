@@ -56,14 +56,14 @@ WL 特征向量几乎相同 → 余弦相似度 ≈ 1.0 → 跨域拓扑命中
 
 ```sql
 ALTER TABLE procedural_memory
-  ADD COLUMN topology_embedding vector(64),     -- WL 核特征向量（64 维）
+  ADD COLUMN topology_embedding vector(128),    -- WL 核特征向量（128 维，32 字节多段投影）
   ADD COLUMN topology_wl_depth  SMALLINT NOT NULL DEFAULT 3;
                                                 -- WL 迭代深度，用于版本对齐
 
 CREATE INDEX idx_procedural_topology_hnsw
   ON procedural_memory
   USING hnsw (topology_embedding vector_cosine_ops)
-  WITH (m=8, ef_construction=32)
+  WITH (m=16, ef_construction=64)
   WHERE topology_embedding IS NOT NULL;
 ```
 
@@ -96,11 +96,16 @@ function computeWLEmbedding(templateGraph: DAG, depth: number = 3): Float32Array
     labels = newLabels;
   }
   
-  // 将 histogram 投影到固定 64 维向量（模 64 取桶）
-  const vec = new Float32Array(64);
+  // 将 histogram 投影到固定 128 维向量
+  // 多字节段投影：32 个字节段各自 % 128，充分利用 SHA-256 全部 256 bit
+  // 原版 hash.slice(0,4) % 64 仅使用 16 bit，桶碰撞率高（3-15 模式/桶）
+  const N_DIMS = 128;
+  const vec = new Float32Array(N_DIMS);
   for (const [hash, count] of histogram) {
-    const bucket = parseInt(hash.slice(0, 4), 16) % 64;
-    vec[bucket] += count;
+    for (let i = 0; i < 32; i++) {
+      const byte = parseInt(hash.slice(i * 2, i * 2 + 2), 16);
+      vec[byte % N_DIMS] += count;
+    }
   }
   
   // L2 归一化
@@ -162,7 +167,7 @@ Phase 2 新增定期任务（每日一次，iii-cron worker）：
 ## 后果
 
 **Phase 1（实现 schema stub + TemplateProposalWorker 扩展）**：
-- `procedural_memory` 新增 `topology_embedding vector(64)` 字段（NULLABLE，不阻塞现有功能）
+- `procedural_memory` 新增 `topology_embedding vector(128)` 字段（NULLABLE，不阻塞现有功能）
 - 每个新模板自动计算 WL 拓扑嵌入，为 Phase 2 发现奠定数据基础
 - 无新服务依赖，计算在 TemplateProposalWorker 进程内完成
 
