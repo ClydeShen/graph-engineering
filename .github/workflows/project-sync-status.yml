@@ -1,0 +1,76 @@
+name: Sync issue labels to project board status
+
+on:
+  issues:
+    types: [labeled, unlabeled]
+
+jobs:
+  sync-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get project item ID
+        id: get-item
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+        run: |
+          ITEM_ID=$(gh api graphql -f query='
+            query($issue: ID!) {
+              node(id: $issue) {
+                ... on Issue {
+                  projectItems(first: 10) {
+                    nodes {
+                      id
+                      project { number }
+                    }
+                  }
+                }
+              }
+            }' -f issue="$ISSUE_NODE_ID" \
+            --jq '.data.node.projectItems.nodes[] | select(.project.number == 4) | .id')
+          echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
+
+      - name: Map label to status option
+        id: map-status
+        env:
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          # Extract status:* label from current issue labels
+          STATUS=$(echo "$LABELS" | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin)
+          names = [l['name'] for l in labels if l['name'].startswith('status:')]
+          label = names[0] if names else ''
+          mapping = {
+            'status:needs-triage':     '3ffb3945',
+            'status:needs-prd':        'f6ab4b03',
+            'status:needs-review':     'd955a1d7',
+            'status:ready-for-agent':  '467257fc',
+            'status:in-progress':      '70d660b0',
+            'status:done':             '44b8bd73',
+          }
+          print(mapping.get(label, ''))
+          ")
+          echo "status_option=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Update project board status
+        if: steps.get-item.outputs.item_id != '' && steps.map-status.outputs.status_option != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          ITEM_ID: ${{ steps.get-item.outputs.item_id }}
+          STATUS_OPTION: ${{ steps.map-status.outputs.status_option }}
+        run: |
+          gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $project
+                itemId: $item
+                fieldId: $field
+                value: { singleSelectOptionId: $option }
+              }) { projectV2Item { id } }
+            }' \
+            -f project="PVT_kwHOAPZRDM4BZVRo" \
+            -f item="$ITEM_ID" \
+            -f field="PVTSSF_lAHOAPZRDM4BZVRozhUUoeU" \
+            -f option="$STATUS_OPTION"
+          echo "✅ Board status updated to $STATUS_OPTION"

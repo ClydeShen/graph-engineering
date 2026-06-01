@@ -1,0 +1,34 @@
+{
+  "github": {
+    "owner": "ClydeShen",
+    "repo": "graph-engineering",
+    "project_v2_id": "PVT_kwHOAPZRDM4BZVRo",
+    "project_number": 4
+  },
+  "project_fields": {
+    "status": {
+      "id": "PVTSSF_lAHOAPZRDM4BZVRozhUUoeU",
+      "options": {
+        "triage": "3ffb3945",
+        "needs_prd": "f6ab4b03",
+        "needs_review": "d955a1d7",
+        "ready_for_agent": "467257fc",
+        "in_progress": "70d660b0",
+        "done": "44b8bd73"
+      }
+    },
+    "effort": {
+      "id": "PVTF_lAHOAPZRDM4BZVRozhUUoj4"
+    },
+    "size": {
+      "id": "PVTSSF_lAHOAPZRDM4BZVRozhUUokw",
+      "options": {
+        "XS": "5cc8da1d",
+        "S": "1b97d26d",
+        "M": "6de49fd4",
+        "L": "a3a875b0",
+        "XL": "1be4a5ba"
+      }
+    }
+  }
+}
