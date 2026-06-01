@@ -139,6 +139,34 @@ _Avoid_: 记忆检索、背景知识注入
 冷启动匹配成功后，从 procedural_memory 取出的 `template_graph`，直接拍入新 Scope 的图账本作为初始拓扑骨架，Worker 无需从零规划直接认领任务。
 _Avoid_: 模板、初始图、工作流模版
 
+## 执行模型
+
+**Event-as-Snapshot（事件即快照）**：
+系统的状态写入哲学。每一个 `memory_updated` 事件本身就是实体当前状态的完整快照，而非差量补丁（Delta）。获取实体的 canonical 当前状态 = 直接读取因果链顶端节点的 payload，不需要沿历史链 fold/reduce。`fold(all_events) -> state` 的模式在本系统中语义错误（跨 event_type 的 payload 字段不可叠加）。
+_Avoid_: 事件溯源折叠、状态投影、CRDT 合并
+
+**Worker 生命周期（Worker Lifecycle）**：
+每个被触发的 Worker 沙箱强制经过四阶段状态机：**Initializing**（组装 Knapsack 上下文）→ **Processing**（调用 LLM，禁止任何持久化内存突变）→ **Writing**（微内核接管，Gateway Zod 校验 + OCC 写入）→ **Terminated**（沙箱物理销毁）。Worker 没有"跳过"状态——任何触发事件都有明确最终归宿（落盘或 Scope Suspended）。
+_Avoid_: 三步黑盒、事件处理器、无状态函数
+
+**Knapsack 失败二分（Knapsack Failure Dichotomy）**：
+Knapsack 组装失败有两种根本不同的原因，处置路径完全不同：（A）**上下文过大**（`N_root + N_current > W_max`）→ 直接触发 OOM 三级降级链路；（B）**系统过载**（活跃沙箱数 ≥ Max_Parallelism）→ 挂起重入队，N=3 重试上限后触发 OOM 链路。两者不可混用同一处置路径。
+_Avoid_: 跳过触发、静默丢弃、统一重入队
+
+**Max_Parallelism（最大并发度）**：
+单 Scope 内同时处于 Processing 状态的 Worker 沙箱上限。由 iii-engine 启动时从 `iii-config.yaml` 参数动态计算：`⌊TPM_limit / (calls_per_min × avg_tokens_per_call)⌋`。不硬编码，调整 LLM Provider 配置后自动重算。Phase 1 单节点 in-memory 令牌桶；Phase 3+ 分布式限流。
+_Avoid_: 魔法数字、固定并发数、线程池大小
+
+**操作确定性（Operational Determinism）**：
+收敛看门狗的判定逻辑是纯代数的：`is_converged = (pending_tasks = 0) AND (open_conflicts = 0)`。两套独立的 iii-engine 实现执行相同 SQL，在 PostgreSQL ACID 隔离性保证下，任何时刻对同一 Scope 的判定结果完全相同。禁止引入时间窗口推断、近似计数、或概率阈值。
+_Avoid_: 超时收敛、近似判定、统计学判断
+
+**单写者互斥（Single-Writer Mutex）**：
+ConflictResolverWorker 的实体级激活约束。同一 `entity_id` 在任意时刻最多只有一个 ConflictResolverWorker 实例处于活跃状态。后续 `conflict_detected` 事件进入 ScopePendingQueue 排队，前一个 Resolver 完成后串行消费。Phase 1 in-memory 实现（ActiveResolverRegistry DashMap）；Phase 3+ 分布式锁。
+_Avoid_: 并发 Resolver、重复实例化、双触发路径
+
+---
+
 ## 基础设施
 
 **iii-engine**：

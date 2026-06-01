@@ -778,6 +778,11 @@
 第七层：记忆层
   ADR 20｜四层记忆物理架构（完全自建，PostgreSQL SSOT）
   ADR 21｜发散性反思轨道触发规范（mem::reflect 接口与 Token 预算）
+
+第八层：执行模型语义层
+  ADR 26｜Event-as-Snapshot 哲学：状态推导与重放验证模型
+  ADR 27｜Worker 执行生命周期状态机
+  ADR 28｜调度规约与操作确定性
 ```
 
 ### ADR 22｜LLM/Embedding Provider 抽象层与最小化原则
@@ -810,4 +815,25 @@
 - **Phase 1**：`procedural_memory` 新增 `topology_embedding vector(128)` 字段（32 字节多段投影，充分利用 SHA-256 全部 256 bit），HNSW 索引 `m=16, ef_construction=64`，TemplateProposalWorker 在模板提炼后计算 WL 嵌入写入（schema stub）
 - **Phase 2**：CrossScopePatternDiscoveryWorker 定期查询余弦相似度 > 0.90 但意图语义差异大的跨域模板对，写入 `cross_domain_cluster_id`，冷启动扩展跨域骨架推荐
 
-**共 25 条 ADR（含 2 条补充），七层架构 + 接入协议 + 跨域发现算法全部覆盖。**
+**ADR 26｜Event-as-Snapshot 哲学：状态推导与重放验证模型**（`docs/adr/0028-adr26-event-as-snapshot-philosophy.md`）
+- Pre-Phase-1 比较研究（G8）：与 kli CRDT fold/reduce 对照，锁定本系统的状态推导范式
+- **核心命题**：`memory_updated` 事件是完整实体状态快照（Event-as-Snapshot），非增量 delta
+- **状态推导**：直接 `SELECT payload WHERE version_hash = $canonical_tip_hash`，禁止沿历史链 fold
+- **重放验证**：RFC §6.1 验证目标是 `version_hash` 密文碰撞（哈希确定性），不是状态语义重建
+- **拒绝方案**：`reduce(...event.payload)` spread 叠加在本系统中产生跨 schema 字段污染，语义错误
+
+**ADR 27｜Worker 执行生命周期状态机**（`docs/adr/0029-adr27-worker-lifecycle-state-machine.md`）
+- Pre-Phase-1 比较研究（G5）：Worker 黑盒运作导致 Knapsack 失败无处理路径，存在活锁死锁
+- **四阶段状态机**：Initializing → Processing → Writing → Terminated，每阶段有明确断言和失败处置
+- **Processing 铁律**：禁止任何持久化内存突变，LLM 结果仅在内存中暂存至 Writing 阶段
+- **Knapsack 失败二分**：上下文过大（→ OOM 三级链路）vs 系统过载（→ 重入队，N=3 重试上限 → OOM 链路）
+- **无静默丢弃**：任何触发事件都有明确最终归宿（落盘或 Suspended），禁止被跳过
+
+**ADR 28｜调度规约与操作确定性**（`docs/adr/0030-adr28-scheduling-spec-and-operational-determinism.md`）
+- Pre-Phase-1 比较研究（G6 + G7）：收敛判定无正式代数声明；事件调度无并发规范
+- **操作确定性**：收敛判定 = 纯代数 SQL（`pending_tasks=0 AND open_conflicts=0`），禁止时间窗口/概率阈值/近似计数
+- **调度规约**：`Max_Parallelism = ⌊TPM_limit / (calls_per_min × avg_tokens)⌋`，由 `iii-config.yaml` 参数动态计算
+- **单写者互斥**：ConflictResolverWorker 实体级互斥（ActiveResolverRegistry），防止同实体重复实例化；Phase 1 in-memory，Phase 3+ 分布式锁
+- **推迟研究项（G1-G4）**：无遍历代数（G1）、无形式化模式语言（G2）、无嵌入训练策略（G3，Phase 1 schema 预留列）、无物化遍历路径（G4）——均列入 Phase 2/3 前置研究
+
+**共 28 条 ADR（含 2 条补充），七层架构 + 接入协议 + 跨域发现 + 执行模型语义层全部覆盖。**
