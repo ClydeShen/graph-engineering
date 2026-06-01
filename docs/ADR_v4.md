@@ -783,6 +783,19 @@
   ADR 26｜Event-as-Snapshot 哲学：状态推导与重放验证模型
   ADR 27｜Worker 执行生命周期状态机
   ADR 28｜调度规约与操作确定性
+
+第九层：接入抽象层
+  ADR 29｜Worker / Tool / Knowledge / Connector 四元边界定义
+
+第十层：Phase 1 实现决策层
+  ADR 30｜Context Assembly Strategy（上下文组装三层策略 + 无 LLM 溢出丢弃器）
+  ADR 31｜Frontier Scheduler Architecture（事件触发微批调度 + 令牌桶限流）
+  ADR 32｜PgQueueAdapter and Idempotency Enforcement（FOR UPDATE SKIP LOCKED + 唯一约束幂等）
+  ADR 33｜Scope Identity Boundary（Scope UUID 与上下文窗口大小正交，溢出不触发 UUID 轮换）
+  ADR 34｜Subagent Execution and Scope Branch Model（spawned_by 超边 + 双层递归守卫）
+  ADR 35｜Worker/Tool Boundary Enforcement（TypeScript ABC + DI capability 双层物理隔离）
+  ADR 36｜Knowledge Entity Write Timing（逐工具结果写入，永久废除懒写）
+  ADR 37｜Pattern Discovery Schedule（离线 OLAP cron 调度，最小语料库守卫，禁止内联触发）
 ```
 
 ### ADR 22｜LLM/Embedding Provider 抽象层与最小化原则
@@ -836,4 +849,55 @@
 - **单写者互斥**：ConflictResolverWorker 实体级互斥（ActiveResolverRegistry），防止同实体重复实例化；Phase 1 in-memory，Phase 3+ 分布式锁
 - **推迟研究项（G1-G4）**：无遍历代数（G1）、无形式化模式语言（G2）、无嵌入训练策略（G3，Phase 1 schema 预留列）、无物化遍历路径（G4）——均列入 Phase 2/3 前置研究
 
-**共 28 条 ADR（含 2 条补充），七层架构 + 接入协议 + 跨域发现 + 执行模型语义层全部覆盖。**
+**ADR 29｜Worker / Tool / Knowledge / Connector 四元边界定义**（`docs/adr/0031-adr29-worker-tool-knowledge-boundaries.md`）
+- 系统最终形态：Claude Code、Memory System、Gmail、Browser 等所有执行单元统一接入 Execution Graph
+- **Worker**：`graph::` 前缀 iii Function，有图写权限，遵循 ADR 27 四阶段生命周期；**Tool**：`tool::` 前缀或 MCP Tool，无状态单次调用，是 Worker 的无状态名片
+- **Knowledge**：`entity_type="knowledge"` 的图节点，通过 `memory_updated` 写入，四子类型（skill/schema/plugin_doc/domain_fact），`procedural_memory` 是其物化查询视图
+- **Connector**：接入适配器（Hook Connector 或 Gateway Connector），不写图，只翻译外部生命周期事件为 iii pub/sub topics
+- **External Participant vs Internal Worker**：Claude Code 是 External Participant（通过 Gateway 提交事件），与 Internal Worker 在图上产生相同格式的事件，但不注册 `sdk.registerFunction`
+
+**ADR 30｜Context Assembly Strategy**（`docs/adr/0032-adr30-context-assembly-strategy.md`）
+- **决策 D-1**：三层提示组装（Stable 知识层 Anthropic 提示缓存 / Context 因果血缘层图投影 / Volatile 当前输入层逐次重建），`Graph → Context` 单向投影
+- **决策 D-2**：溢出 = 三级有损逆时序滑动窗口丢弃器（Zero-LLM）——新事件优先贪心打包，超出 budget 物理截断，无 LLM 调用，无摘要
+- **永久废除**：Option B（同步 LLM 压缩）；上下文溢出是读时视图行为，不修改图结构，不创建 `context_compressed` 知识实体
+- **Phase 2 扩展点**：`IOverflowStrategy` 接口预留，Phase 1 未激活
+
+**ADR 31｜Frontier Scheduler Architecture**（`docs/adr/0033-adr31-frontier-scheduler-architecture.md`）
+- **架构**：`graph::scheduler::frontier` Worker，订阅 `graph::frontier::changed`，内置令牌桶限流（50ms 窗口），微批调度防瀑布风暴
+- **ADR 28.1 修订**：优先级 SQL Top-K 查询——`dynamic_score = base_priority×10 + age_bonus + unlocks_count×5`；`age_bonus` 上限 20 < 最小优先级间距，数学证明优先级反转不可能；同分以 `created_at ASC` FIFO 决胜
+- **不变量**：iii 仅 FIFO；所有优先级逻辑在 PostgreSQL 查询 + 调度器 Worker 中；级联风暴通过令牌桶窗口阻止
+
+**ADR 32｜PgQueueAdapter and Idempotency Enforcement**（`docs/adr/0034-adr32-pgqueueadapter-and-idempotency.md`）
+- **决策 D-4**：`PgQueueAdapter` 以 `FOR UPDATE SKIP LOCKED` 替换 iii 内置 100ms 轮询文件适配器；LISTEN/NOTIFY 仅作唤醒信号，不携带数据；`IQueueAdapter` 抽象预留 Phase 2 Redis 替换接口
+- **决策 D-5**：幂等性 = `UNIQUE(scope_id, entity_id, version_hash)` 约束 + Worker 写入 `ON CONFLICT DO NOTHING`；at-least-once 重投递对 Worker 透明
+- **背压**：所有 4 个 Worker 槽占满时停止 `nextEvent()` 调用，`pending_dispatch` 行静默等待 PostgreSQL——存储即背压缓冲
+
+**ADR 33｜Scope Identity Boundary**（`docs/adr/0035-adr33-scope-identity-boundary.md`）
+- **决策 D-6**：Scope UUID 跟踪逻辑业务任务单元，不跟踪上下文窗口大小；上下文溢出是读时展示关切，完全由 ADR 30 滑动窗口丢弃器处理，不触发 Scope UUID 轮换
+- **正式不变量**：`f(Scope UUID) → 业务身份` 与 `f(上下文窗口大小) → 视图参数` 正交，任何 overflow 事件均保持 UUID 不变
+- **永久拒绝**：hermes-agent 的 `parent_session_id` 链（上下文溢出创建新 Scope）——存储工件耦合业务身份会在跨任务模式匹配中碎裂拓扑等价的任务
+
+**ADR 34｜Subagent Execution and Scope Branch Model**（`docs/adr/0036-adr34-subagent-scope-branch-model.md`）
+- **决策 D-7**：Phase 1 同进程 Scope 分支——子 Worker 创建子 Scope UUID，追加 `spawned_by` 超边 `(parent_scope_id, child_scope_id, "scope_spawned", version_hash, timestamp)`，父 Worker 可 await 或 fire-and-forget
+- **中断传播**：`scope_interrupted` 事件 → ADR 31 调度器 SQL 过滤已中断 Scope → 不再发出 `pending_dispatch`；在途 Worker 完成当前写入后停止
+- **双层递归守卫**：环境变量 `GRAPH_AGENT_CHILD_SCOPE`（进程内）+ Payload 字段 `spawned_by_scope`（跨进程）；`MAX_CHILD_SCOPE_DEPTH = 3`
+- **Phase 2**：子 Scope 在独立 iii-SDK 进程中运行，`spawned_by` 超边不变，进程边界对模式发现透明
+
+**ADR 35｜Worker/Tool Boundary Enforcement**（`docs/adr/0037-adr35-worker-tool-boundary-enforcement.md`）
+- **决策 D-8**：两层物理隔离——Layer 1 编译期（TypeScript ABC：Worker 持有 `GraphHandle` 含 `write()`；Tool 持有 `ReadOnlyGraphHandle` 无 `write()` 声明，编译即报错）；Layer 2 运行期（DI 注入不同 Execution Context，`ReadOnlyGraphHandleImpl.write()` 抛出 `SecurityException`）
+- **能力不存在**：Tool 上下文中图写能力物理缺失，无需代码审查或调用链分析
+- **`sdk.registerWorker` / `sdk.registerTool`** 签名区分注册类型，传错即编译报错
+
+**ADR 36｜Knowledge Entity Write Timing**（`docs/adr/0038-adr36-knowledge-entity-write-timing.md`）
+- **决策 D-9**：每个代表状态变更或可观测动作的工具结果在工具返回后立即原子写入 Execution Graph（逐工具结果写入）；结合 ADR 32 `ON CONFLICT DO NOTHING` 实现幂等崩溃安全
+- **崩溃安全**：Worker 在任意工具结果后崩溃，图中包含所有已完成写入，无历史缺口
+- **纯观测例外**：无副作用、无下游依赖的只读观测（如 `list_files`）可由 Worker 作者自行省略写入
+- **永久废除**：Option C（会话级懒写）和 Option B（轮次级批写）——均产生结构性历史缺口
+
+**ADR 37｜Pattern Discovery Schedule**（`docs/adr/0039-adr37-pattern-discovery-schedule.md`）
+- **决策 D-10**：`graph::patterns::discover` Worker 以 cron 调度（默认每 6 小时）运行；最小语料库守卫 `MIN_CORPUS_THRESHOLD = 10` 个未分析已完成 Scope；`base_priority = 1`（最低），让位于所有业务 Worker
+- **OLAP/OLTP 隔离**：模式发现不订阅 `scope_completed` 事件，不内联触发；爆发式完成期间不抢占业务 Worker 槽
+- **冷启动行为**：Phase 1 语料库初始为空；系统在模式涌现前作为有能力的单会话 Agent 运行（优雅降级）；约 10 个多步 Scope 完成后出现首批有意义模式
+- **永久废除**：Option C（`scope_completed` 事件内联触发）——爆发完成时会耗尽全部 4 个 Worker 槽用于 OLAP，令 OLTP 任务饥饿
+
+**共 37 条 ADR（含 2 条补充），覆盖七层架构 + 接入协议 + 跨域发现 + 执行模型语义层 + 接入抽象层 + Phase 1 实现决策层。**
