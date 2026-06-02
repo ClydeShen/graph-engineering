@@ -29,7 +29,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
   9. Pattern discovery cron fires every 6 hours; skips if `completed_scope_count < 10`; does not acquire any OLTP worker slots
 **Plans**: 10 plans
 - [x] 01-01-PLAN.md — Project scaffold + tooling + canonical_json (shared package)
-- [ ] 01-02-PLAN.md — PostgreSQL schema migrations (event log, memory tables, lineage)
+- [x] 01-02-PLAN.md — PostgreSQL schema migrations (event log, memory tables, lineage)
 - [ ] 01-03-PLAN.md — OCC Writable CTE + pgcrypto hash chain + idempotency
 - [ ] 01-04-PLAN.md — Control Plane Daemon (nesting, pg-listen Pulse-Fetch, Watchdog, OOM)
 - [ ] 01-05-PLAN.md — Worker/Tool ABC framework + lifecycle + subagent branching
@@ -74,7 +74,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Graph Engine | 1/10 | In Progress|  |
+| 1. Core Graph Engine | 2/10 | In Progress|  |
 | 2. Memory & Retrieval | 0/TBD | Not started | - |
 | 3. Pattern Discovery | 0/TBD | Not started | - |
 | 4. External Integrations | 0/TBD | Not started | - |
