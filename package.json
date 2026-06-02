@@ -13,19 +13,20 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@dqbd/tiktoken": "1.0.22",
+    "@hono/zod-validator": "0.8.0",
+    "hono": "4.12.23",
     "iii-sdk": "0.17.0",
     "pg": "8.21.0",
     "pg-listen": "1.7.0",
-    "hono": "4.12.23",
-    "zod": "4.4.3",
-    "@dqbd/tiktoken": "1.0.22",
-    "@hono/zod-validator": "0.8.0"
+    "zod": "4.4.3"
   },
   "devDependencies": {
+    "@types/node": "^22",
+    "@types/pg": "^8",
     "tsx": "4.22.4",
     "typescript": "^5",
-    "vitest": "^2",
-    "@types/pg": "^8",
-    "@types/node": "^22"
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^2"
   }
 }
