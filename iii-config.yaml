@@ -1,0 +1,51 @@
+# iii-config.yaml — Phase 1 configuration
+# Source: RESEARCH.md Pattern 8, github.com/iii-hq/iii
+port: ${III_PORT:49134}
+
+workers:
+  # Required: iii Worker Manager (SDK bridge)
+  - name: iii-worker-manager
+    config:
+      port: 49134
+
+  # HTTP API (iii's own REST — separate from our Hono Gateway)
+  - name: iii-http
+    config:
+      port: 3111
+
+  # Cron scheduler — 7-field format: sec min hr day month weekday year
+  - name: iii-cron
+    config:
+      adapter:
+        name: kv
+
+  # Observability
+  - name: iii-observability
+    config:
+      enabled: true
+      exporter: memory
+      logs_enabled: true
+
+  # Spawn our TypeScript workers/control-plane process
+  - name: iii-exec
+    config:
+      exec:
+        # Cross-platform safe: use node directly, not shell scripts (Pitfall 6)
+        - node dist/control-plane/index.js
+        - node dist/workers/index.js
+        # Gateway runs separately: node dist/gateway/index.js
+
+# LLM Provider (ADR 22 — OpenAI-compatible REST)
+# Credentials live here ONLY — Workers never hold credentials directly
+llm:
+  provider: openai_compatible
+  base_url: ${LLM_BASE_URL:http://localhost:11434/v1}
+  model: ${LLM_MODEL:llama3.2}
+  api_key: ${LLM_API_KEY:""}
+
+embedding:
+  provider: openai_compatible
+  base_url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+  model: ${EMBEDDING_MODEL:nomic-embed-text}
+  dimensions: 1536
+  api_key: ${EMBEDDING_API_KEY:""}
