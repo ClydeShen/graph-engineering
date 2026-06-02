@@ -1,0 +1,34 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0031-adr29-worker-tool-knowledge-boundaries.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 29｜Worker / Tool / Knowledge / Connector 四元边界定义",
+  "summary": "Defines the four canonical abstractions — Worker, Tool, Knowledge, and Connector — and their strict boundaries for all components integrating with the Execution Graph.",
+  "scope": [
+    "Worker",
+    "Tool",
+    "Knowledge",
+    "Connector",
+    "Execution Graph",
+    "MCP Server",
+    "iii-engine",
+    "Gateway",
+    "External Participant",
+    "Internal Worker"
+  ],
+  "cross_refs": [
+    "ADR 02",
+    "ADR 03",
+    "ADR 05",
+    "ADR 12",
+    "ADR 20",
+    "ADR 22",
+    "ADR 24",
+    "ADR 27",
+    "ADR 28"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

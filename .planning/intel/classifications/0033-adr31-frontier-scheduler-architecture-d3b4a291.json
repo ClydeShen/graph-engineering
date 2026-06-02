@@ -1,0 +1,27 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0033-adr31-frontier-scheduler-architecture.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 31: Frontier Scheduler Architecture",
+  "summary": "Defines the FrontierSchedulerWorker architecture using event-triggered micro-batching, a token-bucket throttle, and a PostgreSQL Top-K priority query to enforce Max_Parallelism without cascade storms.",
+  "scope": [
+    "graph::scheduler",
+    "FrontierSchedulerWorker",
+    "frontier nodes",
+    "execution_event_log",
+    "Max_Parallelism",
+    "token-bucket throttle",
+    "pending_scheduling",
+    "pending_dispatch",
+    "iii engine"
+  ],
+  "cross_refs": [
+    "docs/adr/0028-scheduling-spec-and-operational-determinism.md",
+    "docs/adr/0027-worker-lifecycle.md",
+    "docs/adr/0032-pg-queue-adapter.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

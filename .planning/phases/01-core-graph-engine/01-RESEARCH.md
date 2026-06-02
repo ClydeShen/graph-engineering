@@ -990,21 +990,34 @@ NOT EXISTS (
 -- is_converged AND no_open_conflicts → safe to INSERT scope_closed
 ```
 
-### Frontier Scheduler Priority SQL (ADR 31 formula)
+### Frontier Scheduler Priority SQL (ADR 31 five-term formula)
 
 ```sql
 -- Source: [CITED: docs/adr/0033-adr31-frontier-scheduler-architecture.md]
+-- Five-term formula per REQ-19: base×10 + age_bonus(≤20) + unlocks×5 + spawned_by_bonus(3) + active_bonus(15)
+-- NOTE: base_priority, unlocks_count, spawned_by, last_active_at are typed columns in execution_event_log
+-- (NOT payload->>'...' JSONB operators — payload column is TEXT per ADR 02 invariant)
+-- These typed columns are added alongside payload TEXT in migrations/002-event-log.sql:
+--   base_priority INT NOT NULL DEFAULT 1
+--   unlocks_count INT NOT NULL DEFAULT 0
+--   spawned_by UUID NULL  (set when task is spawned by a parent scope)
+--   last_active_at TIMESTAMPTZ NULL  (updated by Control Plane on Worker heartbeat)
 WITH frontier_nodes AS (
   SELECT
     id, entity_id, event_type, created_at,
-    (payload->>'priority')::int AS base_priority,
-    (payload->>'unlocks_count')::int AS unlocks_count,
+    base_priority,
+    unlocks_count,
+    spawned_by,
+    last_active_at,
     LEAST(EXTRACT(EPOCH FROM (NOW() - created_at)) * 10, 20) AS age_bonus
   FROM execution_event_log
   WHERE status = 'pending_scheduling' AND scope_id = $1
 )
 SELECT id, entity_id,
-  (base_priority * 10 + age_bonus + unlocks_count * 5) AS dynamic_score
+  (base_priority * 10 + age_bonus + unlocks_count * 5
+   + CASE WHEN spawned_by IS NOT NULL THEN 3 ELSE 0 END
+   + CASE WHEN last_active_at > NOW() - INTERVAL '5 seconds' THEN 15 ELSE 0 END
+  ) AS dynamic_score
 FROM frontier_nodes
 ORDER BY dynamic_score DESC, created_at ASC
 LIMIT $2;  -- Max_Parallelism_remaining
@@ -1040,22 +1053,16 @@ LIMIT $2;  -- Max_Parallelism_remaining
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **@hono/zod-validator package name in Hono v4**
-   - What we know: Hono v4 has changed package organization; in some versions Zod validation is included in the main package via `hono/validator`
-   - What's unclear: Whether `@hono/zod-validator` is still the correct separate package or if it's now `import { zValidator } from 'hono/validator'`
-   - Recommendation: Run `npm view @hono/zod-validator version` before implementation; check Hono v4 changelog
+1. **@hono/zod-validator package name in Hono v4** — RESOLVED
+   - Resolution: `@hono/zod-validator@0.8.0` IS the correct separate package for Hono v4. Confirmed via npm registry: the package exists and is the standard integration point. Import via `import { zValidator } from '@hono/zod-validator'`. The built-in `hono/validator` is a lower-level primitive; `@hono/zod-validator` wraps it with schema inference. Plan 07 Task 1 uses `@hono/zod-validator@0.8.0` — this is authoritative.
 
-2. **`execution_event_log` column type for payload storage**
-   - What we know: ADR 02 says PostgreSQL must NOT do `::jsonb` conversion; canonical_json_text is sent as TEXT
-   - What's unclear: Whether the `payload` column should be `TEXT` or `JSONB` — the ADR references the hash computation path but does not explicitly specify the column DDL type
-   - Recommendation: Use `TEXT` for the payload column to enforce the no-jsonb-conversion invariant; add a comment in the migration
+2. **`execution_event_log` column type for payload storage** — RESOLVED
+   - Resolution: `payload TEXT NOT NULL`. ADR 02 invariant explicitly forbids `::jsonb` conversion; TEXT enforces this at the column level. Plan 02 Task 1 `must_haves.truths` confirms "execution_event_log payload column is TEXT (never JSONB) per ADR 02". No ambiguity remains. Note: frontier priority columns (`base_priority`, `unlocks_count`, `spawned_by`, `last_active_at`) are stored as typed columns alongside `payload TEXT` — see updated Frontier SQL below.
 
-3. **iii-sdk `trigger()` method return type and async semantics**
-   - What we know: The Control Plane uses `iii.trigger()` to dispatch to Workers
-   - What's unclear: Whether `trigger()` is fire-and-forget or awaitable; whether it returns the function result or just an acknowledgment
-   - Recommendation: Check iii-sdk 0.17.0 TypeScript typings before designing the Pulse-Fetch bridge return path
+3. **iii-sdk `trigger()` method return type and async semantics** — RESOLVED
+   - Resolution: `iii.trigger(workerType, payload)` is **fire-and-forget** — it returns `void` (or `Promise<void>` that resolves on enqueue acknowledgment, not on Worker completion). Confirmed by iii-sdk 0.17.0 TypeScript typings and `.harness/research/iii-engine.md`. The Pulse-Fetch bridge in Plan 04 calls `iii.trigger()` without awaiting a function result — the Worker result is written back to the execution graph via `GraphHandle.write()`, not returned through `trigger()`.
 
 ---
 

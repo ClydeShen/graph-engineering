@@ -1,0 +1,30 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0038-adr36-knowledge-entity-write-timing.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 36: Knowledge Entity Write Timing",
+  "summary": "Locks per-tool-result write timing for Knowledge Entity writes to the Execution Graph, permanently rejecting deferred or batched write strategies.",
+  "scope": [
+    "Execution Graph",
+    "Knowledge Entity",
+    "Worker",
+    "tool result",
+    "write timing",
+    "crash safety",
+    "memory_updated event",
+    "PostgreSQL"
+  ],
+  "cross_refs": [
+    "docs/adr/0012-canonical-cognitive-event-enumeration.md",
+    "docs/adr/0019-watchdog.md",
+    "docs/adr/0027-worker-lifecycle.md",
+    "docs/adr/0029-worker-tool-knowledge-boundaries.md",
+    "docs/adr/0032-pgqueueadapter-idempotency.md",
+    "docs/adr/0035-worker-tool-boundary.md",
+    "docs/adr/0002-version-hash-computation.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

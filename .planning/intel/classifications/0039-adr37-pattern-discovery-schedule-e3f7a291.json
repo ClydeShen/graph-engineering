@@ -1,0 +1,29 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0039-adr37-pattern-discovery-schedule.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 37: Pattern Discovery Schedule",
+  "summary": "Schedules cross-scope topological pattern extraction as an offline OLAP cron job every 6 hours, isolated from the OLTP execution bus, with a minimum corpus guard of 10 unanalyzed completed Scopes.",
+  "scope": [
+    "pattern discovery",
+    "workflow emergence",
+    "OLAP scheduling",
+    "OLTP isolation",
+    "WL graph kernel",
+    "corpus guard",
+    "cron schedule",
+    "Max_Parallelism",
+    "Knowledge entities"
+  ],
+  "cross_refs": [
+    "docs/adr/0025-cross-domain-topology-pattern-discovery-algorithm.md",
+    "docs/adr/0028-scheduling-spec-and-operational-determinism.md",
+    "docs/adr/0029-knowledge-entity-types.md",
+    "docs/adr/0030-context-assembly-strategy.md",
+    "docs/adr/0031-frontier-scheduler.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

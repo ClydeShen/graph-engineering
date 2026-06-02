@@ -1,0 +1,34 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0022-adr21-reflection-track-trigger-spec.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 21｜发散性反思轨道触发规范（mem::reflect 接口与 Token 预算）",
+  "summary": "Specifies the centralized mem::reflect function interface, context window injection structure, and token budget truncation strategy for the divergent reflection retrieval track.",
+  "scope": [
+    "mem::reflect",
+    "iii-engine",
+    "reflection track",
+    "procedural_memory",
+    "episodic_memory",
+    "semantic_memory",
+    "context window",
+    "token budget",
+    "RRF hybrid search",
+    "Wasm Tokenizer"
+  ],
+  "cross_refs": [
+    ".planning/research/verify-bm25-rrf.md",
+    ".planning/research/deep-cross-validation-round2.md",
+    "docs/adr/0013-knapsack-slicing.md",
+    "docs/adr/0005-permissions.md",
+    "docs/adr/0014-context-window-capacity.md",
+    "docs/adr/0015-wasm-tokenizer.md",
+    "docs/adr/0020-memory-physical-architecture.md",
+    "docs/adr/0021-bm25-rrf-hybrid-search.md",
+    "docs/RFC_v4.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

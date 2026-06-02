@@ -1,0 +1,27 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0035-adr33-scope-identity-boundary.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 33: Scope Identity Boundary",
+  "summary": "Declares that Scope UUID tracks business task identity only; context overflow must never trigger Scope UUID rotation or write to the Execution Graph.",
+  "scope": [
+    "Scope UUID",
+    "context window",
+    "Execution Graph",
+    "sliding-window discarder",
+    "Workflow Emergence",
+    "cross-task pattern matching",
+    "Worker"
+  ],
+  "cross_refs": [
+    "docs/adr/0013-adr13-knapsack-slicing.md",
+    "docs/adr/0023-adr23-nested-scope-propagation.md",
+    "docs/adr/0025-adr25-cross-domain-topology.md",
+    "docs/adr/0030-adr30-context-assembly-strategy.md",
+    "docs/adr/0034-adr34-subagent-scope-branch-model.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

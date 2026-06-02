@@ -1,0 +1,30 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0024-adr13-supplement-context-oom-degradation.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 13 补充：拓扑视界宽度熔断三级降级链路",
+  "summary": "Defines a three-tier adaptive degradation chain for context OOM scenarios when ADR 13 width fuse still exceeds W_max after root and current node injection.",
+  "scope": [
+    "context window management",
+    "width fuse (宽度熔断)",
+    "N_root distillation",
+    "N_current tail truncation",
+    "context_oom_throttled event",
+    "control plane daemon",
+    "Scope suspension",
+    "iii-engine gateway",
+    "execution_event_log"
+  ],
+  "cross_refs": [
+    "docs/adr/0013-adr13-knapsack-slicing.md",
+    "docs/adr/0012-adr12-cognitive-event-bus.md",
+    "docs/adr/0015-adr15-wasm-tokenizer.md",
+    "docs/adr/0019-adr19-topology-convergence-watchdog.md",
+    "docs/adr/0022-adr22-embedding-provider.md",
+    "docs/adr/0005-adr05-control-plane-daemon.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

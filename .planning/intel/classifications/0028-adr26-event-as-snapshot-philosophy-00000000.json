@@ -1,0 +1,29 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0028-adr26-event-as-snapshot-philosophy.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 26｜Event-as-Snapshot 哲学：状态推导与重放验证模型",
+  "summary": "Establishes Event-as-Snapshot as the canonical state derivation model, rejecting fold/reduce projection over causal chains in favor of direct tip-node reads.",
+  "scope": [
+    "execution_event_log",
+    "version_hash",
+    "memory_updated",
+    "state derivation",
+    "replay verification",
+    "Knapsack Slicing",
+    "OCC",
+    "conflict_detected"
+  ],
+  "cross_refs": [
+    "docs/adr/0002-adr-scope-salted-content-addressing.md",
+    "docs/adr/0003-adr-writable-cte-occ.md",
+    "docs/adr/0013-adr-knapsack-slicing.md",
+    "docs/adr/0019-adr-topology-convergence-watchdog.md",
+    "docs/adr/0024-adr-assembled-context.md",
+    "docs/RFC_v4.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

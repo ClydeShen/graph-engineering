@@ -1,0 +1,27 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0027-adr25-cross-domain-topology-algorithm.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 25｜跨域拓扑模式发现算法：WL 图核 + 拓扑嵌入",
+  "summary": "Selects Weisfeiler-Lehman graph kernel over GNN/isomorphism alternatives for cross-domain execution topology similarity detection in procedural memory.",
+  "scope": [
+    "cross-domain topology discovery",
+    "WL graph kernel",
+    "topology_embedding",
+    "procedural_memory",
+    "TemplateProposalWorker",
+    "CrossScopePatternDiscoveryWorker",
+    "pgvector",
+    "HNSW index"
+  ],
+  "cross_refs": [
+    "docs/adr/0017-adr-pgvector-atomic-write.md",
+    "docs/adr/0020-adr-four-layer-memory-architecture.md",
+    "docs/adr/0007-adr-template-proposal-worker.md",
+    "docs/RFC_v4.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,29 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0032-adr30-context-assembly-strategy.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 30: Context Assembly Strategy",
+  "summary": "Defines a three-tier (stable/context/volatile) prompt assembly strategy for Worker invocations with a deterministic reverse-chronological overflow discarder and no LLM compression.",
+  "scope": [
+    "context assembly",
+    "Worker invocation",
+    "Execution Graph",
+    "three-tier prompt",
+    "causal lineage projection",
+    "overflow policy",
+    "IOverflowStrategy",
+    "Knapsack Slicing",
+    "prompt caching"
+  ],
+  "cross_refs": [
+    "docs/adr/0013-knapsack-slicing.md",
+    "docs/adr/0014-context-window-safety-formula.md",
+    "docs/adr/0015-wasm-tokenizer.md",
+    "docs/adr/0027-worker-lifecycle.md",
+    "docs/adr/0029-knowledge-entity-definition.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

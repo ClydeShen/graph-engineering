@@ -1,0 +1,30 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0023-adr22-llm-provider-abstraction.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 22｜LLM/Embedding Provider 抽象层与最小化原则",
+  "summary": "Defines a minimization principle for LLM calls and a two-interface provider abstraction (LLMProvider, EmbeddingProvider) decoupling workers from specific model APIs.",
+  "scope": [
+    "LLMProvider",
+    "EmbeddingProvider",
+    "iii-engine",
+    "Worker",
+    "ConflictResolverWorker",
+    "TemplateProposalWorker",
+    "mem::reflect",
+    "OpenAI-compatible API",
+    "ollama",
+    "llama.cpp",
+    "Apple MLX"
+  ],
+  "cross_refs": [
+    "docs/adr/0005-worker-permission-isolation.md",
+    "docs/adr/0014-context-window-safety-capacity.md",
+    "docs/adr/0016-context-window-safety-capacity.md",
+    "docs/adr/0021-mem-reflect.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,33 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0030-adr28-scheduling-spec-and-operational-determinism.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 28｜调度规约与操作确定性",
+  "summary": "Locks algebraic convergence determinism for the watchdog and defines scheduling rules including max parallelism, token-bucket rate limiting, and ConflictResolverWorker single-writer mutex.",
+  "scope": [
+    "iii-engine",
+    "ConflictResolverWorker",
+    "convergence watchdog",
+    "DashMap routing",
+    "scheduling",
+    "token bucket",
+    "FIFO queue",
+    "ActiveResolverRegistry",
+    "Max_Parallelism",
+    "execution_event_log"
+  ],
+  "cross_refs": [
+    "docs/adr/0008-hwm.md",
+    "docs/adr/0009-listen-notify-pulse-fetch.md",
+    "docs/adr/0013-knapsack-slicing.md",
+    "docs/adr/0018-convergence-node-writeback.md",
+    "docs/adr/0019-topology-convergence-watchdog.md",
+    "docs/adr/0024-http-gateway.md",
+    "docs/adr/0025-cross-domain-topology-algorithm.md",
+    "docs/adr/0027-worker-lifecycle.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

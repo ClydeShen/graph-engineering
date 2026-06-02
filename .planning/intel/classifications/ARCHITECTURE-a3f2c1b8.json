@@ -1,0 +1,41 @@
+{
+  "source_path": "D:/Repo/graph-enginerring/docs/ARCHITECTURE.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Graph-Native Agent Runtime — Architecture Document",
+  "summary": "Comprehensive architecture overview of the graph-native agent runtime, covering component design, data flows, sequence diagrams, and key subsystem contracts across 23 ADRs.",
+  "scope": [
+    "Execution Graph",
+    "Control Plane Daemon",
+    "Worker Layer",
+    "PostgreSQL",
+    "Pulse-Fetch Bridge",
+    "Convergence Watchdog",
+    "Knapsack Slicing",
+    "mem::reflect",
+    "OCC conflict resolution",
+    "episodic_memory",
+    "semantic_memory",
+    "procedural_memory",
+    "iii Engine",
+    "DashMap subscription routing",
+    "Context OOM degradation",
+    "Scope lifecycle"
+  ],
+  "cross_refs": [
+    "docs/ADR_v4.md",
+    "docs/RFC_v4.md",
+    "CONTEXT.md",
+    "docs/adr/0021-adr20-supplement-hybrid-retrieval-bm25-rrf.md",
+    "docs/adr/0022-adr21-reflection-track-trigger-spec.md",
+    "docs/adr/0023-adr22-llm-provider-abstraction.md",
+    "docs/adr/0024-adr13-supplement-context-oom-degradation.md",
+    "docs/adr/0025-adr23-nested-scope-propagation.md",
+    "docs/未决问题追踪.md",
+    "docs/TECH_STACK.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

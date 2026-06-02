@@ -1,0 +1,28 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0021-adr20-supplement-hybrid-retrieval-bm25-rrf.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 20 补充：三张记忆表混合检索规范（tsvector BM25 + pgvector RRF）",
+  "summary": "Supplements ADR 20 by adding BM25 tsvector retrieval tracks to all three memory tables and defining RRF fusion formula for hybrid search.",
+  "scope": [
+    "episodic_memory",
+    "semantic_memory",
+    "procedural_memory",
+    "tsvector",
+    "BM25",
+    "pgvector",
+    "HNSW",
+    "RRF",
+    "hybrid retrieval",
+    "GIN index"
+  ],
+  "cross_refs": [
+    "docs/adr/0017-*.md",
+    "docs/adr/0020-*.md",
+    "docs/adr/0013-*.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

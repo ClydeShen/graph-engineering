@@ -1,0 +1,31 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0034-adr32-pgqueueadapter-and-idempotency.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 32: PgQueueAdapter and Idempotency Enforcement",
+  "summary": "Replaces iii's 100ms file-based poll adapter with a PostgreSQL FOR UPDATE SKIP LOCKED queue and enforces Worker idempotency via UNIQUE constraints with ON CONFLICT DO NOTHING.",
+  "scope": [
+    "PgQueueAdapter",
+    "execution_event_log",
+    "hyper_edges",
+    "versions",
+    "IQueueAdapter",
+    "LISTEN/NOTIFY",
+    "FOR UPDATE SKIP LOCKED",
+    "idempotency",
+    "Worker",
+    "PostgreSQL"
+  ],
+  "cross_refs": [
+    "docs/adr/0002-version-hash-computation.md",
+    "docs/adr/0003-occ-writable-cte.md",
+    "docs/adr/0009-listen-notify-pulse-fetch.md",
+    "docs/adr/0011-worker-idempotency-occ.md",
+    "docs/adr/0028-max-parallelism.md",
+    "docs/adr/0031-frontier-scheduler.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

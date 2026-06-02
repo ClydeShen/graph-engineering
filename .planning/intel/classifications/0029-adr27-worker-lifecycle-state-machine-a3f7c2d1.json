@@ -1,0 +1,31 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0029-adr27-worker-lifecycle-state-machine.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 27｜Worker 执行生命周期状态机",
+  "summary": "Defines a mandatory four-phase deterministic state machine (Initializing, Processing, Writing, Terminated) for Worker sandbox execution, including Knapsack assembly failure paths.",
+  "scope": [
+    "Worker",
+    "sandbox",
+    "state machine",
+    "Knapsack",
+    "context window",
+    "OCC",
+    "OOM degradation",
+    "iii-engine",
+    "microkernel",
+    "scheduling"
+  ],
+  "cross_refs": [
+    "docs/adr/0003-adr03-writable-cte-occ.md",
+    "docs/adr/0005-adr05-scope-nesting-protocol.md",
+    "docs/adr/0013-adr13-oom-degradation.md",
+    "docs/adr/0019-adr19-topology-convergence-watchdog.md",
+    "docs/adr/0024-adr24-gateway-zod.md",
+    "docs/adr/0028-adr28-scheduling-spec.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

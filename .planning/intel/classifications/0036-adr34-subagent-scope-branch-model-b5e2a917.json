@@ -1,0 +1,31 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0036-adr34-subagent-scope-branch-model.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 34: Subagent Execution and Scope Branch Model",
+  "summary": "Defines the Phase 1 in-process Scope branch model for subagent spawning, dual-layer recursion guard, interrupt propagation, and the Phase 2 path to multi-node distribution.",
+  "scope": [
+    "Scope",
+    "Worker",
+    "subagent spawning",
+    "scope_spawned Hyper-edge",
+    "recursion guard",
+    "interrupt propagation",
+    "FrontierSchedulerWorker",
+    "Phase 1 in-process execution",
+    "Phase 2 multi-node distribution"
+  ],
+  "cross_refs": [
+    "docs/adr/0023-adr22-llm-provider-abstraction.md",
+    "docs/adr/0033-adr32-scope-identity-boundary.md",
+    "docs/adr/0025-adr23-nested-scope-propagation.md",
+    "docs/adr/0029-adr27-worker-lifecycle-state-machine.md",
+    "docs/adr/0028-adr26-event-as-snapshot-philosophy.md",
+    "docs/adr/0031-adr29-frontier-scheduler.md",
+    "docs/adr/0035-adr33-scope-identity-boundary.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

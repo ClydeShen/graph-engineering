@@ -1,0 +1,29 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0025-adr23-nested-scope-propagation.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 23｜嵌套 Scope 与子 Scope 关闭传导协议",
+  "summary": "Defines the nested Scope creation and child-Scope closure propagation protocol across Phase 1 (forward-compatible stub) and Phase 3 (full activation), without extending the five canonical cognitive events.",
+  "scope": [
+    "nested Scope",
+    "child Scope",
+    "scope_lineage table",
+    "sub_scope_resolved event",
+    "SubScopeResultWorker",
+    "control plane",
+    "watchdog (ADR 19)",
+    "cold/hot separation (ADR 06)"
+  ],
+  "cross_refs": [
+    "docs/adr/0005-adr05-control-plane-ddl.md",
+    "docs/adr/0006-adr06-cold-hot-separation.md",
+    "docs/adr/0012-adr12-canonical-events.md",
+    "docs/adr/0019-adr19-topology-convergence-watchdog.md",
+    "docs/adr/0022-adr22-llm-provider.md",
+    "docs/RFC_v4.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

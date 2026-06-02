@@ -22,7 +22,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
   2. `POST /v1/scopes/{id}/events` accepts a canonical event payload, computes SHA-256 version_hash via pgcrypto, returns assembled Knapsack context
   3. OCC concurrent writes to the same entity: first writer gets `memory_updated`, second gets `conflict_detected` with causal inversion — both via Writable CTE in a single transaction
   4. Worker processes an event through all 4 lifecycle phases (Initializing → Processing → Writing → Terminated) per ADR 27
-  5. Frontier Scheduler dispatches events with `dynamic_score = base_priority×10 + age_bonus + unlocks_count×5` without any LLM calls
+  5. Frontier Scheduler dispatches events with `dynamic_score = base_priority×10 + age_bonus(≤20) + unlocks_count×5 + spawned_by_bonus(3) + active_bonus(15)` without any LLM calls
   6. Context Assembly produces 3-layer prompt (Stable / Causal / Volatile) with Zero-LLM overflow discard when W_max exceeded
   7. Worker class fails to compile if it calls `write()` via a Tool context (TypeScript ABC enforcement, ADR 35)
   8. canonical_json produces deterministic output for the same payload regardless of insertion order (BTreeMap application-layer serialization)

@@ -1,0 +1,32 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0026-adr24-agent-entry-point-protocol.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 24｜Agent 接入协议：HTTP Gateway（控制面 HTTP 层）",
+  "summary": "Defines the HTTP REST Gateway as the agent entry-point protocol for Phase 1, with a deferred MCP cognitive-translation adapter for Phase 2.",
+  "scope": [
+    "HTTP Gateway",
+    "iii-engine",
+    "Agent entry-point",
+    "MCP Adapter",
+    "Scope lifecycle",
+    "Zod input validation",
+    "scope_closed",
+    "AssembledContext",
+    "Knapsack slicing",
+    "OCC"
+  ],
+  "cross_refs": [
+    "ADR 04",
+    "ADR 05",
+    "ADR 06",
+    "ADR 12",
+    "ADR 13",
+    "ADR 18",
+    "ADR 19"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}

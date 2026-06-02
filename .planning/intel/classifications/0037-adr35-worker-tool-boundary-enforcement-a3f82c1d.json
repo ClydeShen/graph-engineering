@@ -1,0 +1,17 @@
+{
+  "source_path": "D:\\Repo\\graph-enginerring\\docs\\adr\\0037-adr35-worker-tool-boundary-enforcement.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR 35: Worker/Tool Boundary Enforcement",
+  "summary": "Establishes two-layer physical enforcement of the Worker/Tool capability boundary via TypeScript interface segregation at compile time and runtime dependency injection.",
+  "scope": ["Worker", "Tool", "ToolExecutionContext", "WorkerExecutionContext", "ReadOnlyGraphHandle", "GraphHandle", "iii SDK", "control plane"],
+  "cross_refs": [
+    "docs/adr/0027-worker-lifecycle.md",
+    "docs/adr/0029-worker-tool-knowledge-connector-boundary-definitions.md",
+    "docs/adr/0032-pg-queue-adapter.md"
+  ],
+  "locked": true,
+  "precedence": null,
+  "notes": ""
+}
