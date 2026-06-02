@@ -14,7 +14,11 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["packages/shared/src/*"]
+      "@shared/*": ["packages/shared/src/*"],
+      "@graph/shared/*": ["packages/shared/src/*"],
+      "@graph/workers/*": ["packages/workers/src/*"],
+      "@graph/control-plane/*": ["packages/control-plane/src/*"],
+      "@graph/gateway/*": ["packages/gateway/src/*"]
     }
   },
   "include": [

@@ -4,7 +4,10 @@
   "type": "module",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./nesting": "./src/nesting.ts",
+    "./hwm": "./src/hwm.ts",
+    "./watchdog": "./src/watchdog.ts"
   },
   "dependencies": {
     "@graph/shared": "*",
