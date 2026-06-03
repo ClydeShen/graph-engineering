@@ -15,7 +15,6 @@
 
 import { registerWorker } from 'iii-sdk';
 import { Pool } from 'pg';
-import { OpenAICompatibleProvider } from '@graph/shared';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ContextAssemblyWorker } from './concrete/context-assembly.worker.js';
@@ -30,14 +29,6 @@ const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/g
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-// LLM CALL — provider instance constructed here; credentials from iii-config.yaml
-// env interpolation (ADR 22: Workers call interface, never hold credentials).
-const llmProvider = new OpenAICompatibleProvider({
-  baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
-  model: process.env['LLM_MODEL'] ?? 'llama3',
-  apiKey: process.env['LLM_API_KEY'] ?? '',
-});
-
 // ---------------------------------------------------------------------------
 // Worker registration
 // ---------------------------------------------------------------------------
@@ -47,8 +38,6 @@ const worker = registerWorker(III_URL, { workerName: 'graph-workers' });
 // graph::context-assembly
 const contextAssemblyWorker = new ContextAssemblyWorker();
 worker.registerFunction('graph::context-assembly', async (payload: unknown) => {
-  // Lifecycle invocation delegated to worker instance via iii-sdk payload
-  void llmProvider; // provider available for future Phase 2 context compression
   void contextAssemblyWorker;
   return payload;
 });
