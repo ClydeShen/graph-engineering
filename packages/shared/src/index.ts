@@ -13,3 +13,4 @@ export * from './tokenizer.js';
 export * from './logger.js';
 export * from './llm/provider.interface.js';
 export * from './llm/openai-compatible.provider.js';
+export * from './write-guard.js';

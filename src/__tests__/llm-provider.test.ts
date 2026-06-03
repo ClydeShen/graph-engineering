@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { OpenAICompatibleProvider } from '../../packages/workers/src/llm/openai-compatible.provider.js';
+import { OpenAICompatibleProvider } from '../../packages/shared/src/llm/openai-compatible.provider.js';
 
 const BASE_URL = 'http://localhost:11434';
 const MODEL = 'llama3';
@@ -71,7 +71,7 @@ describe('OpenAICompatibleProvider', () => {
   it('provider source contains no hardcoded credential literals (sk- pattern)', () => {
     const srcPath = join(
       process.cwd(),
-      'packages/workers/src/llm/openai-compatible.provider.ts',
+      'packages/shared/src/llm/openai-compatible.provider.ts',
     );
     const src = readFileSync(srcPath, 'utf-8');
     expect(src).not.toMatch(/sk-[A-Za-z0-9]+/);

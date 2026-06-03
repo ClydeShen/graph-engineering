@@ -20,6 +20,8 @@ import { Pool } from 'pg';
 import { buildScopesRoute } from './routes/scopes.js';
 import { buildEventsRoute } from './routes/events.js';
 import { buildScopeReadRoute } from './routes/scope-read.js';
+import { buildHealthRoute } from './routes/health.js';
+import { buildTopologyRoute } from './routes/topology.js';
 import { logger } from '@shared/logger';
 
 /**
@@ -36,6 +38,8 @@ export function buildApp(pool: Pool): Hono {
   app.route('/v1/scopes', buildScopesRoute(pool));
   app.route('/v1/scopes', buildEventsRoute(pool));
   app.route('/v1/scopes', buildScopeReadRoute(pool));
+  app.route('/v1', buildHealthRoute(pool));
+  app.route('/v1', buildTopologyRoute(pool));
 
   return app;
 }
