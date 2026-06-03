@@ -88,7 +88,7 @@ export const FRONTIER_PRIORITY_SQL = `
 /** Mark selected frontier nodes as pending_dispatch (idempotent guard). */
 const DISPATCH_SQL = `
   UPDATE execution_event_log
-  SET status = 'pending_dispatch', scheduled_at = NOW()
+  SET status = 'pending_dispatch', dispatched_at = NOW()
   WHERE id = ANY($1::int[])
     AND status = 'pending_scheduling'
 `;

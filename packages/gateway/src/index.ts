@@ -20,6 +20,7 @@ import { Pool } from 'pg';
 import { buildScopesRoute } from './routes/scopes.js';
 import { buildEventsRoute } from './routes/events.js';
 import { buildScopeReadRoute } from './routes/scope-read.js';
+import { logger } from '@shared/logger';
 
 /**
  * Build and return the Hono app with all routes mounted.
@@ -48,8 +49,15 @@ const pool = new Pool({
 
 const app = buildApp(pool);
 
+const gatewayPort = Number(process.env.PORT ?? 3000);
+
+logger.child({ component: 'gateway' }).info(
+  { port: gatewayPort, url: `http://localhost:${gatewayPort}` },
+  'gateway.ready',
+);
+
 export default {
-  port: Number(process.env.PORT ?? 3000),
+  port: gatewayPort,
   fetch: app.fetch,
 };
 

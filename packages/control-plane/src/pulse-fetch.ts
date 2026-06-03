@@ -53,7 +53,7 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
   const hwm = await readHwm(readPool, CONTROL_PLANE_WORKER_ID);
 
   // Step 4: Replay any events missed since HWM
-  const missed = await readPool.query<{ id: number; event_type: string }>(
+  const missed = await readPool.query<{ id: number; event_type: string; scope_id: string }>(
     `SELECT id, event_type, entity_id, scope_id, payload, predecessor_hash, version_hash
      FROM execution_event_log
      WHERE id > $1
@@ -64,8 +64,8 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
     log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
     await iiiWorker.trigger({
-      function_id: `worker::${row.event_type}`,
-      payload: row,
+      function_id: 'graph::scheduler::frontier',
+      payload: { scope_id: row.scope_id },
     });
   }
 
@@ -112,10 +112,10 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
     // Advance HWM before triggering (ADR 09 ordering guarantee)
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, event.id);
 
-    // Route to iii Worker
+    // Route to Frontier Scheduler — passes scope_id for priority queue update
     await iiiWorker.trigger({
-      function_id: `worker::${event.event_type}`,
-      payload: event,
+      function_id: 'graph::scheduler::frontier',
+      payload: { scope_id: event.scope_id },
     });
   });
 

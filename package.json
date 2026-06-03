@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "test:unit": "vitest run src/__tests__",
     "test:integration": "vitest run tests/integration",
     "test": "vitest run",
