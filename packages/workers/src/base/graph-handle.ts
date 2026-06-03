@@ -12,8 +12,9 @@
  * @see ADR 33 — Scope identity boundary (UUID orthogonality)
  */
 
-import type { Pool, QueryResultRow, ClientBase } from 'pg';
+import type { Pool, QueryResultRow } from 'pg';
 import type { GraphWriteEvent, WriteResult } from '@shared/types.js';
+import { OCC_WRITE_SQL, partitionTable } from '@shared/sql/occ-writable-cte.sql.js';
 
 /**
  * Full read/write graph handle — held exclusively by Workers.
@@ -62,57 +63,18 @@ export class GraphHandleImpl implements GraphHandle {
 /**
  * OCC Writable CTE — executes the append-only insert with SHA-256 hash chain.
  *
- * Uses pgcrypto.digest() inside the CTE. First writer wins (occ_result='won').
- * Second writer's event is rewritten as conflict_detected (occ_result='demoted').
- * No application callback or ::jsonb conversion. (ADR 11, ADR 02)
+ * Delegates to the canonical OCC_WRITE_SQL template (ADR 11, ADR 02):
+ *   - First writer wins (occ_result='won').
+ *   - Second writer's event is appended as conflict_detected (occ_result='demoted').
+ *   - Targets the per-scope partition via partitionTable() so ON CONFLICT
+ *     resolves against the partition-local UNIQUE constraint (ADR 01, ADR 11).
  */
-export async function occWrite(pool: ClientBase, event: GraphWriteEvent): Promise<WriteResult> {
-  // Writable CTE: compute version_hash via pgcrypto, insert, handle OCC conflict.
-  // The canonical_json_text is already pre-serialized by the caller (ADR 02).
-  const sql = `
-    WITH input AS (
-      SELECT
-        $1::uuid            AS scope_id,
-        $2::uuid            AS entity_id,
-        $3::text            AS event_type,
-        $4::text            AS predecessor_hash,
-        $5::text            AS canonical_json_text
-    ),
-    computed AS (
-      SELECT
-        scope_id, entity_id, event_type, predecessor_hash, canonical_json_text,
-        encode(
-          pgcrypto.digest(
-            scope_id::text || '|' || entity_id::text || '|' ||
-            predecessor_hash || '|' || event_type || '|' || canonical_json_text,
-            'sha256'
-          ),
-          'hex'
-        ) AS version_hash
-      FROM input
-    ),
-    inserted AS (
-      INSERT INTO execution_event_log
-        (scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, status)
-      SELECT
-        scope_id, entity_id, event_type, predecessor_hash, version_hash,
-        canonical_json_text, 'pending_scheduling'
-      FROM computed
-      ON CONFLICT (predecessor_hash, scope_id) DO NOTHING
-      RETURNING version_hash, event_type
-    )
-    SELECT
-      COALESCE(i.version_hash, c.version_hash) AS version_hash,
-      CASE WHEN i.version_hash IS NOT NULL THEN 'won' ELSE 'demoted' END AS occ_result,
-      c.event_type
-    FROM computed c
-    LEFT JOIN inserted i ON true
-  `;
-
+export async function occWrite(pool: Pool, event: GraphWriteEvent): Promise<WriteResult> {
   const { scope_id, entity_id, event_type, predecessor_hash, canonical_json_text } = event;
-  const result = await pool.query(sql, [
-    scope_id, entity_id, event_type, predecessor_hash, canonical_json_text,
-  ]);
+  const result = await pool.query(
+    OCC_WRITE_SQL(partitionTable(scope_id)),
+    [scope_id, entity_id, predecessor_hash, canonical_json_text, event_type],
+  );
 
   const row = result.rows[0];
   return {
