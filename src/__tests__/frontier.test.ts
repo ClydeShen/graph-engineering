@@ -139,7 +139,7 @@ describe('FRONTIER_TRIGGER_CONFIG', () => {
   });
 
   it('subscribes to graph::frontier::changed topic', () => {
-    expect(FRONTIER_TRIGGER_CONFIG.topic).toBe('graph::frontier::changed');
+    expect(FRONTIER_TRIGGER_CONFIG.config.topic).toBe('graph::frontier::changed');
   });
 
   it('is a durable:subscriber type', () => {

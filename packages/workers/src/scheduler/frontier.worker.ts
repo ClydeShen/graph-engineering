@@ -26,14 +26,14 @@ import { TokenBucket } from './token-bucket.js';
 export interface TriggerConfig {
   type: 'durable:subscriber';
   function_id: string;
-  topic: string;
+  config: { topic: string };
 }
 
 /** Trigger registration config for Plan 09 index.ts. */
 export const FRONTIER_TRIGGER_CONFIG: TriggerConfig = {
   type: 'durable:subscriber',
   function_id: 'graph::scheduler::frontier',
-  topic: 'graph::frontier::changed',
+  config: { topic: 'graph::frontier::changed' },
 };
 
 // ---------------------------------------------------------------------------
