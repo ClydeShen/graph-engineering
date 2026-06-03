@@ -256,7 +256,8 @@ embedding:
 | iii Engine | 通過官方安裝腳本安裝；生產配置指向 PostgreSQL backend |
 | PostgreSQL | v15+，pgcrypto + pgvector 已安裝；推薦 Docker `pgvector/pgvector:pg16` |
 | Redis | iii CronModule 等需要（可選，視 iii 配置而定） |
-| Node.js | v20 LTS+（Workers + Control Plane） |
+| Node.js | v22+（Workers + Control Plane）；啟動命令 `node --import tsx/esm`，`--loader tsx` 在 v22 已廢棄 |
+| Bun | v1.x（HTTP Gateway）；Gateway 使用 `export default { port, fetch }` Bun server API，Node.js 不自動啟動 HTTP 服務器 |
 | Windows 開發 | Docker 或 WSL2（STATE.md 風險 #10） |
 | Pi Agent 跨平台 | `{ shell: true }` spawn（STATE.md 風險 #9） |
 
