@@ -35,88 +35,81 @@ export function partitionTable(scopeId: string): string {
 }
 
 /**
- * OCC Writable CTE — first-writer-wins with atomic causal inversion.
+ * OCC Writable CTE — first-writer-wins, losers appended as conflict_detected.
  *
- * First writer: inserts with event_type=$5 (agent-submitted), returns occ_result='won'.
- * Second writer: ON CONFLICT triggers DO UPDATE that:
- *   1. Sets event_type='conflict_detected'
- *   2. Rewrites predecessor_hash to point at the winner's version_hash (causal inversion)
- *   3. Recomputes version_hash with event_type='conflict_detected' and the SAME canonical_json_text
- *   4. Stores payload=$4::text
- *   Returns occ_result='demoted'.
+ * First writer:  inserts with event_type=$5, returns occ_result='won'.
+ * Second+ writer: DO NOTHING on the contested slot, then inserts a NEW
+ *   conflict_detected row whose predecessor points at the winner's version_hash
+ *   (causal append, not causal inversion). The winner row is never mutated.
  *
- * The winner may be either 'task_spawned' or 'memory_updated'. The DO UPDATE subquery
- * finds the winner by excluding 'conflict_detected' rows at the contested slot.
+ * Three-CTE structure:
+ *   attempt        — try the slot; DO NOTHING on conflict
+ *   winner         — find the row that holds predecessor_hash=$3 (excluding conflicts)
+ *   conflict       — insert conflict_detected after the winner (skipped if attempt won)
+ *   demoted_fallback — if two losers race for the conflict slot, the second gets DO NOTHING;
+ *                      return a computed version_hash so the application always gets a row
  *
- * The causal inversion is atomic — no application callback, no ::jsonb conversion.
  * @see ADR 11, ADR 02, ADR 40
  */
 export function OCC_WRITE_SQL(partition: string): string { return `
-WITH attempt AS (
+WITH
+attempt AS (
   INSERT INTO ${partition} (
-    scope_id,
-    entity_id,
-    event_type,
-    predecessor_hash,
-    version_hash,
-    payload,
-    created_at
+    scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, created_at
   )
   VALUES (
-    $1::uuid,
-    $2::uuid,
-    $5::text,
-    $3::text,
+    $1::uuid, $2::uuid, $5::text, $3::text,
     encode(
-      digest(
-        $1::text || '|' || $2::text || '|' || $3::text || '|' || $5::text || '|' || $4::text,
-        'sha256'
-      ),
+      digest($1::text || '|' || $2::text || '|' || $3::text || '|' || $5::text || '|' || $4::text, 'sha256'),
       'hex'
     ),
-    $4::text,
-    NOW()
+    $4::text, NOW()
   )
-  ON CONFLICT (predecessor_hash, scope_id) DO UPDATE SET
-    event_type       = 'conflict_detected',
-    predecessor_hash = (
-      SELECT version_hash
-      FROM execution_event_log
-      WHERE predecessor_hash = $3::text
-        AND scope_id = $1::uuid
-        AND event_type NOT IN ('conflict_detected')
-      ORDER BY created_at DESC
-      LIMIT 1
-    ),
-    version_hash     = encode(
-      digest(
-        $1::text || '|' || $2::text
-          || '|' || (
-            SELECT version_hash
-            FROM execution_event_log
-            WHERE predecessor_hash = $3::text
-              AND scope_id = $1::uuid
-              AND event_type NOT IN ('conflict_detected')
-            ORDER BY created_at DESC
-            LIMIT 1
-          )
-          || '|conflict_detected|' || $4::text,
-        'sha256'
-      ),
+  ON CONFLICT (predecessor_hash, scope_id) DO NOTHING
+  RETURNING event_type, version_hash
+),
+winner AS (
+  SELECT version_hash AS wh
+  FROM ${partition}
+  WHERE predecessor_hash = $3::text
+    AND scope_id = $1::uuid
+    AND event_type <> 'conflict_detected'
+  LIMIT 1
+),
+conflict AS (
+  INSERT INTO ${partition} (
+    scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, created_at
+  )
+  SELECT
+    $1::uuid, $2::uuid, 'conflict_detected', wh,
+    encode(
+      digest($1::text || '|' || $2::text || '|' || wh || '|conflict_detected|' || $4::text, 'sha256'),
       'hex'
     ),
-    payload          = $4::text,
-    created_at       = NOW()
+    $4::text, NOW()
+  FROM winner
+  WHERE NOT EXISTS (SELECT 1 FROM attempt)
+  ON CONFLICT (predecessor_hash, scope_id) DO NOTHING
   RETURNING event_type, version_hash
+),
+demoted_fallback AS (
+  SELECT
+    'conflict_detected'::text AS event_type,
+    encode(
+      digest($1::text || '|' || $2::text || '|' || wh || '|conflict_detected|' || $4::text, 'sha256'),
+      'hex'
+    ) AS version_hash
+  FROM winner
+  WHERE NOT EXISTS (SELECT 1 FROM attempt)
+    AND NOT EXISTS (SELECT 1 FROM conflict)
 )
-SELECT
-  event_type,
-  version_hash,
-  CASE event_type
-    WHEN 'conflict_detected' THEN 'demoted'
-    ELSE 'won'
-  END AS occ_result
-FROM attempt;
+SELECT event_type, version_hash,
+  CASE event_type WHEN 'conflict_detected' THEN 'demoted' ELSE 'won' END AS occ_result
+FROM attempt
+UNION ALL
+SELECT event_type, version_hash, 'demoted' AS occ_result FROM conflict
+UNION ALL
+SELECT event_type, version_hash, 'demoted' AS occ_result FROM demoted_fallback;
 `; }
 
 /**
