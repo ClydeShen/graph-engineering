@@ -26,4 +26,23 @@ Gate 1 测试和 Phase 1 实现产生的所有记录已迁移至正式文档：
 
 ## Phase 2 活跃备注
 
-_当前无条目。Phase 2 开始后在此追加。_
+### TD-2 根因记录（2026-06-03）
+
+`spawnChildScope` 原来用 `predecessor_hash: ZERO_HASH` 写入父 Scope 分区，
+但 `plan_created` 已经占用了 `(ZERO_HASH, scope_id)` OCC 唯一槽位，第二次写入
+会静默 demoted（`ON CONFLICT DO NOTHING`）。修复：写入前查询父 Scope tip 版本哈希作 predecessor。
+文件：`packages/workers/src/base/subagent.ts`，commit `e88a61b`。
+
+### TD-6 架构决策（2026-06-03）
+
+`ScopeConvergenceTracker` Tier-1 计数器重启后归零属于**有意设计**：
+Tier-3 DB SQL 是唯一权威 guard；Tier-1 仅是性能优化（避免 DB round-trip）。
+重启后 Tier-1 为 0 → checkAndClose 直通 Tier-3 SQL → 结果与有计数时一致。
+不需要持久化 Tier-1 状态。文件：`packages/control-plane/src/watchdog.ts`，commit `1c0674d`。
+
+### D3 迁移状态（2026-06-03）
+
+LLMProvider/EmbeddingProvider 接口已从 `packages/workers/src/llm/` 迁移到
+`packages/shared/src/llm/`，并从 `@graph/shared` 统一导出。
+`packages/workers/src/llm/` 目录已删除。VERIFICATION.md §D3 已过时。
+Commit `44f842c`。
