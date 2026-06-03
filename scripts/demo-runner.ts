@@ -15,6 +15,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+// Read ports from env (fall back to project defaults 4000/4001)
+const GATEWAY_PORT = process.env.PORT ?? '4000';
+const GW = `http://localhost:${GATEWAY_PORT}`;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ScenarioResult {
@@ -59,7 +63,7 @@ const GATES: Record<number, Gate> = {
   4. Workers 进程已启动（npx tsx packages/workers/src/index.ts）
   5. Control Plane 进程已启动（npx tsx packages/control-plane/src/index.ts）
   6. HTTP Gateway 进程已启动（npx tsx packages/gateway/src/index.ts）
-  7. .env 文件包含 DATABASE_URL, III_URL, PORT=3000, LOG_LEVEL=debug
+  7. .env 文件包含 DATABASE_URL, III_URL, PORT=4000, LOG_LEVEL=debug
 `,
     scenarios: [
       {
@@ -67,7 +71,7 @@ const GATES: Record<number, Gate> = {
         name: '创建 Scope',
         description: `
   运行：
-    curl -s -X POST http://localhost:3000/v1/scopes \\
+    curl -s -X POST ${GW}/v1/scopes \\
       -H "Content-Type: application/json" \\
       -d '{"intent": "Gate 1 smoke test"}' | jq .
 
@@ -86,7 +90,7 @@ const GATES: Record<number, Gate> = {
     SCOPE_ID="<A返回的scope_id>"
     PLAN_HASH="<A返回的plan_hash>"
 
-    curl -s -X POST "http://localhost:3000/v1/scopes/$SCOPE_ID/events" \\
+    curl -s -X POST "${GW}/v1/scopes/$SCOPE_ID/events" \\
       -H "Content-Type: application/json" \\
       -d "{
         \\"event_type\\": \\"task_spawned\\",
@@ -106,7 +110,7 @@ const GATES: Record<number, Gate> = {
         name: '读取 Scope 状态',
         description: `
   运行：
-    curl -s "http://localhost:3000/v1/scopes/$SCOPE_ID" | jq .
+    curl -s "${GW}/v1/scopes/$SCOPE_ID" | jq .
 
   期望：
     • HTTP 200
@@ -118,7 +122,7 @@ const GATES: Record<number, Gate> = {
         name: 'Zod 验证拒绝无效请求',
         description: `
   运行：
-    curl -s -X POST "http://localhost:3000/v1/scopes/not-a-uuid/events" \\
+    curl -s -X POST "${GW}/v1/scopes/not-a-uuid/events" \\
       -H "Content-Type: application/json" \\
       -d '{"event_type":"task_spawned","entity_id":"bad","predecessor_hash":"bad","payload":{}}' | jq .
 
@@ -132,11 +136,11 @@ const GATES: Record<number, Gate> = {
         name: 'OCC 并发冲突（同一 predecessor_hash 两次写入）',
         description: `
   运行（两次使用相同的 PLAN_HASH）：
-    curl -s -X POST "http://localhost:3000/v1/scopes/$SCOPE_ID/events" \\
+    curl -s -X POST "${GW}/v1/scopes/$SCOPE_ID/events" \\
       -H "Content-Type: application/json" \\
       -d "{\\"event_type\\":\\"memory_updated\\",\\"entity_id\\":\\"$(uuidgen)\\",\\"predecessor_hash\\":\\"$PLAN_HASH\\",\\"payload\\":{\\"note\\":\\"A\\"}}" | jq .occ_result
 
-    curl -s -X POST "http://localhost:3000/v1/scopes/$SCOPE_ID/events" \\
+    curl -s -X POST "${GW}/v1/scopes/$SCOPE_ID/events" \\
       -H "Content-Type: application/json" \\
       -d "{\\"event_type\\":\\"memory_updated\\",\\"entity_id\\":\\"$(uuidgen)\\",\\"predecessor_hash\\":\\"$PLAN_HASH\\",\\"payload\\":{\\"note\\":\\"B\\"}}" | jq .occ_result
 

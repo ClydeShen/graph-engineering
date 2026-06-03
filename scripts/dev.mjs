@@ -29,6 +29,10 @@ if (!appEnv.PATH?.includes(bunBin)) {
   appEnv.PATH = bunBin + sep + (appEnv.PATH ?? '');
 }
 
+// ── Derive ports from env (never hardcode) ────────────────────────────────────
+const iiiPort = Number((appEnv.III_URL ?? 'ws://localhost:4001').match(/:(\d+)$/)?.[1] ?? '4001');
+const gatewayPort = Number(appEnv.PORT ?? 4000);
+
 // ── ANSI ──────────────────────────────────────────────────────────────────────
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -115,13 +119,13 @@ console.log(`
 ${C.bold}${C.cyan}  Graph-Native Agent Runtime${C.reset}  ${C.dim}dev${C.reset}
   ${C.dim}────────────────────────────────────────${C.reset}
   ${C.dim}DB     ${C.reset} ${appEnv.DATABASE_URL ?? 'postgres://localhost:5432/graph_test'}
-  ${C.dim}iii    ${C.reset} ${appEnv.III_URL ?? 'ws://localhost:49134'}
-  ${C.dim}HTTP   ${C.reset} http://localhost:${appEnv.PORT ?? '3000'}
+  ${C.dim}iii    ${C.reset} ${appEnv.III_URL ?? `ws://localhost:${iiiPort}`}
+  ${C.dim}HTTP   ${C.reset} http://localhost:${gatewayPort}
   ${C.dim}────────────────────────────────────────${C.reset}
   ${C.dim}[iii    ]${C.reset} ${C.blue}iii engine${C.reset}      ${appEnv.III_URL ?? 'ws://localhost:4001'}
   ${C.dim}[ctrl   ]${C.reset} ${C.green}control plane${C.reset}   DDL · Pulse-Fetch · Watchdog
   ${C.dim}[workers]${C.reset} ${C.yellow}workers${C.reset}         Frontier · PatternDiscovery · Context
-  ${C.dim}[gateway]${C.reset} ${C.magenta}gateway${C.reset}         http://localhost:${appEnv.PORT ?? '3000'}
+  ${C.dim}[gateway]${C.reset} ${C.magenta}gateway${C.reset}         http://localhost:${gatewayPort}
   ${C.dim}────────────────────────────────────────${C.reset}
 `);
 
@@ -134,8 +138,8 @@ const procs = [];
 
 async function boot() {
   // 0. Free ports from any leftover processes
-  freePort(49134);
-  freePort(Number(appEnv.PORT ?? 3000));
+  freePort(iiiPort);
+  freePort(gatewayPort);
 
   // 1. iii engine
   procs.push(start({
