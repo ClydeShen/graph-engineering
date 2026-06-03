@@ -118,7 +118,7 @@ ${C.bold}${C.cyan}  Graph-Native Agent Runtime${C.reset}  ${C.dim}dev${C.reset}
   ${C.dim}iii    ${C.reset} ${appEnv.III_URL ?? 'ws://localhost:49134'}
   ${C.dim}HTTP   ${C.reset} http://localhost:${appEnv.PORT ?? '3000'}
   ${C.dim}────────────────────────────────────────${C.reset}
-  ${C.dim}[iii    ]${C.reset} ${C.blue}iii engine${C.reset}      ${appEnv.III_URL ?? 'ws://localhost:4001'}
+  ${C.dim}[iii    ]${C.reset} ${C.blue}iii engine${C.reset}      ${appEnv.III_URL ?? 'ws://localhost:49134'}
   ${C.dim}[ctrl   ]${C.reset} ${C.green}control plane${C.reset}   DDL · Pulse-Fetch · Watchdog
   ${C.dim}[workers]${C.reset} ${C.yellow}workers${C.reset}         Frontier · PatternDiscovery · Context
   ${C.dim}[gateway]${C.reset} ${C.magenta}gateway${C.reset}         http://localhost:${appEnv.PORT ?? '3000'}

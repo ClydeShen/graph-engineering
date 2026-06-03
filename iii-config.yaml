@@ -1,7 +1,7 @@
 workers:
   - name: iii-worker-manager
     config:
-      port: 4001
+      port: 49134
 
   - name: iii-cron
     config:
