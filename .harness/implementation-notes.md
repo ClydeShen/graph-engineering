@@ -50,17 +50,21 @@ LLMProvider and EmbeddingProvider interfaces are in the workers package. REQ-21 
 
 ---
 
-## Tool write() guard is compile-time only (D4) — DEFERRED, Phase 2 Day 0
+## Tool write() guard — D4 STATUS CORRECTION (2026-06-03)
 
-**File:** `packages/workers/src/base/tool.interface.ts`
+**File:** `packages/workers/src/base/read-only-handle.ts`
 **ADR ref:** ADR 35 D-8
 
-The Tool ABC enforces `ReadOnlyGraphHandle` (no `write()`) at TypeScript compile time only. ADR 35 D-8 specifies a runtime `SecurityException` if a tool somehow acquires write access. This runtime guard is not implemented.
+**RESOLVED — already implemented.** `SecurityException` class and `ReadOnlyGraphHandleImpl.write() → throw SecurityException()` are both present in `packages/workers/src/base/read-only-handle.ts`. The D4 "DEFERRED to Phase 2" entry was incorrect — the runtime guard was already in place. Confirmed by gsd-verifier during Gate 1 (2026-06-03). Phase 2 Day 0 does NOT need to implement D4; only D3 (LLMProvider move to shared) remains.
 
-**Resolution plan (agreed 2026-06-03):** 与 D3 合并为 Phase 2 plan 02-01 的同一个 Day 0 前置 commit。
-- `packages/shared/src/errors.ts` 加 `SecurityException` 类
-- `ReadOnlyGraphHandleImpl.write()` 改为 `throw new SecurityException(...)`
-触发点：第一个真实 LLM Tool 实现之前必须到位。
+---
+
+## Control Plane OOM status inconsistency — Phase 2 fix needed
+
+**File:** `packages/control-plane/src/watchdog.ts` line 196
+**ADR ref:** ADR 38
+
+`handleContextOom(tier=3)` writes event with `status='terminated'` instead of `'suspended'`. This would allow Convergence Watchdog to incorrectly treat an OOM-suspended scope as converged. However, `handleContextOom` has NO callers in Phase 1 (it's wired up in Phase 2 when LLM distillation is needed). Not a Phase 1 risk; fix MUST be applied in Phase 2 when wiring up the OOM handler. Fix: change line 196 from `'terminated'` to `'suspended'`.
 
 ---
 
