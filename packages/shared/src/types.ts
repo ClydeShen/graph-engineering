@@ -23,7 +23,7 @@ export interface EventLogNode {
   version_hash: string;
   /** Canonical JSON text — TEXT column, never JSONB. Deserialize before use. */
   payload: string;
-  status: 'pending_scheduling' | 'pending_dispatch' | 'processing' | 'terminated' | 'archived';
+  status: 'pending_scheduling' | 'pending_dispatch' | 'processing' | 'terminated' | 'archived' | 'suspended';
   base_priority: number;
   unlocks_count: number;
   spawned_by: string | null;

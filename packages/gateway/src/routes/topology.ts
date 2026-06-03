@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import type { Pool } from 'pg';
+import { ZERO_HASH } from '@graph/shared';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
-
-const ZERO_HASH = '0'.repeat(64);
 
 type EventRow = {
   version_hash: string;

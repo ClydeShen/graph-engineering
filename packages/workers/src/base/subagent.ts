@@ -23,8 +23,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { MAX_CHILD_SCOPE_DEPTH } from '@shared/constants.js';
-import { ZERO_HASH } from '@shared/constants.js';
+import { MAX_CHILD_SCOPE_DEPTH, ZERO_HASH } from '@shared/constants.js';
+import { canonicalJson } from '@shared/canonical-json.js';
 import type { GraphHandle } from './graph-handle.js';
 
 /**
@@ -87,7 +87,7 @@ export async function spawnChildScope(
   };
 
   // canonical_json_text: pre-serialize with sorted keys (ADR 02 BTreeMap requirement)
-  const canonical_json_text = canonicalJsonText(payloadObj);
+  const canonical_json_text = canonicalJson(payloadObj);
 
   // Write the scope_spawned / spawned_by hyperedge to the execution graph
   // Uses plan_created event type as the closest canonical type for scope lifecycle events.
@@ -104,19 +104,3 @@ export async function spawnChildScope(
   return { childScopeId };
 }
 
-/**
- * Minimal canonical JSON serialization with sorted keys (ADR 02 BTreeMap equivalent).
- * Matches the canonicalJson() implementation in @graph/shared.
- */
-function canonicalJsonText(value: unknown): string {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return JSON.stringify(value);
-  }
-  const sorted = Object.keys(value as Record<string, unknown>)
-    .sort()
-    .reduce<Record<string, unknown>>((acc, k) => {
-      acc[k] = (value as Record<string, unknown>)[k];
-      return acc;
-    }, {});
-  return JSON.stringify(sorted);
-}
