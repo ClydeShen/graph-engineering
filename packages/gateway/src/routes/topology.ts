@@ -10,6 +10,10 @@ type EventRow = {
   event_type: string;
 };
 
+export interface TopologyNode { id: string; entity_id: string; event_type: string; }
+export interface TopologyEdge { source: string; target: string; }
+export interface TopologyResponse { nodes: TopologyNode[]; edges: TopologyEdge[]; truncated: boolean; }
+
 export function buildTopologyRoute(pool: Pool): Hono {
   const app = new Hono();
 
@@ -49,7 +53,7 @@ export function buildTopologyRoute(pool: Pool): Hono {
       .filter((r) => r.predecessor_hash !== ZERO_HASH)
       .map((r) => ({ source: r.predecessor_hash, target: r.version_hash }));
 
-    return c.json({ nodes, edges, truncated });
+    return c.json<TopologyResponse>({ nodes, edges, truncated });
   });
 
   return app;

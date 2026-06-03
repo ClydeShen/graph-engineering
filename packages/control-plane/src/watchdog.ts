@@ -44,7 +44,11 @@ const CONVERGENCE_SQL = `
 `;
 
 export class ScopeConvergenceTracker {
-  // Tier 1: in-memory counters per scope
+  // Tier 1: in-memory counters per scope.
+  // On process restart these reset to 0, causing checkAndClose() to skip the
+  // Tier 1 fast-path and fall through to the authoritative Tier 3 SQL check.
+  // This is intentional: Tier 3 is the only hard guard; Tier 1 is a performance
+  // optimisation that avoids a DB round-trip for the common case.
   private readonly pendingTasks = new Map<string, number>();
   private readonly openConflicts = new Map<string, number>();
 
