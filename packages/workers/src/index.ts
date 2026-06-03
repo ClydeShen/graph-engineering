@@ -15,7 +15,7 @@
 
 import { registerWorker } from 'iii-sdk';
 import { Pool } from 'pg';
-import { OpenAICompatibleProvider } from './llm/openai-compatible.provider.js';
+import { OpenAICompatibleProvider } from '@graph/shared';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ContextAssemblyWorker } from './concrete/context-assembly.worker.js';
