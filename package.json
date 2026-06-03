@@ -10,7 +10,9 @@
     "test:integration": "vitest run tests/integration",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "demo": "tsx scripts/demo-runner.ts",
+    "analyze-feedback": "tsx scripts/analyze-feedback.ts"
   },
   "dependencies": {
     "@dqbd/tiktoken": "1.0.22",
