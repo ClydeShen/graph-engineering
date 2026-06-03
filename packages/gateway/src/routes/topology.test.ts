@@ -19,7 +19,7 @@ function makePool(rows: EventRow[], scopeExists = true): Pool {
 }
 
 describe('GET /v1/scopes/:id/topology', () => {
-  it('returns 200 with nodes and edges for a known scope', async () => {
+  it('returns 200 with nodes, edges, and truncated flag for a known scope', async () => {
     const pool = makePool([
       { version_hash: 'aaa', predecessor_hash: ZERO_HASH, entity_id: 'e1', event_type: 'plan_created' },
     ]);
@@ -27,9 +27,10 @@ describe('GET /v1/scopes/:id/topology', () => {
     const res = await app.fetch(new Request(`http://localhost/scopes/${VALID_UUID}/topology`));
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { nodes: unknown[]; edges: unknown[] };
+    const body = await res.json() as { nodes: unknown[]; edges: unknown[]; truncated: boolean };
     expect(Array.isArray(body.nodes)).toBe(true);
     expect(Array.isArray(body.edges)).toBe(true);
+    expect(body.truncated).toBe(false);
   });
 
   it('nodes contain version_hash, entity_id, and event_type', async () => {

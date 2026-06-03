@@ -31,4 +31,9 @@ describe('writeGuard', () => {
     const payload = 'key=sk-abcdefghijklmnopqrstuvwxyz12345678901234 db=postgres://u:p@host/db';
     expect(writeGuard(payload)).toBe('key=[REDACTED:api_key] db=[REDACTED:pg_conn]');
   });
+
+  it('redacts Anthropic API key (sk-ant- prefix)', () => {
+    const payload = '{"key":"sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890abcde"}';
+    expect(writeGuard(payload)).toBe('{"key":"[REDACTED:api_key]"}');
+  });
 });

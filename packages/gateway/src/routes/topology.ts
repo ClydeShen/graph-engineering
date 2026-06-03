@@ -27,25 +27,30 @@ export function buildTopologyRoute(pool: Pool): Hono {
       return c.json({ error: 'scope not found' }, 404);
     }
 
+    const MAX_NODES = 500;
     const result = await pool.query<EventRow>(
       `SELECT version_hash, predecessor_hash, entity_id, event_type
        FROM execution_event_log
        WHERE scope_id = $1
-       ORDER BY id ASC`,
-      [id],
+       ORDER BY id ASC
+       LIMIT $2`,
+      [id, MAX_NODES + 1],
     );
 
-    const nodes = result.rows.map((r) => ({
+    const truncated = result.rows.length > MAX_NODES;
+    const rows = truncated ? result.rows.slice(0, MAX_NODES) : result.rows;
+
+    const nodes = rows.map((r) => ({
       id: r.version_hash,
       entity_id: r.entity_id,
       event_type: r.event_type,
     }));
 
-    const edges = result.rows
+    const edges = rows
       .filter((r) => r.predecessor_hash !== ZERO_HASH)
       .map((r) => ({ source: r.predecessor_hash, target: r.version_hash }));
 
-    return c.json({ nodes, edges });
+    return c.json({ nodes, edges, truncated });
   });
 
   return app;

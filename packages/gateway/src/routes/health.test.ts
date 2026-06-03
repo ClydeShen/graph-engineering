@@ -26,7 +26,20 @@ describe('GET /v1/sys/health', () => {
       live_scopes: 3,
       suspended_count: 1,
       slots: expect.any(Number),
+      idle_slots: expect.any(Number),
     });
+  });
+
+  it('returns 503 degraded when DB query throws', async () => {
+    const pool = {
+      query: vi.fn().mockRejectedValue(new Error('connection refused')),
+    } as unknown as Pool;
+    const app = buildHealthRoute(pool);
+    const res = await app.fetch(new Request('http://localhost/sys/health'));
+
+    expect(res.status).toBe(503);
+    const body = await res.json() as { engine_status: string };
+    expect(body.engine_status).toBe('degraded');
   });
 
   it('live_scopes and suspended_count reflect DB counts', async () => {
