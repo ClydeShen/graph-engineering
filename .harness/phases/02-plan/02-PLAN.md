@@ -6,6 +6,24 @@
 
 ---
 
+## Phase 2 Dashboard 集成约束（设计护栏，非额外工作量）
+
+> 来源：`docs/UI-SPEC.md` · `side-visualization` 讨论结论（2026-06-03）
+> 原则：dashboard 所有决策为后端让步。以下约束在 Phase 2 设计时遵守，不改变后端架构。
+
+| # | 约束 | 验证 |
+|---|---|---|
+| C1 | Phase 2 所有新 `event_type` 必须写入 `execution_event_log`，禁止绕过走私有表 | Gate 2：新事件可在 `execution_event_log` 查询 |
+| C2 | Gateway 路由命名空间 `GET /v1/*` 保持可扩展，Phase 2 新路由不破坏 Gate 1 端点 | Gate 2：Gate 1 全部端点仍返回预期响应 |
+| C3 | Phase 2 新增 Entity 的 `predecessor_hash` 必须正确挂接现有图，哈希链不断裂 | Gate 2：`GET /v1/scopes/:id/topology` 返回连通图 |
+
+**Gate 2 新增验收项**（Phase 2 顺手实现，每项一条 SQL 或路由）：
+- [ ] `GET /v1/scopes/:id/topology` — 返回邻接表 JSON（nodes + edges），dashboard 可离线渲染
+- [ ] `GET /v1/sys/health` — 返回系统状态摘要（engine_status / live_scopes / suspended_count / slots）
+- [ ] P0-E 修复验证：OOM 触发后 `scope_lineage.status = 'suspended'`（非 `'terminated'`）
+
+---
+
 ## Task 1: ADR 20 supplement — reinforcement SQL on template adoption
 
 **Type:** docs
