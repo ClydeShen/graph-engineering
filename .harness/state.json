@@ -2,22 +2,22 @@
   "version": "1.0",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-03T01:30:00.000Z",
-    "last_session": "2026-06-03T02:30:00.000Z",
-    "last_active": "2026-06-03T02:30:00.000Z"
+    "started_at": "2026-06-03T03:00:00.000Z",
+    "last_session": "2026-06-03T05:30:00.000Z",
+    "last_active": "2026-06-03T05:30:00.000Z"
   },
   "phase": {
     "active": "03-execute",
     "step": "phase1-complete-pending-gate1"
   },
   "context": {
-    "last_summary": "Spike: gate demo runner + feedback analyzer (2e92996). Zoom-out review: found D1-D7 deviations vs ADRs. Fixed D2 (conflict_detected in EventBodySchema) + ROADMAP Phase 1 marked 11/11 complete (0ca9efe). master HEAD: 0ca9efe.",
+    "last_summary": "grill-with-docs session resolved D1/D3/D6 deviations. 3 bugs fixed, 3 ADRs written (38/39/40). master HEAD: latest commit after D1 fix.",
     "continue_here": ".harness/phases/03-execute/.continue-here.json"
   },
   "position": {
     "phase": "03-execute",
     "active_task": "execute-phase-1",
     "resume_file": ".harness/phases/03-execute/.continue-here.json",
-    "stopped_at": "Fixed D2 (EventBodySchema conflict_detected removed) + ROADMAP updated 11/11. D1 design decision still open. Gate 1 testing still pending."
+    "stopped_at": "D1 fixed (task_spawned first-class, ADR 40). D6 fixed (status=suspended, ADR 38). Suspended Lockout added (ADR 39). D3/D4 remain Phase 2 pre-work. Gate 1 testing still pending."
   }
 }
