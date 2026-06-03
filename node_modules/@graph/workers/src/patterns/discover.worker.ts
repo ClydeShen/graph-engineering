@@ -10,6 +10,8 @@ export const PATTERN_DISCOVERY_CRON_TRIGGER = {
   config: { expression: '0 0 */6 * * * *' },
 };
 
+// Does not extend Worker ABC: batch/cron workers use a Pool directly and never
+// hold a GraphHandle or participate in the OCC write lifecycle (ADR 27/37).
 export class PatternDiscoveryWorker {
   readonly base_priority = 1;
 
