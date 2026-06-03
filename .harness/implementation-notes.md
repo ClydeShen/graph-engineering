@@ -25,17 +25,17 @@ Payload JSON semantics: `payload.event_type` carries the client-submitted semant
 
 ---
 
-## context_oom_throttled stored as memory_updated (D6)
+## context_oom_throttled stored as memory_updated (D6) — RESOLVED
 
 **File:** `packages/gateway/src/watchdog-sql.ts` — `writeContextOomThrottled()`
-**ADR ref:** ADR 24
+**ADR ref:** ADR 24, ADR 38
 
 When context assembly OOM is triggered (Tier 3 degradation), the Gateway writes an event with:
-- `event_type = 'memory_updated'` (DB column)
+- `event_type = 'memory_updated'` (DB column — identification requires payload inspection)
 - `payload = { scope_id, reason: 'context_oom_throttled' }` (identification field)
-- `status = 'terminated'` (does not block convergence check)
+- `status = 'suspended'` (**not** `terminated` — see ADR 38)
 
-To identify this event in the DB, inspect `payload` content — the `event_type` column alone is insufficient.
+`status='suspended'` blocks the Convergence Watchdog SQL (`status NOT IN ('terminated', 'archived')`), preventing a partially-converged OOM scope from receiving `scope_closed`. The original `status='terminated'` was a bug: it caused the Watchdog to treat an OOM-interrupted scope as cleanly converged. Fixed in commit after `0ca9efe`.
 
 ---
 

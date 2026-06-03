@@ -154,7 +154,7 @@ export async function writeContextOomThrottled(
          'hex'
        ),
        $3,
-       'terminated'
+       'suspended'
      FROM execution_event_log
      WHERE scope_id = $1
      ORDER BY id DESC
