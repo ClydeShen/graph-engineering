@@ -11,7 +11,7 @@
 
 import type { Pool } from 'pg';
 import { hashablePayload } from './canonical-json.js';
-import { OCC_WRITE_SQL, OCC_WRITE_DO_NOTHING_SQL } from './sql/occ-writable-cte.sql.js';
+import { OCC_WRITE_SQL, OCC_WRITE_DO_NOTHING_SQL, partitionTable } from './sql/occ-writable-cte.sql.js';
 import type { WriteResult } from './types.js';
 
 /**
@@ -67,7 +67,7 @@ export async function occWrite(
     event_type: string;
     version_hash: string;
     occ_result: string;
-  }>(OCC_WRITE_SQL, [scopeId, entityId, predecessorHash, canonicalText, eventType]);
+  }>(OCC_WRITE_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText, eventType]);
 
   const row = result.rows[0];
   return {
@@ -98,7 +98,7 @@ export async function occWriteIdempotent(
     event_type: string;
     version_hash: string;
     occ_result: string;
-  }>(OCC_WRITE_DO_NOTHING_SQL, [scopeId, entityId, predecessorHash, canonicalText]);
+  }>(OCC_WRITE_DO_NOTHING_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText]);
 
   if (result.rows.length === 0) return null;
   const row = result.rows[0];

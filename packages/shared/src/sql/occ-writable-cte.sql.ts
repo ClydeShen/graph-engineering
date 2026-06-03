@@ -21,13 +21,18 @@
  *  - Hash formula: scope_id|entity_id|predecessor_hash|event_type|canonical_json_text
  *  - event_type in the hash is the actual submitted type ($5), NOT a normalised constant
  *
- * Pitfall 5 avoidance: uses COLUMN-LIST form `ON CONFLICT (predecessor_hash, scope_id) DO UPDATE`
- * NOT `ON CONFLICT ON CONSTRAINT <name>` — column-list form resolves to the correct
- * per-partition constraint automatically without requiring the constraint name.
- * @see .planning/phases/01-core-graph-engine/01-RESEARCH.md Pitfall 5
+ * Pitfall 5 avoidance: uses COLUMN-LIST form `ON CONFLICT (predecessor_hash, scope_id) DO UPDATE`.
+ * INSERT targets the per-scope partition directly (not the parent table) because PostgreSQL
+ * requires the unique constraint to exist on the table being inserted into for ON CONFLICT
+ * column-list resolution. Use partitionTable(scopeId) to get the target table name.
  * @see docs/ADR_v4.md §ADR 11
  * @see docs/adr/0042-adr40-task-spawned-first-class-event-type.md
  */
+
+/** Compute the partition table name for a given scope UUID. */
+export function partitionTable(scopeId: string): string {
+  return `execution_event_log_scope_${scopeId.replace(/-/g, '')}`;
+}
 
 /**
  * OCC Writable CTE — first-writer-wins with atomic causal inversion.
@@ -46,9 +51,9 @@
  * The causal inversion is atomic — no application callback, no ::jsonb conversion.
  * @see ADR 11, ADR 02, ADR 40
  */
-export const OCC_WRITE_SQL = `
+export function OCC_WRITE_SQL(partition: string): string { return `
 WITH attempt AS (
-  INSERT INTO execution_event_log (
+  INSERT INTO ${partition} (
     scope_id,
     entity_id,
     event_type,
@@ -112,7 +117,7 @@ SELECT
     ELSE 'won'
   END AS occ_result
 FROM attempt;
-`;
+`; }
 
 /**
  * Idempotent re-delivery variant — ON CONFLICT DO NOTHING on (scope_id, entity_id, version_hash).
@@ -127,9 +132,9 @@ FROM attempt;
  * Returns 0 or 1 rows. If 0 rows returned the insert was a no-op (duplicate).
  * @see ADR 32 D-5, REQ-18
  */
-export const OCC_WRITE_DO_NOTHING_SQL = `
+export function OCC_WRITE_DO_NOTHING_SQL(partition: string): string { return `
 WITH attempt AS (
-  INSERT INTO execution_event_log (
+  INSERT INTO ${partition} (
     scope_id,
     entity_id,
     event_type,
@@ -161,4 +166,4 @@ SELECT
   version_hash,
   'won' AS occ_result
 FROM attempt;
-`;
+`; }
