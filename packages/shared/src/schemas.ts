@@ -32,7 +32,7 @@ export const CreateScopeSchema = z.object({
  * @see ADR 24, ADR 12
  */
 export const EventBodySchema = z.object({
-  event_type: z.enum(['task_spawned', 'memory_updated', 'conflict_detected']),
+  event_type: z.enum(['task_spawned', 'memory_updated']),
   entity_id: z.string().regex(UUID_V4),
   predecessor_hash: z.string().regex(HASH_HEX64),
   payload: z.record(z.string(), z.unknown()),

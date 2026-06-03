@@ -27,17 +27,18 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
   7. Worker class fails to compile if it calls `write()` via a Tool context (TypeScript ABC enforcement, ADR 35)
   8. canonical_json produces deterministic output for the same payload regardless of insertion order (BTreeMap application-layer serialization)
   9. Pattern discovery cron fires every 6 hours; skips if `completed_scope_count < 10`; does not acquire any OLTP worker slots
-**Plans**: 10 plans
+**Plans**: 11 plans
 - [x] 01-01-PLAN.md — Project scaffold + tooling + canonical_json (shared package)
 - [x] 01-02-PLAN.md — PostgreSQL schema migrations (event log, memory tables, lineage)
-- [ ] 01-03-PLAN.md — OCC Writable CTE + pgcrypto hash chain + idempotency
-- [ ] 01-04-PLAN.md — Control Plane Daemon (nesting, pg-listen Pulse-Fetch, Watchdog, OOM)
-- [ ] 01-05-PLAN.md — Worker/Tool ABC framework + lifecycle + subagent branching
-- [ ] 01-06-PLAN.md — PgQueueAdapter + Frontier Scheduler
-- [ ] 01-07-PLAN.md — HTTP Gateway (Hono, 3 endpoints, inline Watchdog, context)
-- [ ] 01-08-PLAN.md — Context Assembly (tiktoken, Knapsack, Zero-LLM overflow)
-- [ ] 01-09-PLAN.md — LLM Provider abstraction + core Workers
-- [ ] 01-10-PLAN.md — Pattern Discovery cron stub
+- [x] 01-03-PLAN.md — OCC Writable CTE + pgcrypto hash chain + idempotency
+- [x] 01-04-PLAN.md — Control Plane Daemon (nesting, pg-listen Pulse-Fetch, Watchdog, OOM)
+- [x] 01-05-PLAN.md — Worker/Tool ABC framework + lifecycle + subagent branching
+- [x] 01-06-PLAN.md — PgQueueAdapter + Frontier Scheduler
+- [x] 01-07-PLAN.md — HTTP Gateway (Hono, 3 endpoints, inline Watchdog, context)
+- [x] 01-08-PLAN.md — Context Assembly (tiktoken, Knapsack, Zero-LLM overflow)
+- [x] 01-09-PLAN.md — LLM Provider abstraction + core Workers
+- [x] 01-10-PLAN.md — Pattern Discovery cron stub
+- [x] 01-11-PLAN.md — pino structured logger (shared package, all 3 components)
 
 ### Phase 2: Memory & Retrieval
 **Goal**: Full hybrid BM25+RRF retrieval across all three memory tables, complete ConflictResolverWorker with LLM-assisted merge, MemorySynthesizer with Ebbinghaus decay, and `mem::reflect` function with token budget enforcement.
@@ -74,7 +75,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Graph Engine | 2/10 | In Progress|  |
+| 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
 | 2. Memory & Retrieval | 0/TBD | Not started | - |
 | 3. Pattern Discovery | 0/TBD | Not started | - |
 | 4. External Integrations | 0/TBD | Not started | - |
