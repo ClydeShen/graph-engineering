@@ -2,7 +2,7 @@ name: Sync issue labels to project board status
 
 on:
   issues:
-    types: [labeled, unlabeled]
+    types: [labeled, unlabeled, closed, reopened]
 
 jobs:
   sync-status:
@@ -30,24 +30,29 @@ jobs:
             --jq '.data.node.projectItems.nodes[] | select(.project.number == 4) | .id')
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
-      - name: Map label to status option
+      - name: Map label or state to status option
         id: map-status
         env:
           LABELS: ${{ toJson(github.event.issue.labels) }}
+          EVENT_ACTION: ${{ github.event.action }}
         run: |
-          # Extract status:* label from current issue labels
-          STATUS=$(echo "$LABELS" | python3 -c "
-          import json, sys
-          labels = json.load(sys.stdin)
+          STATUS=$(python3 -c "
+          import json, os, sys
+          action = os.environ['EVENT_ACTION']
+          # closed always maps to Done regardless of labels
+          if action == 'closed':
+              print('44b8bd73')
+              sys.exit(0)
+          labels = json.loads(os.environ['LABELS'])
           names = [l['name'] for l in labels if l['name'].startswith('status:')]
           label = names[0] if names else ''
           mapping = {
-            'status:needs-triage':     '3ffb3945',
-            'status:needs-prd':        'f6ab4b03',
-            'status:needs-review':     'd955a1d7',
-            'status:ready-for-agent':  '467257fc',
-            'status:in-progress':      '70d660b0',
-            'status:done':             '44b8bd73',
+              'status:needs-triage':     '3ffb3945',
+              'status:needs-prd':        'f6ab4b03',
+              'status:needs-review':     'd955a1d7',
+              'status:ready-for-agent':  '467257fc',
+              'status:in-progress':      '70d660b0',
+              'status:done':             '44b8bd73',
           }
           print(mapping.get(label, ''))
           ")
