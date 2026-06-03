@@ -12,7 +12,7 @@
  * @see ADR 33 — Scope identity boundary (UUID orthogonality)
  */
 
-import type { Pool, PoolClient, QueryResultRow } from 'pg';
+import type { Pool, QueryResultRow, ClientBase } from 'pg';
 import type { GraphWriteEvent, WriteResult } from '@shared/types.js';
 
 /**
@@ -66,7 +66,7 @@ export class GraphHandleImpl implements GraphHandle {
  * Second writer's event is rewritten as conflict_detected (occ_result='demoted').
  * No application callback or ::jsonb conversion. (ADR 11, ADR 02)
  */
-export async function occWrite(pool: Pool | PoolClient, event: GraphWriteEvent): Promise<WriteResult> {
+export async function occWrite(pool: ClientBase, event: GraphWriteEvent): Promise<WriteResult> {
   // Writable CTE: compute version_hash via pgcrypto, insert, handle OCC conflict.
   // The canonical_json_text is already pre-serialized by the caller (ADR 02).
   const sql = `
@@ -110,7 +110,7 @@ export async function occWrite(pool: Pool | PoolClient, event: GraphWriteEvent):
   `;
 
   const { scope_id, entity_id, event_type, predecessor_hash, canonical_json_text } = event;
-  const result = await (pool as Pool).query(sql, [
+  const result = await pool.query(sql, [
     scope_id, entity_id, event_type, predecessor_hash, canonical_json_text,
   ]);
 

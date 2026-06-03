@@ -52,14 +52,19 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
   // Step 3: Read current HWM
   const hwm = await readHwm(readPool, CONTROL_PLANE_WORKER_ID);
 
-  // Step 4: Replay any events missed since HWM
+  // Step 4: Replay any events missed since HWM (capped at REPLAY_LIMIT to prevent restart flood)
+  const REPLAY_LIMIT = 1000;
   const missed = await readPool.query<{ id: number; event_type: string; scope_id: string }>(
     `SELECT id, event_type, entity_id, scope_id, payload, predecessor_hash, version_hash
      FROM execution_event_log
      WHERE id > $1
-     ORDER BY id ASC`,
-    [hwm],
+     ORDER BY id ASC
+     LIMIT $2`,
+    [hwm, REPLAY_LIMIT],
   );
+  if (missed.rows.length === REPLAY_LIMIT) {
+    log.warn({ hwm, limit: REPLAY_LIMIT }, LOG_EVENTS.PULSE_FETCH + ' replay capped — consider advancing HWM manually');
+  }
   for (const row of missed.rows) {
     log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
