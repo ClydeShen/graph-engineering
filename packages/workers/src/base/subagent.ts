@@ -76,6 +76,16 @@ export async function spawnChildScope(
   // The child entity UUID for the scope_spawned event
   const childEntityId = randomUUID();
 
+  // Read the current tip of the parent scope chain so the hyperedge appends correctly.
+  // Using ZERO_HASH would conflict with plan_created which already owns that slot.
+  const tipRows = await graph.query<{ version_hash: string }>(
+    `SELECT version_hash FROM execution_event_log
+     WHERE scope_id = $1 AND event_type <> 'conflict_detected'
+     ORDER BY id DESC LIMIT 1`,
+    [parentScopeId],
+  );
+  const predecessorHash = tipRows[0]?.version_hash ?? ZERO_HASH;
+
   // Build the spawned_by hyperedge payload.
   // Shape: (parent_scope_id, child_scope_id, 'scope_spawned', version_hash, timestamp)
   // payload carries spawned_by_scope = parentScopeId (ADR 34)
@@ -96,8 +106,8 @@ export async function spawnChildScope(
   await graph.write({
     scope_id: parentScopeId,
     entity_id: childEntityId,
-    event_type: 'task_spawned',   // canonical type per ADR 12; semantic: spawned_by hyperedge
-    predecessor_hash: ZERO_HASH,  // child scope starts a new chain in the parent's partition
+    event_type: 'task_spawned',
+    predecessor_hash: predecessorHash,
     canonical_json_text,
   });
 
