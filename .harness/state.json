@@ -3,11 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-03T05:00:00.000Z",
-    "last_session": "2026-06-03T06:30:00.000Z",
-    "last_active": "2026-06-03T06:30:00.000Z"
+    "last_session": "2026-06-03T07:30:00.000Z",
+    "last_active": "2026-06-03T07:30:00.000Z"
   },
   "position": {
     "active": "side-visualization",
+    "resume_file": ".harness/phases/side-visualization/.continue-here.json",
+    "stopped_at": "手动测试完成，OCC bug 修复，测试结构决策记录，开始系统可视化设计。",
     "tasks": [
       {
         "id": "phase2-main",
