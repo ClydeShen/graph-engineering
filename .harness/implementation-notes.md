@@ -5,7 +5,7 @@ Updated incrementally — append only.
 
 ---
 
-## OCC event_type column always 'memory_updated' (D1)
+## OCC event_type column always 'memory_updated' (D1) — RESOLVED
 
 **File:** `packages/shared/src/sql/occ-writable-cte.sql.ts`
 **ADR ref:** ADR 11
@@ -21,7 +21,7 @@ DB column semantics:
 
 Payload JSON semantics: `payload.event_type` carries the client-submitted semantic type.
 
-**Impact:** TESTING-PLAN Gate 1 Scenario B DB verification shows `memory_updated` in row 2, not `task_spawned`. Updated in TESTING-PLAN.md accordingly.
+**Resolution (ADR 40):** OCC_WRITE_SQL now accepts event_type as $5 parameter. `task_spawned` and `memory_updated` are stored as first-class column values. TESTING-PLAN Scenario B restored to expect `task_spawned` in row 2.
 
 ---
 

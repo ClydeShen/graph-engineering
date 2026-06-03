@@ -127,6 +127,7 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
       scopeId: TEST_SCOPE_ID,
       entityId,
       predecessorHash: ZERO_HASH,
+      eventType: 'memory_updated',
       payload,
     });
     expect(first.occ_result).toBe('won');
@@ -137,6 +138,7 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
       scopeId: TEST_SCOPE_ID,
       entityId,
       predecessorHash: ZERO_HASH,
+      eventType: 'memory_updated',
       payload: { role: 'challenger' },
     });
     expect(second.occ_result).toBe('demoted');

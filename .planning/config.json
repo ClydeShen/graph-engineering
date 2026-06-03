@@ -10,7 +10,8 @@
     "security_enforcement": false,
     "discuss_mode": "discuss",
     "research_before_questions": false,
-    "plan_bounce": false
+    "plan_bounce": false,
+    "_auto_chain_active": false
   },
   "planning": {
     "commit_docs": true,

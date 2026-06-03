@@ -75,6 +75,7 @@ describe.skipIf(skipIfNoDb())('hash-chain integration (REQ-02)', () => {
       scopeId: TEST_SCOPE_ID,
       entityId,
       predecessorHash: ZERO_HASH,
+      eventType: 'memory_updated',
       payload: { action: 'test', value: 42 },
     });
 
@@ -91,6 +92,7 @@ describe.skipIf(skipIfNoDb())('hash-chain integration (REQ-02)', () => {
       scopeId: TEST_SCOPE_ID,
       entityId,
       predecessorHash: ZERO_HASH,
+      eventType: 'memory_updated',
       payload,
     });
 

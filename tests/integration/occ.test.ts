@@ -76,12 +76,14 @@ describe.skipIf(skipIfNoDb())('OCC causal inversion integration (REQ-02)', () =>
         scopeId: TEST_SCOPE_ID,
         entityId,
         predecessorHash: ZERO_HASH,
+        eventType: 'memory_updated',
         payload: payloadA,
       }),
       occWrite(pool, {
         scopeId: TEST_SCOPE_ID,
         entityId,
         predecessorHash: ZERO_HASH,
+        eventType: 'memory_updated',
         payload: payloadB,
       }),
     ]);
@@ -104,12 +106,14 @@ describe.skipIf(skipIfNoDb())('OCC causal inversion integration (REQ-02)', () =>
         scopeId: TEST_SCOPE_ID,
         entityId,
         predecessorHash: ZERO_HASH,
+        eventType: 'memory_updated',
         payload: payloadA,
       }),
       occWrite(pool, {
         scopeId: TEST_SCOPE_ID,
         entityId,
         predecessorHash: ZERO_HASH,
+        eventType: 'memory_updated',
         payload: payloadB,
       }),
     ]);

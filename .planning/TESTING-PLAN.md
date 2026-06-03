@@ -229,9 +229,7 @@ psql $DATABASE_URL -c "
 
 期望看到 2 行：
 1. `plan_created`，`pred_prefix = 00000000`（ZERO_HASH 前缀）
-2. `memory_updated`，`pred_prefix` = 第 1 行的 `hash_prefix`（hash chain 连通）
-
-> **注意：** OCC 路径始终将 `event_type` 列写为 `memory_updated`，不管客户端提交的是 `task_spawned` 还是 `memory_updated`。提交的 `event_type` 值存入 `payload` JSON（可查 `payload` 列中的 `event_type` 字段验证）。这是设计行为（ADR 11 — 所有 agent 写入都是"内存更新"语义）。
+2. `task_spawned`，`pred_prefix` = 第 1 行的 `hash_prefix`（hash chain 连通）
 
 ---
 
