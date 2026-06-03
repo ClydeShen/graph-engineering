@@ -31,6 +31,7 @@ export const LOG_EVENTS = {
 
   SCOPE_CREATED: 'scope.created',
   SCOPE_CLOSED: 'scope.closed',
+  SCOPE_SUSPENDED_LOCKOUT: 'scope.suspended.lockout',
 
   EVENT_WRITTEN: 'event.written',
   OCC_CONFLICT: 'occ.conflict',

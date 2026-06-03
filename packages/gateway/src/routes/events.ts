@@ -67,6 +67,21 @@ export function buildEventsRoute(pool: Pool): Hono {
 
     const { event_type, entity_id, predecessor_hash, payload } = c.req.valid('json');
 
+    // ── Step 1b: Suspended lockout (ADR 39) ───────────────────────────────────
+    // Reject all non-privileged writes to suspended scopes. Gateway infra-writes
+    // (writeScopeClosed, writeContextOomThrottled) bypass this check because they
+    // are direct pool.query() calls, not routed through this endpoint.
+    const scopeRow = await pool.query<{ status: string }>(
+      'SELECT status FROM scope_lineage WHERE scope_id = $1',
+      [id],
+    );
+    if (scopeRow.rows[0]?.status === 'suspended') {
+      logger.child({ component: 'gateway', scope_id: id }).warn(
+        LOG_EVENTS.SCOPE_SUSPENDED_LOCKOUT,
+      );
+      return c.json({ error: 'scope suspended', scope_status: 'suspended' }, 409);
+    }
+
     // ── Step 2: OCC write ─────────────────────────────────────────────────────
     const writeResult = await occWrite(pool, {
       scopeId: id,
