@@ -28,6 +28,7 @@ import type { Pool } from 'pg';
 import { zValidator } from '@hono/zod-validator';
 import { EventBodySchema } from '@shared/schemas';
 import { occWrite } from '@shared/occ-write';
+import { logger, LOG_EVENTS } from '@shared/logger';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 import {
   checkConvergence,
@@ -126,7 +127,10 @@ export function buildEventsRoute(pool: Pool): Hono {
       );
     } catch (oomErr) {
       // Context assembly OOM — Gateway infra-write right #2: context_oom_throttled (ADR 24)
-      console.error('[gateway/events] Context OOM for scope', id, oomErr);
+      logger.child({ component: 'gateway', scope_id: id }).error(
+        { err: oomErr instanceof Error ? oomErr.message : String(oomErr) },
+        LOG_EVENTS.CONTEXT_OOM,
+      );
       await writeContextOomThrottled(pool, id);
       // Return null context to signal Agent to terminate / degrade
       return c.json({ version_hash, occ_result, context: null });

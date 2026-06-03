@@ -23,6 +23,9 @@ import { CreateScopeSchema } from '@shared/schemas';
 import { nestScope } from '@graph/control-plane/nesting';
 import { assembleContext } from '@graph/workers/context/assemble';
 import type { KnapsackGraph } from '@graph/workers/context/knapsack';
+import { logger, LOG_EVENTS } from '@shared/logger';
+
+const log = logger.child({ component: 'gateway', route: 'POST /v1/scopes' });
 
 /** Default W_max token budget for initial context assembly (configurable). */
 const DEFAULT_W_MAX = 4096;
@@ -46,6 +49,7 @@ export function buildScopesRoute(_pool: Pool): Hono {
 
     // Delegates DDL nesting to Control Plane — Gateway has no DDL rights (ADR 24)
     const { scopeId, planHash } = await nestScope(intent);
+    log.info({ scope_id: scopeId, plan_hash: planHash }, LOG_EVENTS.SCOPE_CREATED);
 
     // Assemble initial context for the newly created scope.
     // The graph is empty except for plan_created — provide a no-op KnapsackGraph.

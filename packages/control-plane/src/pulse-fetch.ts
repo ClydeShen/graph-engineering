@@ -21,6 +21,9 @@
 import createSubscriber from 'pg-listen';
 import { readPool } from './db/read-pool.js';
 import { advanceHwm, readHwm } from './hwm.js';
+import { logger, LOG_EVENTS } from '@graph/shared';
+
+const log = logger.child({ component: 'control-plane', module: 'pulse-fetch' });
 
 const CHANNEL = 'graph_event_ready';
 const CONTROL_PLANE_WORKER_ID = 'control-plane';
@@ -58,6 +61,7 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
     [hwm],
   );
   for (const row of missed.rows) {
+    log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
     await iiiWorker.trigger({
       function_id: `worker::${row.event_type}`,
@@ -74,12 +78,12 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
         typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
       eventId = Number(parsed?.id);
     } catch {
-      console.error('[pulse-fetch] Failed to parse notification payload:', rawPayload);
+      log.error({ raw: rawPayload }, LOG_EVENTS.PULSE_ERROR + ' failed to parse notification');
       return;
     }
 
     if (!eventId || isNaN(eventId)) {
-      console.error('[pulse-fetch] Notification missing id:', rawPayload);
+      log.warn({ raw: rawPayload }, LOG_EVENTS.PULSE_ERROR + ' notification missing id');
       return;
     }
 
@@ -117,8 +121,8 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
 
   // pg-listen auto-reconnects — log errors but do NOT exit the process
   subscriber.events.on('error', (err: Error) => {
-    console.error('[pulse-fetch] pg-listen error (auto-reconnecting):', err.message);
+    log.error({ err: err.message }, LOG_EVENTS.PULSE_ERROR + ' pg-listen reconnecting');
   });
 
-  console.log('[pulse-fetch] Subscribed to channel:', CHANNEL, 'hwm:', hwm);
+  log.info({ channel: CHANNEL, hwm }, LOG_EVENTS.PULSE_FETCH + ' subscribed');
 }

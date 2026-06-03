@@ -19,6 +19,7 @@
     "iii-sdk": "0.17.0",
     "pg": "8.21.0",
     "pg-listen": "1.7.0",
+    "pino": "9.6.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -21,7 +21,9 @@
  */
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { ZERO_HASH } from '@graph/shared';
+import { ZERO_HASH, logger, LOG_EVENTS } from '@graph/shared';
+
+const log = logger.child({ component: 'control-plane', module: 'watchdog' });
 
 // ── Tier 3 convergence SQL ────────────────────────────────────────────────────
 // Source: ADR 19 / RESEARCH.md §Convergence Watchdog SQL
@@ -160,26 +162,14 @@ export class ScopeConvergenceTracker {
    */
   async handleContextOom(scopeId: string, tier: 1 | 2 | 3): Promise<void> {
     if (tier === 1) {
-      // Tier 1: LLM distillation of N_root context
       // LLM CALL — justified by ADR 13 supplement (Context OOM degradation chain)
-      // The LLM condenses the root context node into a smaller summary to free budget.
-      // Actual LLM provider call goes here in production via LLMProvider interface (ADR 22).
-      console.warn(
-        '[watchdog] OOM Tier 1: LLM distill N_root for scope', scopeId,
-        '— LLM CALL per ADR 13 supplement',
-      );
-      // Stub: in production, call LLMProvider.complete() to distill N_root content.
+      log.warn({ scope_id: scopeId, tier: 1 }, LOG_EVENTS.CONTEXT_OOM + ' LLM distill N_root');
+      // Stub: in production, call LLMProvider.chat() to distill N_root content.
     } else if (tier === 2) {
-      // Tier 2: Tail-truncate N_current to last 2000 tokens (Zero-LLM, deterministic)
-      console.warn(
-        '[watchdog] OOM Tier 2: tail-truncate N_current to 2000 tokens for scope', scopeId,
-      );
+      log.warn({ scope_id: scopeId, tier: 2 }, LOG_EVENTS.CONTEXT_OOM + ' tail-truncate N_current 2000 tokens');
       // Stub: in production, apply sliding-window truncation via @dqbd/tiktoken.
     } else {
-      // Tier 3: Direct-write context_oom_throttled and mark scope Suspended
-      console.error(
-        '[watchdog] OOM Tier 3: writing context_oom_throttled and suspending scope', scopeId,
-      );
+      log.error({ scope_id: scopeId, tier: 3 }, LOG_EVENTS.CONTEXT_OOM + ' writing context_oom_throttled, suspending scope');
       const entityId = randomUUID();
       const canonicalPayload = JSON.stringify({
         scope_id: scopeId,

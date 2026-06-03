@@ -14,6 +14,9 @@ import { registerWorker } from 'iii-sdk';
 import { startPulseFetch } from './pulse-fetch.js';
 import { ScopeConvergenceTracker } from './watchdog.js';
 import { readPool } from './db/read-pool.js';
+import { logger, LOG_EVENTS } from '@graph/shared';
+
+const log = logger.child({ component: 'control-plane' });
 
 async function boot(): Promise<void> {
   // Register with iii engine — returns the worker handle used for trigger()
@@ -28,13 +31,13 @@ async function boot(): Promise<void> {
   // Start Pulse-Fetch bridge — blocks on LISTEN subscription
   await startPulseFetch({ iiiWorker });
 
-  console.log('[control-plane] Boot complete — watchdog and pulse-fetch active');
+  log.info(LOG_EVENTS.BOOT + ' complete — watchdog and pulse-fetch active');
 
   // Expose watchdog on module exports for other components that need it
   return;
 }
 
 boot().catch((err) => {
-  console.error('[control-plane] Fatal boot error:', err);
+  log.fatal({ err }, LOG_EVENTS.BOOT_ERROR);
   process.exit(1);
 });

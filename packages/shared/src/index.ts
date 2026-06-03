@@ -10,3 +10,4 @@ export * from './schemas.js';
 export * from './occ-write.js';
 export * from './sql/occ-writable-cte.sql.js';
 export * from './tokenizer.js';
+export * from './logger.js';
