@@ -89,6 +89,33 @@ LLMProvider and EmbeddingProvider interfaces are in the workers package. REQ-21 
 Gateway 使用 `export default { port, fetch }` Bun server API。Node.js 不自动启动 HTTP 服务器。
 **处理：** Gate 1 测试用 Bun 1.3.14 运行 Gateway。Phase 2 如需纯 Node.js 可加 `@hono/node-server`。
 
-### G1-Obs-2: OCC 冲突行为说明（因果倒置）
+### G1-Obs-2: OCC winner 被覆写 bug — FIXED (commit 54b2b01)
 
-当第二个写入者与已存在的行（predecessor_hash 相同）冲突时，DO UPDATE 更新的是 **已存在行**（winner），将其 event_type 改为 `conflict_detected`，predecessor_hash 指向其自身旧 version_hash。这是设计中的"因果倒置"。结果：冲突后原 winner 的 event_type 丢失，但 version_hash 链保持连通。Scenario E 验证正常（返回 `demoted`，HTTP 200，无报错）。
+**原 SQL（DO UPDATE）的问题：** `ON CONFLICT DO UPDATE` 更新的是**已存在行（winner）**，将其改为 `conflict_detected` 并释放了 predecessor_hash 槽位。导致下一个写入者能再次 won，破坏 first-writer-wins 语义。
+
+**修复（2026-06-03）：** 改为三段 CTE：
+1. `attempt` — `ON CONFLICT DO NOTHING`，winner 行永不被修改
+2. `conflict` — 在 winner 之后追加新 `conflict_detected` 行（因果追加，不是因果倒置）
+3. `demoted_fallback` — 两个 loser 并发争同一 conflict 槽时，计算返回 version_hash 而不插入
+
+---
+
+## 手动测试流程问题 (2026-06-03) — 待解决
+
+### 测试 UX 问题
+1. **curl 手动 paste**：用户在 `npm run dev` 终端看日志，需要另开终端手动粘贴 curl 命令，无法与 Claude 实时互动。
+2. **临时测试文件**：`scripts/test-gate1.sh` 是临时文件，不属于正式测试结构。
+
+### 未来测试结构决策（已确定）
+- 测试文件位置：项目根目录 `tests/` 目录，命名规范 `test-gate*.sh`
+- 用户可在新终端直接运行 `bash tests/test-gate1.sh`，无需其他操作
+- `scripts/` 目录保留 dev 工具（dev.mjs, demo-runner.ts 等），`tests/` 专放 gate 测试
+
+### 自动化 E2E 测试流程（Phase 2+ 起执行）
+每个开发阶段完成后：
+1. Claude 补全对应 `tests/test-gate*.sh`
+2. 通过 **subagent + background task** 自主运行 E2E 测试
+3. 等待结果，汇报 pass/fail
+4. 触发 `/context-handover`
+
+此流程从 Phase 2 Gate 2 验收起生效。

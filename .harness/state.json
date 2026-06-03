@@ -1,23 +1,35 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "session": {
-    "status": "in_progress",
-    "started_at": "2026-06-03T03:00:00.000Z",
-    "last_session": "2026-06-03T03:40:00.000Z",
-    "last_active": "2026-06-03T03:40:00.000Z"
-  },
-  "phase": {
-    "active": "03-execute",
-    "step": "gate1-passed-pending-verification"
-  },
-  "context": {
-    "last_summary": "Gate 1 E2E testing complete. All 5 Scenarios passed (A-E). Fixed OCC partition bug (committed fc0a6ae). Gate 1 PASSED. Running gsd-verifier to create VERIFICATION.md.",
-    "continue_here": ".harness/phases/03-execute/.continue-here.json"
+    "status": "idle",
+    "started_at": "2026-06-03T05:00:00.000Z",
+    "last_session": "2026-06-03T06:30:00.000Z",
+    "last_active": "2026-06-03T06:30:00.000Z"
   },
   "position": {
-    "phase": "03-execute",
-    "active_task": "execute-phase-1",
-    "resume_file": ".harness/phases/03-execute/.continue-here.json",
-    "stopped_at": "Gate 1 PASSED (all 5 scenarios A-E). OCC partition fix committed (fc0a6ae). Running gsd-verifier."
+    "active": "side-visualization",
+    "tasks": [
+      {
+        "id": "phase2-main",
+        "label": "Phase 2: Memory & Retrieval",
+        "status": "paused",
+        "resume_file": ".harness/phases/03-execute/.continue-here.json",
+        "stopped_at": "Phase 1 complete (Gate 1 PASSED). Day 0 D3 commit pending before /gsd-plan-phase."
+      },
+      {
+        "id": "side-manual-testing",
+        "label": "手动理解和测试系统",
+        "status": "completed",
+        "resume_file": ".harness/phases/side-manual-testing/.continue-here.json",
+        "stopped_at": "全部 Scenario A-E 验证完毕。OCC bug 已修复（commit 54b2b01）。tests/test-gate1.sh 建立。"
+      },
+      {
+        "id": "side-visualization",
+        "label": "系统可视化方案 design",
+        "status": "not-started",
+        "resume_file": null,
+        "stopped_at": null
+      }
+    ]
   }
 }
