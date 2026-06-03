@@ -93,11 +93,11 @@ const DISPATCH_SQL = `
     AND status = 'pending_scheduling'
 `;
 
-/** Count active (processing + writing) workers for a scope. */
+/** Count active (processing) workers for a scope. */
 const ACTIVE_COUNT_SQL = `
   SELECT COUNT(*)::int AS count
   FROM execution_event_log
-  WHERE status IN ('processing', 'writing')
+  WHERE status = 'processing'
     AND scope_id = $1
 `;
 
