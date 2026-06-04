@@ -43,13 +43,21 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 ### Phase 2: Memory & Retrieval
 **Goal**: Full hybrid BM25+RRF retrieval across all three memory tables, complete ConflictResolverWorker with LLM-assisted merge, MemorySynthesizer with Ebbinghaus decay, and `mem::reflect` function with token budget enforcement.
 **Depends on**: Phase 1
-**Requirements**: TBD
+**Requirements**: [MEM-01, MEM-02, MEM-03, MEM-04, MEM-05]
 **Success Criteria** (what must be TRUE):
   1. `mem::reflect` query returns hybrid-retrieved memories with `rrf_score × 0.6 + quality × 0.3 + recency × 0.1` ranking
   2. ConflictResolverWorker resolves entity-level conflicts with ActiveResolverRegistry mutex (in-memory)
   3. MemorySynthesizer fires at 2 AM cron OR on `scope_closed` + ≥20 episodic records
   4. Ebbinghaus decay scan marks `reinforcement_count=0 AND last_used_at < 90 days` as superseded
-**Plans**: TBD
+**Execution Plans:**
+- 02-01-PLAN.md — Schema extensions (migration 006): episodic entity_id, semantic HNSW, procedural decay columns, working_memory dedup_hash
+- 02-02-PLAN.md — EpisodicMemoryWorker + durable:subscriber registration
+- 02-03-PLAN.md — SemanticMemoryWorker + scope_closed trigger + LLM distillation
+- 02-04-PLAN.md — MemorySynthesizerWorker: synthesis/decay/TTL cron (3 triggers)
+- 02-05-PLAN.md — ProceduralMemoryWorker + WL kernel embedding utility
+- 02-06-PLAN.md — Hybrid BM25+HNSW RRF retrieval + GET /v1/memory/search + POST /v1/memory/reinforce
+- 02-07-PLAN.md — Working memory SHA-256 dedup + ConflictResolverWorker LLM merge
+- 02-08-PLAN.md — Gate 3 integration tests G3-1 through G3-7
 
 ### Phase 3: Pattern Discovery
 **Goal**: WL graph kernel with topology_embedding computation, CrossScopePatternDiscoveryWorker, nested Scope activation (ADR 23 Phase 3 stubs removed), SubScopeResultWorker.
@@ -76,6 +84,6 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
-| 2. Memory & Retrieval | 0/TBD | Not started | - |
+| 2. Memory & Retrieval | 8/8 | Complete | 2026-06-04 |
 | 3. Pattern Discovery | 0/TBD | Not started | - |
 | 4. External Integrations | 0/TBD | Not started | - |
