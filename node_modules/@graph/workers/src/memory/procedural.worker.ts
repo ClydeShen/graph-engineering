@@ -37,7 +37,7 @@ export class ProceduralMemoryWorker {
       [
         scopeId,
         writeGuard(intentDescription),
-        intentDescription,
+        writeGuard(intentDescription),
         JSON.stringify(templateGraph),
         embeddingLiteral,
       ],

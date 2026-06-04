@@ -27,16 +27,14 @@ import { logger, LOG_EVENTS } from '@shared/logger';
 
 const log = logger.child({ component: 'gateway', route: 'POST /v1/scopes' });
 
-/** Default W_max token budget for initial context assembly (configurable). */
-const DEFAULT_W_MAX = 4096;
-
 /**
  * Build the scopes route.
  *
- * @param _pool  SELECT/INSERT pool (not used for POST /v1/scopes — nestScope uses
- *               the DDL pool internally; provided for future GET /v1/scopes queries)
+ * @param _pool   SELECT/INSERT pool (provided for future GET /v1/scopes queries)
+ * @param ddlPool DDL-exclusive pool for the 3-phase nesting protocol
+ * @param wMax    Context assembly token budget (read from env at boot, ADR 22)
  */
-export function buildScopesRoute(_pool: Pool): Hono {
+export function buildScopesRoute(_pool: Pool, ddlPool: Pool, wMax: number): Hono {
   const app = new Hono();
 
   /**
@@ -48,7 +46,7 @@ export function buildScopesRoute(_pool: Pool): Hono {
     const { intent } = c.req.valid('json');
 
     // Delegates DDL nesting to Control Plane — Gateway has no DDL rights (ADR 24)
-    const { scopeId, planHash } = await nestScope(intent);
+    const { scopeId, planHash } = await nestScope(ddlPool, intent);
     log.info({ scope_id: scopeId, plan_hash: planHash }, LOG_EVENTS.SCOPE_CREATED);
 
     // Assemble initial context for the newly created scope.
@@ -58,7 +56,6 @@ export function buildScopesRoute(_pool: Pool): Hono {
       getSiblings: () => [],
     };
 
-    const wMax = Number(process.env.CONTEXT_W_MAX ?? DEFAULT_W_MAX);
     const context = await assembleContext(
       emptyGraph,
       scopeId,

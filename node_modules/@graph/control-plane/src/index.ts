@@ -13,23 +13,27 @@
 import { registerWorker } from 'iii-sdk';
 import { startPulseFetch } from './pulse-fetch.js';
 import { ScopeConvergenceTracker } from './watchdog.js';
-import { readPool } from './db/read-pool.js';
+import { createReadPool } from './db/read-pool.js';
 import { logger, LOG_EVENTS } from '@graph/shared';
 
 const log = logger.child({ component: 'control-plane' });
 
 async function boot(): Promise<void> {
+  const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://localhost:5432/graph';
+
   // Register with iii engine — returns the worker handle used for trigger()
   const iiiWorker = registerWorker(
     process.env.III_URL ?? 'ws://localhost:49134',
     { workerName: 'control-plane' },
   );
 
+  const readPool = createReadPool(DATABASE_URL);
+
   // Instantiate watchdog (uses readPool for convergence SQL and scope_closed writes)
   const watchdog = new ScopeConvergenceTracker(readPool);
 
   // Start Pulse-Fetch bridge — blocks on LISTEN subscription
-  await startPulseFetch({ iiiWorker });
+  await startPulseFetch({ iiiWorker, readPool, connectionString: DATABASE_URL });
 
   log.info(LOG_EVENTS.BOOT + ' complete — watchdog and pulse-fetch active');
 

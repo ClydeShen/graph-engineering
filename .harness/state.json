@@ -3,20 +3,34 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-04T22:00:00.000Z",
-    "last_session": "2026-06-04T22:45:00.000Z",
-    "last_active": "2026-06-04T22:45:00.000Z"
+    "last_session": "2026-06-05T00:00:00.000Z",
+    "last_active": "2026-06-05T00:00:00.000Z"
   },
   "position": {
-    "active": "phase2-main",
-    "resume_file": ".harness/phases/03-execute/.continue-here.json",
-    "stopped_at": "Phase 2 complete. Wave 3 (e35e94f) + Wave 4 (066d785) committed. 129 unit tests pass, 7 gate3 integration tests skip cleanly without DATABASE_URL. Ready to push to origin.",
+    "active": "phase3-plan",
+    "resume_file": ".harness/phases/02-plan/.continue-here.json",
+    "stopped_at": "Phase 2 tech debt Tasks 16-18 complete (commits 00013a3, 2a94a0f, a387366). typecheck exits 0. Ready for Phase 3 — start next session with code/design/GitHub review.",
     "tasks": [
       {
         "id": "phase2-main",
         "label": "Phase 2: Memory & Retrieval",
         "status": "completed",
-        "resume_file": ".harness/phases/03-execute/.continue-here.json",
-        "stopped_at": "Phase 2 complete — all 8 plans executed, all artifacts committed. Next: push to origin."
+        "resume_file": null,
+        "stopped_at": "All 8 plans complete. Commits a13a4c7→9f5fd7e pushed. 129 tests pass."
+      },
+      {
+        "id": "phase2-techdebt",
+        "label": "Phase 2: Tech Debt Tasks 16-18 (#20-#22)",
+        "status": "completed",
+        "resume_file": null,
+        "stopped_at": "Task 16 (canonicalJson 5 paths), Task 17 (remove ContextAssemblyWorker), Task 18 (process.env boot consolidation). All committed and typecheck clean."
+      },
+      {
+        "id": "phase3-plan",
+        "label": "Phase 3: Pattern Discovery — planning",
+        "status": "pending",
+        "resume_file": ".harness/phases/02-plan/.continue-here.json",
+        "stopped_at": "Phase 2 tech debt done. Next: review code+design+GitHub, then /gsd-plan-phase 3."
       },
       {
         "id": "side-manual-testing",

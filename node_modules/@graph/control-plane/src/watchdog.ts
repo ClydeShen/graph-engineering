@@ -21,7 +21,7 @@
  */
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { ZERO_HASH, logger, LOG_EVENTS } from '@graph/shared';
+import { ZERO_HASH, logger, LOG_EVENTS, canonicalJson } from '@graph/shared';
 
 const log = logger.child({ component: 'control-plane', module: 'watchdog' });
 
@@ -118,7 +118,7 @@ export class ScopeConvergenceTracker {
       // All 3 tiers confirm convergence — emit scope_closed
       // This is the ONLY place scope_closed is emitted in the Control Plane Daemon
       const entityId = randomUUID();
-      const canonicalPayload = JSON.stringify({ scope_id: scopeId });
+      const canonicalPayload = canonicalJson({ scope_id: scopeId });
 
       await this.pool.query(
         `INSERT INTO execution_event_log
@@ -175,7 +175,7 @@ export class ScopeConvergenceTracker {
     } else {
       log.error({ scope_id: scopeId, tier: 3 }, LOG_EVENTS.CONTEXT_OOM + ' writing context_oom_throttled, suspending scope');
       const entityId = randomUUID();
-      const canonicalPayload = JSON.stringify({
+      const canonicalPayload = canonicalJson({
         scope_id: scopeId,
         reason: 'context_oom_throttled',
       });

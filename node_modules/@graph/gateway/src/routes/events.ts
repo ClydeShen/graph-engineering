@@ -39,16 +39,14 @@ import { assembleContext } from '@graph/workers/context/assemble';
 import type { KnapsackGraph } from '@graph/workers/context/knapsack';
 import type { EventLogNode } from '@shared/types';
 
-/** Default W_max token budget for context assembly. */
-const DEFAULT_W_MAX = 4096;
-
 /**
  * Build the events route.
  *
  * @param pool  SELECT/INSERT pool — used for OCC write, Watchdog SQL, context queries.
  *              This pool has NO DDL rights (ADR 24).
+ * @param wMax  Context assembly token budget (read from env at boot, ADR 22).
  */
-export function buildEventsRoute(pool: Pool): Hono {
+export function buildEventsRoute(pool: Pool, wMax: number): Hono {
   const app = new Hono();
 
   /**
@@ -132,7 +130,6 @@ export function buildEventsRoute(pool: Pool): Hono {
         eventCache.set(row.version_hash, row);
       }
 
-      const wMax = Number(process.env.CONTEXT_W_MAX ?? DEFAULT_W_MAX);
       assembledContext = await assembleContext(
         graph,
         id,

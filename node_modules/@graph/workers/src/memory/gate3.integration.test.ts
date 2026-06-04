@@ -123,7 +123,7 @@ it.skipIf(skip)('G3-3: procedural_memory receives a row with non-NULL topology_e
 it.skipIf(skip)('G3-4: GET /v1/memory/search returns 200 with results array', async () => {
   const { buildApp } = await import('@graph/gateway/index.js');
 
-  const app = buildApp(pool);
+  const app = buildApp(pool, pool, 4096);
   const scopeId = randomUUID();
   const res = await app.fetch(
     new Request(`http://localhost/v1/memory/search?q=test&scope_id=${scopeId}`),
@@ -188,7 +188,7 @@ it.skipIf(skip)('G3-6: Ebbinghaus decay marks stale records with superseded_by =
 it.skipIf(skip)('G3-7: GET /v1/sys/health returns 200 (Gate 2 regression)', async () => {
   const { buildApp } = await import('@graph/gateway/index.js');
 
-  const app = buildApp(pool);
+  const app = buildApp(pool, pool, 4096);
   const res = await app.fetch(new Request('http://localhost/v1/sys/health'));
   expect(res.status).toBe(200);
 });
