@@ -59,11 +59,11 @@ worker.registerFunction('graph::context-assembly', async (payload: unknown) => {
   return payload;
 });
 
-// graph::conflict-resolver (Phase 1 stub — OCC hard-stop handles conflicts)
-const conflictResolverWorker = new ConflictResolverWorker();
+// graph::conflict-resolver — Phase 2: LLM-assisted semantic merge (ADR 22)
+const conflictResolverWorker = new ConflictResolverWorker(llmProvider);
 worker.registerFunction('graph::conflict-resolver', async (payload: unknown) => {
-  void conflictResolverWorker;
-  return payload;
+  const p = payload as { entity_id: string; payload_a: string; payload_b: string };
+  return conflictResolverWorker.onConflict(p.entity_id, p.payload_a, p.payload_b);
 });
 
 // graph::scheduler::frontier — token bucket dispatch, NO LLM call (ADR 31)

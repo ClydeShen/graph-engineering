@@ -22,7 +22,15 @@ import { buildEventsRoute } from './routes/events.js';
 import { buildScopeReadRoute } from './routes/scope-read.js';
 import { buildHealthRoute } from './routes/health.js';
 import { buildTopologyRoute } from './routes/topology.js';
+import { buildMemoryRoute } from './routes/memory.js';
+import { OpenAICompatibleProvider } from '@graph/shared';
 import { logger } from '@shared/logger';
+
+const gatewayLlmProvider = new OpenAICompatibleProvider({
+  baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
+  model: process.env['LLM_MODEL'] ?? 'llama3',
+  apiKey: process.env['LLM_API_KEY'] ?? '',
+});
 
 /**
  * Build and return the Hono app with all routes mounted.
@@ -40,6 +48,7 @@ export function buildApp(pool: Pool): Hono {
   app.route('/v1/scopes', buildScopeReadRoute(pool));
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildTopologyRoute(pool));
+  app.route('/v1', buildMemoryRoute(pool, gatewayLlmProvider));
 
   return app;
 }
