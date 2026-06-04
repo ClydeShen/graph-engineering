@@ -2,21 +2,21 @@
   "version": "1.1",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-03T22:08:00.000Z",
-    "last_session": "2026-06-03T22:45:00.000Z",
-    "last_active": "2026-06-03T22:45:00.000Z"
+    "started_at": "2026-06-04T00:00:00.000Z",
+    "last_session": "2026-06-04T00:00:00.000Z",
+    "last_active": "2026-06-04T00:00:00.000Z"
   },
   "position": {
     "active": "phase2-main",
     "resume_file": ".harness/phases/03-execute/.continue-here.json",
-    "stopped_at": "Session complete: TD-1~TD-10 all fixed (7 commits, 86 tests GREEN), PHASE2-DESIGN.md written, GitHub #4/#16 closed, #17 created, kanban updated, memory synced. Next: /gsd-plan-phase issue #17.",
+    "stopped_at": "Plan defects fixed (commit 042e303): 02-04 runSynthesis now publishes via worker.trigger; C1 best-effort documented in 02-02/03/05; LIMIT 50 added to 02-03; scope_id=$4 filter added to 02-06 RRF SQL. All 4 review defects resolved. Ready to execute Wave 1.",
     "tasks": [
       {
         "id": "phase2-main",
         "label": "Phase 2: Memory & Retrieval",
         "status": "active",
         "resume_file": ".harness/phases/03-execute/.continue-here.json",
-        "stopped_at": "Design complete. Issue #17 on kanban. Run /gsd-plan-phase to start execution planning."
+        "stopped_at": "Cross-AI review done. Fix 02-04-PLAN.md (add iii publish) and 02-02/03/05-PLAN.md (C1 transaction decision) before executing waves."
       },
       {
         "id": "side-manual-testing",
@@ -30,7 +30,7 @@
         "label": "系统可视化方案 design",
         "status": "completed",
         "resume_file": ".harness/phases/side-visualization/.continue-here.json",
-        "stopped_at": "UI-SPEC.md 完成，Phase 2 约束归档，GitHub issue #15/#16 创建。"
+        "stopped_at": "UI-SPEC.md 完成，Phase 2 約束歸檔，GitHub issue #15/#16 創建。"
       }
     ]
   }
