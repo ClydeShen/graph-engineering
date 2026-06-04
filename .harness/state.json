@@ -9,14 +9,14 @@
   "position": {
     "active": "phase2-main",
     "resume_file": ".harness/phases/03-execute/.continue-here.json",
-    "stopped_at": "Plan defects fixed (commit 042e303): 02-04 runSynthesis now publishes via worker.trigger; C1 best-effort documented in 02-02/03/05; LIMIT 50 added to 02-03; scope_id=$4 filter added to 02-06 RRF SQL. All 4 review defects resolved. Ready to execute Wave 1.",
+    "stopped_at": "Wave 1 complete: migration 006 (a13a4c7) + EpisodicMemoryWorker with 5 TDD tests (8fe093a). Ready for Wave 2: 02-03 SemanticMemoryWorker.",
     "tasks": [
       {
         "id": "phase2-main",
         "label": "Phase 2: Memory & Retrieval",
         "status": "active",
         "resume_file": ".harness/phases/03-execute/.continue-here.json",
-        "stopped_at": "All 4 plan defects fixed (042e303). GitHub #17 updated. Ready to execute Wave 1: 02-01 migration then 02-02 EpisodicMemoryWorker."
+        "stopped_at": "Wave 1 complete: migration 006 (a13a4c7) + EpisodicMemoryWorker with 5 TDD tests (8fe093a). Ready for Wave 2."
       },
       {
         "id": "side-manual-testing",
