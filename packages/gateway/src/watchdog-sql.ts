@@ -19,6 +19,7 @@
 
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
+import { canonicalJson } from '@graph/shared';
 
 /**
  * Tier 3 convergence SQL — identical to the Control Plane Watchdog's Tier 3.
@@ -84,7 +85,7 @@ export async function writeScopeClosed(
   scopeId: string,
 ): Promise<void> {
   const entityId = randomUUID();
-  const canonicalPayload = JSON.stringify({ scope_id: scopeId });
+  const canonicalPayload = canonicalJson({ scope_id: scopeId });
 
   await pool.query(
     `INSERT INTO execution_event_log
@@ -132,7 +133,7 @@ export async function writeContextOomThrottled(
   scopeId: string,
 ): Promise<void> {
   const entityId = randomUUID();
-  const canonicalPayload = JSON.stringify({
+  const canonicalPayload = canonicalJson({
     scope_id: scopeId,
     reason: 'context_oom_throttled',
   });

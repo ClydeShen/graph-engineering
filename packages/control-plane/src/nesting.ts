@@ -16,7 +16,7 @@
  */
 import { randomUUID } from 'crypto';
 import { ddlPool } from './db/ddl-pool.js';
-import { ZERO_HASH, MAX_CHILD_SCOPE_DEPTH } from '@graph/shared';
+import { ZERO_HASH, MAX_CHILD_SCOPE_DEPTH, canonicalJson } from '@graph/shared';
 
 export interface NestScopeResult {
   scopeId: string;
@@ -68,7 +68,7 @@ export async function nestScope(
   const entityId = randomUUID();
 
   // canonical payload for plan_created (stripped of _meta / schema_version)
-  const canonicalPayload = JSON.stringify({ intent });
+  const canonicalPayload = canonicalJson({ intent });
 
   const client = await ddlPool.connect();
   try {
