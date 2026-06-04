@@ -67,6 +67,15 @@ describe('ProceduralMemoryWorker', () => {
     );
   });
 
+  it('onSynthesizerOutput applies writeGuard to both content ($2) and intent_description ($3)', async () => {
+    const worker = new ProceduralMemoryWorker(pool);
+    await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'raw intent', nodes, edges);
+
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    expect(params[1]).toBe('[guarded]:raw intent');
+    expect(params[2]).toBe('[guarded]:raw intent');
+  });
+
   it('reinforce() updates success_count = success_count + 1 and last_used_at for given template_id', async () => {
     const worker = new ProceduralMemoryWorker(pool);
     await worker.reinforce('template-uuid-123');

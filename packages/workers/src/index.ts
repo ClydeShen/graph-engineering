@@ -109,27 +109,37 @@ worker.registerFunction('graph::memory::semantic', async (payload: unknown) => {
 worker.registerTrigger(SEMANTIC_TRIGGER_CONFIG);
 
 // graph::memory::synthesizer — cron 2AM, batch distillation episodic→procedural
+// Queries distinct scope_ids with recent episodic records; synthesizes each independently.
 const synthesizerWorker = new MemorySynthesizerWorker(pool, llmProvider);
 worker.registerFunction('graph::memory::synthesizer', async (_payload: unknown) => {
-  const result = await synthesizerWorker.runSynthesis();
-  if (!result.skipped) {
-    // Trigger ProceduralMemoryWorker — synthesizer→procedural publish link.
-    // TriggerAction.Void() = fire-and-forget; no need to await the procedural write.
-    await worker.trigger({
-      function_id: 'graph::memory::procedural',
-      payload: {
-        scope_id: result.scope_id,
-        entity_id: randomUUID(),
-        predecessor_hash: '0'.repeat(64),
-        intent_description: result.intent_description,
-        template_graph: result.template_graph,
-        nodes: result.nodes,
-        edges: result.edges,
-      },
-      action: TriggerAction.Void(),
-    });
+  const { rows: scopeRows } = await pool.query<{ scope_id: string }>(
+    `SELECT DISTINCT scope_id FROM episodic_memory
+     WHERE created_at > NOW() - INTERVAL '25 hours'
+     LIMIT 10`,
+  );
+  let processed = 0;
+  for (const { scope_id } of scopeRows) {
+    const result = await synthesizerWorker.runSynthesis(scope_id);
+    if (!result.skipped) {
+      // Trigger ProceduralMemoryWorker — synthesizer→procedural publish link.
+      // TriggerAction.Void() = fire-and-forget; no need to await the procedural write.
+      await worker.trigger({
+        function_id: 'graph::memory::procedural',
+        payload: {
+          scope_id: result.scope_id,
+          entity_id: randomUUID(),
+          predecessor_hash: '0'.repeat(64),
+          intent_description: result.intent_description,
+          template_graph: result.template_graph,
+          nodes: result.nodes,
+          edges: result.edges,
+        },
+        action: TriggerAction.Void(),
+      });
+      processed++;
+    }
   }
-  return result;
+  return { processed };
 });
 worker.registerTrigger(SYNTHESIZER_CRON_TRIGGER);
 

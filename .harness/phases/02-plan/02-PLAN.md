@@ -268,3 +268,82 @@ Write ADR 05 supplement defining "high-frequency task" criteria and pool size N 
 
 ### Files likely involved
 <!-- agent decides -->
+
+---
+
+## Task 14: fix(memory) — runSynthesis() cross-scope contamination (#18) ⚡ P1
+
+**Type:** bug
+**Effort:** 1 context window(s)
+
+### What to build
+Add a `scopeId` parameter to `MemorySynthesizerWorker.runSynthesis()` and filter `episodic_memory` by `scope_id`, so each synthesis run operates on a single scope's data and attributes the result to the correct scope.
+
+### Acceptance criteria
+- [ ] `runSynthesis(scopeId)` query includes `WHERE scope_id = $1`
+- [ ] `SynthesisResult.scope_id` equals the `scopeId` argument, not `rows[0]!.scope_id`
+- [ ] Worker registration in `index.ts` passes `scope_id` from trigger payload
+- [ ] Existing synthesizer unit tests updated and passing
+
+---
+
+## Task 15: fix(security) — writeGuard missing from intent_description column (#19) ⚡ P1
+
+**Type:** bug
+**Effort:** 1 context window(s)
+
+### What to build
+Apply `writeGuard()` to the `intent_description` column in `ProceduralMemoryWorker.onSynthesizerOutput`, matching the existing guard on `content`.
+
+### Acceptance criteria
+- [ ] `intent_description` value passes through `writeGuard()` before INSERT
+- [ ] Both `content` and `intent_description` receive the same redacted value
+- [ ] Typecheck exits 0
+
+---
+
+## Task 16: chore(adr02) — replace JSON.stringify with canonicalJson in infra-write paths (#20) P2
+
+**Type:** chore
+**Effort:** 1 context window(s)
+
+### What to build
+Replace the 5 `JSON.stringify()` calls that produce `canonical_json_text` values in infra-write paths with `canonicalJson()` from `@graph/shared`.
+
+### Acceptance criteria
+- [ ] `control-plane/src/nesting.ts` uses `canonicalJson({ intent })`
+- [ ] `control-plane/src/watchdog.ts` (2 locations) uses `canonicalJson(...)`
+- [ ] `gateway/src/watchdog-sql.ts` (2 locations) uses `canonicalJson(...)`
+- [ ] `workers/src/concrete/context-assembly.worker.ts` uses `canonicalJson(...)`
+- [ ] Typecheck exits 0, no regressions
+
+---
+
+## Task 17: chore(workers) — wire or remove dead context-assembly registration (#21) P2
+
+**Type:** chore
+**Effort:** 1 context window(s)
+
+### What to build
+Resolve the `graph::context-assembly` no-op in `workers/src/index.ts`: either wire `runLifecycle(contextAssemblyWorker, ctx)` or remove the instantiation and registration.
+
+### Acceptance criteria
+- [ ] Registration either calls `runLifecycle` or is removed entirely
+- [ ] If removed: inline `assembleContext` in gateway routes confirmed intact
+- [ ] Typecheck exits 0, full test suite passes
+
+---
+
+## Task 18: chore(config) — consolidate process.env into boot entry points (#22) P3
+
+**Type:** chore
+**Effort:** 2 context window(s)
+
+### What to build
+Extract `process.env` reads from module-level singletons (`ddl-pool.ts`, `read-pool.ts`) and inline route handlers (`events.ts`, `scopes.ts`) into the boot/index entry points as injected parameters.
+
+### Acceptance criteria
+- [ ] `ddlPool` and `readPool` accept `connectionString` or are constructed in `index.ts`
+- [ ] `buildEventsRoute` and `buildScopesRoute` accept `wMax` parameter
+- [ ] `GRAPH_AGENT_CHILD_SCOPE` guard in `subagent.ts` left with Phase 4 comment
+- [ ] Typecheck exits 0, no regressions

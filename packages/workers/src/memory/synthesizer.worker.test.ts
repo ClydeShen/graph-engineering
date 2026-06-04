@@ -55,25 +55,40 @@ describe('MemorySynthesizerWorker', () => {
     expect(sql).toContain("INTERVAL '24 hours'");
   });
 
-  it('runSynthesis() returns { skipped: true } when episodic_memory returns 0 rows', async () => {
+  it('runSynthesis(scopeId) returns { skipped: true } when episodic_memory returns 0 rows', async () => {
     const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
-    const result = await worker.runSynthesis();
+    const result = await worker.runSynthesis('sc-1');
 
     expect(result).toEqual({ skipped: true });
     expect(mockChat).not.toHaveBeenCalled();
   });
 
-  it('runSynthesis() returns skipped:false with nodes/edges when episodic rows exist', async () => {
+  it('runSynthesis(scopeId) passes scope_id to query and returns scope_id from parameter', async () => {
     const rows = [
       { scope_id: 'sc-1', content: 'trace A' },
       { scope_id: 'sc-1', content: 'trace B' },
-      { scope_id: 'sc-1', content: 'trace C' },
+    ];
+    mockQuery = vi.fn().mockResolvedValueOnce({ rows, rowCount: 2 });
+    pool = { query: mockQuery } as unknown as Pool;
+    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+
+    await worker.runSynthesis('sc-1');
+    const [sql, params] = mockQuery.mock.calls[0] as [string, string[]];
+    expect(sql).toContain('scope_id = $1');
+    expect(params).toEqual(['sc-1']);
+  });
+
+  it('runSynthesis(scopeId) returns skipped:false with scope_id from parameter, not from rows', async () => {
+    const rows = [
+      { scope_id: 'sc-OTHER', content: 'trace A' },
+      { scope_id: 'sc-OTHER', content: 'trace B' },
+      { scope_id: 'sc-OTHER', content: 'trace C' },
     ];
     mockQuery = vi.fn().mockResolvedValueOnce({ rows, rowCount: 3 });
     pool = { query: mockQuery } as unknown as Pool;
     const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
 
-    const result = await worker.runSynthesis();
+    const result = await worker.runSynthesis('sc-PARAM');
     const r = result as {
       skipped: false;
       scope_id: string;
@@ -82,7 +97,7 @@ describe('MemorySynthesizerWorker', () => {
       edges: unknown[];
     };
     expect(r.skipped).toBe(false);
-    expect(r.scope_id).toBe('sc-1');
+    expect(r.scope_id).toBe('sc-PARAM');
     expect(r.nodes).toHaveLength(rows.length);
     expect(r.edges).toHaveLength(rows.length - 1);
     expect(r.intent_description).toBe('test workflow');

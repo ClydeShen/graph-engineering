@@ -41,12 +41,14 @@ export class MemorySynthesizerWorker {
     this.llm = llm;
   }
 
-  async runSynthesis(): Promise<SynthesisResult> {
+  async runSynthesis(scopeId: string): Promise<SynthesisResult> {
     const { rows } = await this.pool.query<{ scope_id: string; content: string }>(
       `SELECT scope_id, content FROM episodic_memory
        WHERE created_at > NOW() - INTERVAL '25 hours'
+         AND scope_id = $1
        ORDER BY created_at ASC
        LIMIT 100`,
+      [scopeId],
     );
     if (rows.length === 0) return { skipped: true };
 
@@ -76,7 +78,7 @@ export class MemorySynthesizerWorker {
 
     return {
       skipped: false,
-      scope_id: rows[0]!.scope_id,
+      scope_id: scopeId,
       intent_description: intentDescription,
       template_graph: { steps: parsed.steps ?? [] },
       nodes,
