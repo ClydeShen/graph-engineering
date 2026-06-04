@@ -87,6 +87,18 @@ interface IOverflowStrategy {
 - No summarization means information that would have fit in a compressed form is simply absent. The correctness burden shifts to graph queries (Workers can re-query the graph if they need older context).
 - The `IOverflowStrategy` abstraction adds a layer that is unused in Phase 1.
 
+## Supplement: Context Assembly is Read-Only — No Graph Event Written
+
+Context assembly is a **read-time projection** (`Graph → Context`), not a cognitive advancement. It does not write a `memory_updated` event to the Execution Graph.
+
+**Rationale:** `memory_updated` represents a cognitive state advancement (per CONTEXT.md: "Worker 执行成功，版本链向前推进"). Context assembly is infrastructure preparation — the system reading from the graph to construct the Agent's context window. Writing "I assembled context" back into the graph would conflate the projection with the state, violating the `Context as Projection` paradigm.
+
+**Token usage data** for future task planning is already present in `payload._meta.tokens[model_fingerprint]` written by the Wasm Tokenizer on each event. No separate aggregate write is needed.
+
+**Infrastructure telemetry** (assembly latency, token counts, overflow events) belongs in the observability layer (metrics/APM), not in the Execution Graph.
+
+**Implementation note:** A `ContextAssemblyWorker` class was removed in Phase 2 tech-debt cleanup (commit `00013a3` + follow-up). The `graph::context-assembly` function registration that previously existed in `workers/src/index.ts` was a dead no-op — the gateway has always handled context assembly inline. Do not re-introduce a worker registration for this purpose without first resolving the `registerFunction` → `WorkerExecutionContext` architectural incompatibility.
+
 ## References
 - ADR 13 — Knapsack Slicing algorithm (horizontal + vertical axes, B3 dedup)
 - ADR 14 — Context Window safety capacity formula (`W_max`)

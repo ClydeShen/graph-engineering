@@ -18,7 +18,6 @@ import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
-import { ContextAssemblyWorker } from './concrete/context-assembly.worker.js';
 import { ConflictResolverWorker } from './concrete/conflict-resolver.worker.js';
 import { EpisodicMemoryWorker, EPISODIC_TRIGGER_CONFIG } from './memory/episodic.worker.js';
 import { OpenAICompatibleProvider } from '@graph/shared';
@@ -51,13 +50,6 @@ const llmProvider = new OpenAICompatibleProvider({
 // ---------------------------------------------------------------------------
 
 const worker = registerWorker(III_URL, { workerName: 'graph-workers' });
-
-// graph::context-assembly
-const contextAssemblyWorker = new ContextAssemblyWorker();
-worker.registerFunction('graph::context-assembly', async (payload: unknown) => {
-  void contextAssemblyWorker;
-  return payload;
-});
 
 // graph::conflict-resolver — Phase 2: LLM-assisted semantic merge (ADR 22)
 const conflictResolverWorker = new ConflictResolverWorker(llmProvider);
