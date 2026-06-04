@@ -900,4 +900,15 @@
 - **冷启动行为**：Phase 1 语料库初始为空；系统在模式涌现前作为有能力的单会话 Agent 运行（优雅降级）；约 10 个多步 Scope 完成后出现首批有意义模式
 - **永久废除**：Option C（`scope_completed` 事件内联触发）——爆发完成时会耗尽全部 4 个 Worker 槽用于 OLAP，令 OLTP 任务饥饿
 
-**共 37 条 ADR（含 2 条补充），覆盖七层架构 + 接入协议 + 跨域发现 + 执行模型语义层 + 接入抽象层 + Phase 1 实现决策层。**
+**ADR 42｜多 Agent 协调层：AgentCard 注册、技能路由、跨协议接入**（`docs/adr/0044-adr42-multi-agent-coordination-layer.md`）
+- **背景**：ADR 24 定义单 Agent 接入基线；多异构 Agent（Claude/Codex/Pi/第三方 A2A）并发接入时需统一能力注册与任务路由
+- **D-1 方式 B**：`task_spawned` 只允许 `required_skills[]`，禁止 `assigned_agent_id`；FrontierScheduler 集中裁决，不可绕过
+- **D-2 AgentCard 通用化**：内部 Worker + 外部 Agent 统一注册 `agent_registry`（GIN 索引 skills）；graph-os 自身 AgentCard 暴露于 `GET /.well-known/agent-card.json`
+- **D-3 三协议并存**：MCP（Claude/Codex/Pi）、A2A JSON-RPC（第三方）、iii WebSocket（内部 Worker）共享同一账本
+- **D-4 Pull 为主**：`claim_next_task(skills)` + SKIP LOCKED 原子抢占；PostgreSQL NOTIFY → MCP SSE Push 为可选延迟优化
+- **D-5 账本即协调者**：执行方崩溃 → Watchdog（ADR 19）检测超时 → 重入队 → 新 executor 通过 D-8 ReadOnlyGraphHandle 接续
+- **D-6 循环依赖是设计错误**：FrontierScheduler 在 dispatch 时检测 spawned_by 链，DAG 校验失败返回 ERR_CYCLE_DETECTED
+- **新端点**：`POST /v1/agents/register`、`GET /.well-known/agent-card.json`、`GET /mcp/sse`、`POST /mcp/messages`
+- **新 MCP tools**：`spawn_subtask`、`claim_next_task`、`get_task_status`、`complete_task`、`wait_all_tasks`、`query_context`
+
+**共 38 条 ADR（含 2 条补充），覆盖七层架构 + 接入协议 + 跨域发现 + 执行模型语义层 + 接入抽象层 + Phase 1 实现决策层 + 多 Agent 协调层。**

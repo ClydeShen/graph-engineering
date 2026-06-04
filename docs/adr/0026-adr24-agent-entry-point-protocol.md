@@ -231,6 +231,14 @@ LLM 在生产环境中无法稳定维护"数据库状态机"心智模型：
 
 ---
 
+## Phase 3：多 Agent 协调层（延期，不阻塞 Phase 1/2）
+
+多个异构 Agent（Claude、Codex、Pi、第三方 A2A 系统）并发接入时，需要基于能力（skills）的任务路由、Agent 注册、以及跨协议（MCP/A2A）统一接入。
+
+**完整规范见 ADR 42。** 本 ADR 不重复该内容。
+
+---
+
 ## 拒绝的方案
 
 ### 直接 iii-sdk 函数调用
@@ -276,3 +284,4 @@ LLM 在生产环境中无法稳定维护"数据库状态机"心智模型：
 - **ADR 13** — Knapsack Slicing：每次 event POST 后重新切片，context 即时返回
 - **ADR 18** — 收敛节点写回：`_meta.convergence_gate` 由 ConflictResolverWorker 写入，Gateway 不剥离（MCP Adapter session state 管理冲突实体的 predecessor_hash 更新）
 - **ADR 19** — 拓扑收敛看门狗：Gateway 内联看门狗 SQL，`scope_closed` 时 context 返回 null，通知 Agent Scope 已终止
+- **ADR 42** — 多 Agent 协调层：AgentCard 注册、基于 skills 的任务路由、MCP Server 层、跨协议（MCP/A2A）接入
