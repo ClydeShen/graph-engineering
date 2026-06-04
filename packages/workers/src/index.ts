@@ -19,6 +19,7 @@ import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/fr
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ContextAssemblyWorker } from './concrete/context-assembly.worker.js';
 import { ConflictResolverWorker } from './concrete/conflict-resolver.worker.js';
+import { EpisodicMemoryWorker, EPISODIC_TRIGGER_CONFIG } from './memory/episodic.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -59,6 +60,22 @@ worker.registerFunction('graph::scheduler::frontier', async (payload: unknown) =
   return { dispatched: true };
 });
 worker.registerTrigger(FRONTIER_TRIGGER_CONFIG);
+
+// graph::memory::episodic — durable:subscriber on graph::memory::episodic::ingest
+// Writes to episodic_memory on task_spawned/memory_updated events.
+// Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
+const episodicWorker = new EpisodicMemoryWorker(pool);
+worker.registerFunction('graph::memory::episodic', async (payload: unknown) => {
+  const p = payload as {
+    scope_id: string;
+    entity_id: string;
+    content: string;
+    predecessor_hash: string;
+  };
+  await episodicWorker.onEvent(p.scope_id, p.entity_id, p.content, p.predecessor_hash);
+  return { written: true };
+});
+worker.registerTrigger(EPISODIC_TRIGGER_CONFIG);
 
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();
