@@ -24,7 +24,10 @@ import { buildHealthRoute } from './routes/health.js';
 import { buildTopologyRoute } from './routes/topology.js';
 import { buildMemoryRoute } from './routes/memory.js';
 import { OpenAICompatibleProvider } from '@graph/shared';
+import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
+
+const DEFAULT_W_MAX = 4096;
 
 const gatewayLlmProvider = new OpenAICompatibleProvider({
   baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
@@ -39,13 +42,13 @@ const gatewayLlmProvider = new OpenAICompatibleProvider({
  *              In production, this is a real pg.Pool bound to the gateway DB user
  *              (SELECT + INSERT rights only — no DDL per ADR 24).
  */
-export function buildApp(pool: Pool): Hono {
+export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   const app = new Hono();
 
   // Mount route modules
-  app.route('/v1/scopes', buildScopesRoute(pool));
-  app.route('/v1/scopes', buildEventsRoute(pool));
-  app.route('/v1/scopes', buildScopeReadRoute(pool));
+  app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));
+  app.route('/v1/scopes', buildEventsRoute(pool, wMax));
+  app.route('/v1/scopes', buildScopeReadRoute(pool, wMax));
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildTopologyRoute(pool));
   app.route('/v1', buildMemoryRoute(pool, gatewayLlmProvider));
@@ -53,14 +56,13 @@ export function buildApp(pool: Pool): Hono {
   return app;
 }
 
-// Production entry point — export Bun/Node-compatible server object
-// Pool uses environment variables for configuration.
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
-});
+// Production entry point — env reads consolidated here (ADR 22)
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://localhost:5432/graph';
+const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
+const ddlPool = createDdlPool(DATABASE_URL);
+const wMax = Number(process.env.CONTEXT_W_MAX ?? DEFAULT_W_MAX);
 
-const app = buildApp(pool);
+const app = buildApp(pool, ddlPool, wMax);
 
 const gatewayPort = Number(process.env.PORT ?? 3000);
 

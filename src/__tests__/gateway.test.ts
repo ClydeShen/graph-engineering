@@ -32,7 +32,7 @@ const VALID_HASH = 'a'.repeat(64);
 describe('POST /v1/scopes', () => {
   it('returns 400 and does not call DB when intent is empty', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const res = await app.request('/v1/scopes', {
       method: 'POST',
@@ -46,7 +46,7 @@ describe('POST /v1/scopes', () => {
 
   it('returns 400 and does not call DB when intent is missing', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const res = await app.request('/v1/scopes', {
       method: 'POST',
@@ -64,7 +64,7 @@ describe('POST /v1/scopes', () => {
 describe('POST /v1/scopes/:id/events — scope UUID param validation', () => {
   it('returns 400 when :id is not a valid UUID v4 and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'task_spawned',
@@ -85,7 +85,7 @@ describe('POST /v1/scopes/:id/events — scope UUID param validation', () => {
 
   it('returns 400 when :id is a UUID v1 (wrong version) and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     // UUID v1 — note the '1' in position 14 (version nibble)
     const uuidV1 = '550e8400-e29b-11d4-a716-446655440000';
@@ -113,7 +113,7 @@ describe('POST /v1/scopes/:id/events — scope UUID param validation', () => {
 describe('POST /v1/scopes/:id/events — body validation', () => {
   it('returns 400 when predecessor_hash is not 64 hex chars and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'task_spawned',
@@ -134,7 +134,7 @@ describe('POST /v1/scopes/:id/events — body validation', () => {
 
   it('returns 400 when predecessor_hash contains uppercase hex chars and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     // 64 chars but uppercase — HASH_HEX64 requires lowercase /^[0-9a-f]{64}$/
     const upperHash = 'A'.repeat(64);
@@ -158,7 +158,7 @@ describe('POST /v1/scopes/:id/events — body validation', () => {
 
   it('returns 400 when entity_id is not a valid UUID and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'task_spawned',
@@ -179,7 +179,7 @@ describe('POST /v1/scopes/:id/events — body validation', () => {
 
   it('returns 400 when event_type is plan_created (infrastructure-only event) and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'plan_created',  // not in EventBodySchema enum
@@ -200,7 +200,7 @@ describe('POST /v1/scopes/:id/events — body validation', () => {
 
   it('returns 400 when event_type is scope_closed (infrastructure-only event) and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'scope_closed',  // not in EventBodySchema enum
@@ -225,7 +225,7 @@ describe('POST /v1/scopes/:id/events — body validation', () => {
 describe('GET /v1/scopes/:id — UUID param validation', () => {
   it('returns 400 when :id is not a valid UUID v4 and does not call DB', async () => {
     const { pool, spy } = makeSpyPool();
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const res = await app.request('/v1/scopes/invalid-id');
 
@@ -242,7 +242,7 @@ describe('valid event body passes Zod guard (reaches handler)', () => {
     // What we test here is that query() IS called (i.e. the Zod guard did not block it).
     const spy = vi.fn().mockRejectedValue(new Error('spy: no real DB'));
     const pool = { query: spy } as unknown as Pool;
-    const app = buildApp(pool);
+    const app = buildApp(pool, pool, 4096);
 
     const body = {
       event_type: 'task_spawned',

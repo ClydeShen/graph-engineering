@@ -19,7 +19,7 @@
  * @see RESEARCH.md Pitfall 3 — boot order: LISTEN before HWM read
  */
 import createSubscriber from 'pg-listen';
-import { readPool } from './db/read-pool.js';
+import type { Pool } from 'pg';
 import { advanceHwm, readHwm } from './hwm.js';
 import { logger, LOG_EVENTS } from '@graph/shared';
 
@@ -32,14 +32,14 @@ export interface PulseFetchDeps {
   iiiWorker: {
     trigger(args: { function_id: string; payload: unknown }): Promise<void>;
   };
+  readPool: Pool;
+  connectionString: string;
 }
 
 export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
-  const { iiiWorker } = deps;
+  const { iiiWorker, readPool, connectionString } = deps;
 
-  const subscriber = createSubscriber({
-    connectionString: process.env.DATABASE_URL ?? '',
-  });
+  const subscriber = createSubscriber({ connectionString });
 
   // ── Boot order: connect → listenTo → readHwm → replay ───────────────────
 

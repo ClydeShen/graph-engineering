@@ -15,7 +15,7 @@
  * @see ADR 34 D-7 — MAX_CHILD_SCOPE_DEPTH = 3
  */
 import { randomUUID } from 'crypto';
-import { ddlPool } from './db/ddl-pool.js';
+import type { Pool } from 'pg';
 import { ZERO_HASH, MAX_CHILD_SCOPE_DEPTH, canonicalJson } from '@graph/shared';
 
 export interface NestScopeResult {
@@ -49,6 +49,7 @@ function uuidNoDash(uuid: string): string {
  * @param depth    Nesting depth (0 = top-level). Enforced <= MAX_CHILD_SCOPE_DEPTH.
  */
 export async function nestScope(
+  ddlPool: Pool,
   intent: string,
   parentScopeId?: string,
   depth = 0,
