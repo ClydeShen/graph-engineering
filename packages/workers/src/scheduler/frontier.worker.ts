@@ -2,8 +2,8 @@
  * FrontierSchedulerWorker — graph::scheduler::frontier (ADR 31).
  *
  * Subscribes to the graph::frontier::changed topic (durable:subscriber).
- * Computes Top-K priority events via SQL and dispatches them as
- * pending_dispatch rows that PgQueueAdapter consumes (ADR 32 D-4).
+ * Computes Top-K priority events via SQL and marks them as
+ * pending_dispatch for MCP agents to claim via SKIP LOCKED (ADR 32 D-4).
  *
  * DISPATCH PATH IS LLM-FREE (ADR 31 invariant): no chat/completions call,
  * no embedding call, no LLM provider interaction of any kind.
