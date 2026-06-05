@@ -12,41 +12,56 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'crypto';
+import { assignClusters, discoverClusters } from './cross-scope.js';
 
 // --- Unit test (no DB, pure union-find logic) ---------------------------------
-// Dynamic import so we can catch the missing-module error gracefully
-// (cross-scope.ts does not exist until Plan 03-02 — static import omitted to keep typecheck clean)
 let discoverClustersImpl: ((pool: import('pg').Pool) => Promise<void>) | undefined;
 
 beforeAll(async () => {
-  try {
-    // cross-scope.js does not exist until Plan 03-02 — intentional RED state
-    const mod = await import('./cross-scope.js' as string);
-    discoverClustersImpl = (mod as { discoverClusters?: (pool: import('pg').Pool) => Promise<void> }).discoverClusters;
-  } catch {
-    // Module not yet created — RED state, tests will fail intentionally
-    discoverClustersImpl = undefined;
-  }
+  discoverClustersImpl = discoverClusters;
 });
 
 /**
- * Pure union-find unit test (no DB).
- * Given: a list of similar pairs [(a,b), (b,c)], groupToPairs should assign
- * a,b,c the same cluster_id.
- *
- * This test exercises the union-find grouping logic independently of SQL.
- * It references `./cross-scope.js` which does not yet exist (RED state).
+ * Pure union-find unit tests (no DB).
+ * Exercises assignClusters independently of SQL.
  */
 describe('Cross-scope pattern discovery — union-find unit test', () => {
   it('GATE4-2 (unit): groups connected pairs into the same cluster_id', () => {
-    if (!discoverClustersImpl) {
-      // Module not yet created — RED state
-      expect.fail('RED: cross-scope.ts not yet implemented (Plan 03-02 turns this GREEN)');
-    }
-    // When cross-scope.ts is implemented, it should export a groupPairs function
-    // that accepts an array of [id_a, id_b] pairs and returns Map<id, cluster_id>.
-    // For now the test is a placeholder exercising the expected interface.
-    expect(true).toBe(true); // replaced by real assertions in Plan 03-02
+    // Chain: a-b, b-c → all three should share one cluster ID
+    const result = assignClusters([['a', 'b'], ['b', 'c']]);
+    expect(result.size).toBe(3);
+    const clusterA = result.get('a');
+    const clusterB = result.get('b');
+    const clusterC = result.get('c');
+    expect(clusterA).toBeDefined();
+    expect(clusterA).toBe(clusterB);
+    expect(clusterA).toBe(clusterC);
+  });
+
+  it('disjoint pairs produce distinct cluster IDs', () => {
+    // a-b and c-d are disconnected → should get different cluster IDs
+    const result = assignClusters([['a', 'b'], ['c', 'd']]);
+    expect(result.size).toBe(4);
+    expect(result.get('a')).toBe(result.get('b'));
+    expect(result.get('c')).toBe(result.get('d'));
+    expect(result.get('a')).not.toBe(result.get('c'));
+  });
+
+  it('single pair produces two IDs sharing one cluster', () => {
+    const result = assignClusters([['x', 'y']]);
+    expect(result.size).toBe(2);
+    expect(result.get('x')).toBe(result.get('y'));
+  });
+
+  it('empty pairs returns empty map', () => {
+    const result = assignClusters([]);
+    expect(result.size).toBe(0);
+  });
+
+  it('cluster IDs are valid UUIDs', () => {
+    const result = assignClusters([['p', 'q']]);
+    const uuid = result.get('p')!;
+    expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   });
 });
 
