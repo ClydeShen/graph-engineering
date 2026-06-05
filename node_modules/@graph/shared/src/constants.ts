@@ -42,3 +42,17 @@ export const MAX_CHILD_SCOPE_DEPTH = 3;
  * @see ADR 37 D-10
  */
 export const MIN_CORPUS_THRESHOLD = 10;
+
+/**
+ * Staleness threshold (seconds) for agent_registry heartbeat eviction.
+ * Agents whose last_heartbeat is older than this value are excluded from
+ * FrontierScheduler skill-matching dispatch (Plan 03-03).
+ *
+ * Value 60s is at Claude's discretion per CONTEXT.md §"Claude's Discretion".
+ * Referenced in DESIGN.md §3.2 and FrontierScheduler skill-match query:
+ *   WHERE status = 'active' AND last_heartbeat > NOW() - INTERVAL '60 seconds'
+ *
+ * @see ADR 37 — Pattern Discovery Schedule (D-10 cron isolation)
+ * @see .harness/phases/side-branch/DESIGN.md §3.2 — agent_registry schema
+ */
+export const AGENT_HEARTBEAT_TTL_S = 60;

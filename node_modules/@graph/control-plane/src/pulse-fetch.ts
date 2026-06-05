@@ -28,6 +28,20 @@ const log = logger.child({ component: 'control-plane', module: 'pulse-fetch' });
 const CHANNEL = 'graph_event_ready';
 const CONTROL_PLANE_WORKER_ID = 'control-plane';
 
+/**
+ * Dedicated topic for sub_scope_resolved events.
+ * SubScopeResultWorker (Plan 03-06) registers a durable:subscriber on this topic.
+ * Exported so Plan 06 imports the identical string — no magic string duplication.
+ *
+ * sub_scope_resolved is a Control Plane direct-write that bypasses the bus enum
+ * (ADR 12 / ADR 23). It must NOT route to graph::scheduler::frontier — doing so
+ * would cause FrontierScheduler to treat it as a dispatchable frontier node.
+ *
+ * @see ADR 23 §4 — 总线感知到此事件后，激活 SubScopeResultWorker 订阅
+ * @see RESEARCH.md Pitfall 3 — iii-sdk rejects non-canonical event types; use topic routing
+ */
+export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';
+
 export interface PulseFetchDeps {
   iiiWorker: {
     trigger(args: { function_id: string; payload: unknown }): Promise<void>;
@@ -68,10 +82,18 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
   for (const row of missed.rows) {
     log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
-    await iiiWorker.trigger({
-      function_id: 'graph::scheduler::frontier',
-      payload: { scope_id: row.scope_id },
-    });
+    // sub_scope_resolved routes to its own topic — NOT the frontier topic (ADR 23)
+    if (row.event_type === 'sub_scope_resolved') {
+      await iiiWorker.trigger({
+        function_id: SUB_SCOPE_TOPIC,
+        payload: { scope_id: row.scope_id, event_id: row.id },
+      });
+    } else {
+      await iiiWorker.trigger({
+        function_id: 'graph::scheduler::frontier',
+        payload: { scope_id: row.scope_id },
+      });
+    }
   }
 
   // ── Register notification handler ────────────────────────────────────────
@@ -117,11 +139,20 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
     // Advance HWM before triggering (ADR 09 ordering guarantee)
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, event.id);
 
-    // Route to Frontier Scheduler — passes scope_id for priority queue update
-    await iiiWorker.trigger({
-      function_id: 'graph::scheduler::frontier',
-      payload: { scope_id: event.scope_id },
-    });
+    // Route by event_type: sub_scope_resolved gets its own dedicated topic (ADR 23).
+    // All other event types route to Frontier Scheduler as before.
+    if (event.event_type === 'sub_scope_resolved') {
+      await iiiWorker.trigger({
+        function_id: SUB_SCOPE_TOPIC,
+        payload: { scope_id: event.scope_id, event_id: event.id },
+      });
+    } else {
+      // Route to Frontier Scheduler — passes scope_id for priority queue update
+      await iiiWorker.trigger({
+        function_id: 'graph::scheduler::frontier',
+        payload: { scope_id: event.scope_id },
+      });
+    }
   });
 
   // pg-listen auto-reconnects — log errors but do NOT exit the process

@@ -8,10 +8,15 @@
  * All three phases run inside a single BEGIN/COMMIT on ddlPool.
  * Any failure causes a full ROLLBACK — no partial state is left.
  *
+ * Additional exports:
+ *   createSubScope — wraps nestScope for spawn_sub_scope interception
+ *   resolveSubScope — direct-writes sub_scope_resolved to parent partition (ADR 23)
+ *
  * @see ADR 05 — 3-phase nesting protocol in single DDL transaction
  * @see ADR 01 — PARTITION BY LIST(scope_id)
  * @see ADR 11 — OCC UNIQUE(predecessor_hash, scope_id) per partition
  * @see ADR 02 — ZERO_HASH sentinel for plan_created root
+ * @see ADR 23 — sub_scope_resolved direct-write (Control Plane only)
  * @see ADR 34 D-7 — MAX_CHILD_SCOPE_DEPTH = 3
  */
 import { randomUUID } from 'crypto';
@@ -145,4 +150,115 @@ export async function nestScope(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Create a child scope from a spawn_sub_scope interception.
+ *
+ * Delegates to nestScope for the full 3-phase DDL protocol and returns the
+ * child scopeId + planHash. The triggerTaskId is the parent's task_spawned
+ * entity_id; it is NOT stored in scope_lineage (the real schema has no such
+ * column) but is embedded in the sub_scope_resolved payload by resolveSubScope.
+ *
+ * Depth enforcement is inherited from nestScope (throws if depth > MAX_CHILD_SCOPE_DEPTH).
+ *
+ * @see ADR 23 — nested scope activation (Phase 3)
+ * @see ADR 34 D-7 — MAX_CHILD_SCOPE_DEPTH = 3
+ */
+export async function createSubScope(
+  ddlPool: Pool,
+  intent: string,
+  parentScopeId: string,
+  triggerTaskId: string,
+  depth: number,
+): Promise<NestScopeResult> {
+  // Depth enforcement — reuses nestScope's guard (throws with MAX_CHILD_SCOPE_DEPTH message)
+  // triggerTaskId is not stored in DB (scope_lineage has no such column per migration 005)
+  // It is carried to resolveSubScope by the caller and embedded in sub_scope_resolved payload
+  void triggerTaskId;
+  return nestScope(ddlPool, intent, parentScopeId, depth);
+}
+
+/**
+ * Direct-write sub_scope_resolved to the parent partition after a child scope closes.
+ *
+ * Follows the watchdog.ts context_oom_throttled direct-write pattern exactly:
+ *   - SELECT parent_scope_id from scope_lineage
+ *   - If no parent (root scope): return without writing (no-op)
+ *   - Read child's final version_hash (last row in child partition by id DESC)
+ *   - SELECT parent's tail version_hash as predecessor
+ *   - INSERT sub_scope_resolved into the parent partition with pgcrypto digest()
+ *
+ * sub_scope_resolved is a Control Plane direct-write — it does NOT go through
+ * occWrite, the bus enum, or any Worker path. ADR 12 EVENT_TYPES enum is unchanged.
+ *
+ * @param pool          Regular read/write pool (not DDL pool)
+ * @param childScopeId  The scope that just closed
+ * @param triggerTaskId The parent's task_spawned entity_id (carried from createSubScope caller)
+ *
+ * @see ADR 23 §3 — 三步火炬传递 (three-step torch relay)
+ * @see ADR 12 — sub_scope_resolved bypasses EVENT_TYPES enum
+ */
+export async function resolveSubScope(
+  pool: Pool,
+  childScopeId: string,
+  triggerTaskId: string,
+): Promise<void> {
+  // Step 1: find parent
+  const lineageResult = await pool.query<{ parent_scope_id: string | null }>(
+    `SELECT parent_scope_id FROM scope_lineage WHERE scope_id = $1`,
+    [childScopeId],
+  );
+  const parentScopeId = lineageResult.rows[0]?.parent_scope_id ?? null;
+  if (!parentScopeId) {
+    // Root scope — no propagation
+    return;
+  }
+
+  // Step 2: read child's final version_hash (tail of child partition by id DESC)
+  const childTailResult = await pool.query<{ version_hash: string }>(
+    `SELECT version_hash FROM execution_event_log
+     WHERE scope_id = $1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [childScopeId],
+  );
+  const childFinalVersionHash = childTailResult.rows[0]?.version_hash ?? ZERO_HASH;
+
+  // Step 3: direct-write sub_scope_resolved to parent partition
+  // Mirrors watchdog.ts context_oom_throttled pattern exactly:
+  //   predecessor_hash = parent's tail version_hash (ORDER BY id DESC LIMIT 1)
+  //   version_hash = pgcrypto digest() in SQL (never computed in TypeScript — ADR 02)
+  const entityId = randomUUID();
+  const payload = canonicalJson({
+    child_scope_id: childScopeId,
+    trigger_task_id: triggerTaskId,
+    child_final_version_hash: childFinalVersionHash,
+    parent_scope_id: parentScopeId,
+  });
+
+  await pool.query(
+    `INSERT INTO execution_event_log
+       (scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, status)
+     SELECT
+       $1::uuid,
+       $2::uuid,
+       'sub_scope_resolved',
+       version_hash,
+       encode(
+         digest(
+           $1::text || '|' || $2::text || '|' || version_hash
+             || '|sub_scope_resolved|' || $3,
+           'sha256'
+         ),
+         'hex'
+       ),
+       $3,
+       'pending_scheduling'
+     FROM execution_event_log
+     WHERE scope_id = $1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [parentScopeId, entityId, payload],
+  );
 }

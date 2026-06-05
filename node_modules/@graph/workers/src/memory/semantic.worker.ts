@@ -33,8 +33,8 @@ export class SemanticMemoryWorker {
     ]);
 
     await this.pool.query(
-      `INSERT INTO semantic_memory (scope_id, content, created_at)
-       VALUES ($1, $2, NOW())`,
+      `INSERT INTO semantic_memory (scope_id, content, valid_from, created_at)
+       VALUES ($1, $2, NOW(), NOW())`,
       [scopeId, writeGuard(fact)],
     );
 

@@ -1,31 +1,30 @@
-# Roam ignore — gitignore syntax. Skip directories that bloat the
-# index without adding signal. Uncomment lines that apply to your repo.
+# Roam ignore — gitignore syntax.
 
-# Build outputs
-# dist/
-# build/
-# out/
-# target/
-# .next/
-# .nuxt/
+# ── Vendored deps ──────────────────────────────────────────────
+node_modules/
 
-# Vendored deps
-# node_modules/
-# vendor/
-# bower_components/
+# ── Roam internal state (circular) ────────────────────────────
+.roam/
 
-# Python virtualenvs + caches
-# .venv/
-# venv/
-# __pycache__/
-# .mypy_cache/
-# .pytest_cache/
+# ── Agent tooling state (no code signal) ──────────────────────
+# Session state, phase plans, research notes, memory — operational
+# artifacts for the harness/agent, not runtime source code.
+.harness/
+.planning/
+.memobank/
+.claude/
 
-# Coverage / profiling
-# coverage/
-# htmlcov/
-# .coverage
+# ── CI / platform config ──────────────────────────────────────
+.github/
 
-# Generated assets
-# *.min.js
-# *.min.css
+# ── Build outputs ─────────────────────────────────────────────
+dist/
+build/
+out/
+
+# ── Lock files ────────────────────────────────────────────────
+package-lock.json
+
+# ── Env / secrets ─────────────────────────────────────────────
+.env
+.env.*

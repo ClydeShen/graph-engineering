@@ -94,7 +94,9 @@ it.skipIf(skip)('G3-3: procedural_memory receives a row with non-NULL topology_e
   const scopeId = randomUUID();
   const nodes = [{ id: 'n1', event_type: 'task_spawned' }, { id: 'n2', event_type: 'scope_closed' }];
   const edges = [{ source: 'n1', target: 'n2' }];
-  const worker = new ProceduralMemoryWorker(pool);
+  // Minimal EmbeddingProvider stub — embed failures fall back to NULL intent_embedding (safe)
+  const mockLlmForG3 = { embed: async () => ({ vector: [], countedAgainstBudget: false as const }) };
+  const worker = new ProceduralMemoryWorker(pool, mockLlmForG3);
 
   try {
     await worker.onSynthesizerOutput(

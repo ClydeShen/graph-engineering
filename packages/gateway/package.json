@@ -11,6 +11,7 @@
     "@graph/shared": "*",
     "@graph/workers": "*",
     "@hono/zod-validator": "0.8.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "hono": "4.12.23",
     "pg": "8.21.0",
     "zod": "4.4.3"

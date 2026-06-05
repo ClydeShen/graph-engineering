@@ -151,6 +151,14 @@ export class ScopeConvergenceTracker {
         [scopeId],
       );
 
+      // Non-blocking refresh of materialized traversal cache (migration 009).
+      // CONCURRENTLY does not block readers — fire-and-forget is safe.
+      this.pool
+        .query('REFRESH MATERIALIZED VIEW CONCURRENTLY scope_lineage_view')
+        .catch((err: unknown) =>
+          log.warn({ err }, 'scope_lineage_view refresh failed — fallback active'),
+        );
+
       return true;
     } finally {
       this.closeLock.delete(scopeId);

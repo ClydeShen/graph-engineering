@@ -83,17 +83,26 @@ export function buildScopeReadRoute(pool: Pool, wMax: number): Hono {
       },
     };
 
-    // Pre-populate cache with the causal chain for this scope
+    // Pre-populate cache with the causal chain for this scope.
+    // Try scope_lineage_view (materialized cache) first — O(1) index lookup for
+    // large scopes (>50 tasks). Falls back to direct table scan if view is stale
+    // or unavailable (correctness over speed, ADR 05 supplement / migration 009).
     if (rootHash) {
-      const chainResult = await pool.query<EventLogNode>(
-        `SELECT id, scope_id, entity_id, event_type, predecessor_hash,
+      const CHAIN_COLS = `id, scope_id, entity_id, event_type, predecessor_hash,
                 version_hash, payload, status, base_priority, unlocks_count,
-                spawned_by, last_active_at, created_at
-         FROM execution_event_log
-         WHERE scope_id = $1
-         ORDER BY id ASC`,
-        [id],
-      );
+                spawned_by, last_active_at, created_at`;
+      let chainResult: { rows: EventLogNode[] };
+      try {
+        chainResult = await pool.query<EventLogNode>(
+          `SELECT ${CHAIN_COLS} FROM scope_lineage_view WHERE scope_id = $1 ORDER BY id ASC`,
+          [id],
+        );
+      } catch {
+        chainResult = await pool.query<EventLogNode>(
+          `SELECT ${CHAIN_COLS} FROM execution_event_log WHERE scope_id = $1 ORDER BY id ASC`,
+          [id],
+        );
+      }
       for (const row of chainResult.rows) {
         eventCache.set(row.version_hash, row);
       }

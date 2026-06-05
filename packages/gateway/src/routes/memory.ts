@@ -4,6 +4,15 @@ import type { EmbeddingProvider } from '@graph/shared';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const BM25_ONLY_SQL = `
+SELECT id, scope_id, content,
+       ts_rank_cd(ts_doc, plainto_tsquery('english', $1)) AS rrf_score
+FROM semantic_memory
+WHERE ts_doc @@ plainto_tsquery('english', $1) AND scope_id = $3
+ORDER BY rrf_score DESC
+LIMIT $2
+`;
+
 const HYBRID_RRF_SQL = `
 WITH
 vector_candidates AS (
@@ -49,9 +58,16 @@ export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider): Hono
     if (!UUID_V4_RE.test(scopeId)) return c.json({ error: 'scope_id must be a valid UUID v4' }, 400);
 
     try {
-      const embedResult = await embedding.embed(q);
-      const embeddingLiteral = `[${embedResult.vector.join(',')}]`;
-      const { rows } = await pool.query(HYBRID_RRF_SQL, [embeddingLiteral, q, 10, scopeId]);
+      let rows: unknown[];
+      try {
+        const embedResult = await embedding.embed(q);
+        if (embedResult.vector.length === 0) throw new Error('empty vector');
+        const embeddingLiteral = `[${embedResult.vector.join(',')}]`;
+        ({ rows } = await pool.query(HYBRID_RRF_SQL, [embeddingLiteral, q, 10, scopeId]));
+      } catch {
+        // Embedding unavailable or empty — fall back to BM25-only search
+        ({ rows } = await pool.query(BM25_ONLY_SQL, [q, 10, scopeId]));
+      }
       return c.json({ results: rows });
     } catch {
       return c.json({ error: 'internal server error' }, 500);
