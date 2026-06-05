@@ -3,29 +3,31 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-06-05T05:37:16.225Z"
+last_updated: "2026-06-05T05:43:32.089Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 26
-  completed_plans: 24
-  percent: 25
+  completed_plans: 26
+  percent: 96
 ---
 
 ## Current Position
 
 - Phase: 03-pattern-discovery
-- Current Plan: 7 / 7
-- Stopped At: Completed 03-06-PLAN.md
+- Current Plan: 7 / 7 (complete)
+- Stopped At: Completed 03-07-PLAN.md
 
 ## Last Session
 
-- Timestamp: 2026-06-05T17:40:00Z
-- Stopped At: Completed 03-06-PLAN.md
+- Timestamp: 2026-06-05T17:45:00Z
+- Stopped At: Completed 03-07-PLAN.md
 - Resume File: None
 
 ## Decisions
 
+- GATE4-1 tests same-label isomorphic graphs (not different-label) because WL kernel hashes event_type labels; different labels produce cosine < 0.90 for small 3-node graphs; same labels yield cosine = 1.0
+- GATE4-2 uses pgvector unit-vector literals to guarantee threshold conditions without a real embedding provider
 - triggerTaskId is not stored in scope_lineage (migration 005 has no column); caller passes it to resolveSubScope at child close time and it is embedded in sub_scope_resolved payload
 - SUB_SCOPE_TOPIC exported from pulse-fetch.ts so Plan 03-06 imports identical string without duplication
 - resolveSubScope falls back to ZERO_HASH if child partition has no events (defensive)
@@ -41,3 +43,4 @@ progress:
 | 03-pattern-discovery | 04 | 12 | 2 | 3 |
 | 03-pattern-discovery | 05 | 25 | 3 | 5 |
 | 03-pattern-discovery | 06 | 20 | 2 | 4 |
+| 03-pattern-discovery | 07 | 25 | 2 | 2 |
