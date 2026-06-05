@@ -10,8 +10,13 @@
     "test:unit": "vitest run src/__tests__",
     "test:integration": "vitest run tests/integration",
     "test": "vitest run",
+    "test:db": "node scripts/test-with-db.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npx tsx scripts/migrate.ts",
+    "db:reset": "docker compose down -v && docker compose up -d && npx tsx scripts/migrate.ts",
     "demo": "tsx scripts/demo-runner.ts",
     "analyze-feedback": "tsx scripts/analyze-feedback.ts"
   },
