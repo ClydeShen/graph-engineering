@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { MIN_CORPUS_THRESHOLD } from '@shared/constants.js';
+import { discoverClusters } from './cross-scope.js';
 
 // MUST NOT subscribe to scope_completed inline and MUST NOT acquire OLTP worker slots.
 // This worker runs only on the 6-hour cron schedule at lowest priority (base_priority = 1).
@@ -27,7 +28,10 @@ export class PatternDiscoveryWorker {
       return { skipped: true };
     }
 
-    // Phase 1 stub body — full WL-kernel pattern extraction is Phase 3.
+    // CrossScopePatternDiscovery: find topologically-similar / semantically-different
+    // template pairs and assign cross_domain_cluster_id via union-find (ADR 25 Phase 2).
+    // Pool is used directly — no GraphHandle, no OCC write, no frontier dispatch (ADR 37).
+    await discoverClusters(pool);
     return { skipped: false };
   }
 }
