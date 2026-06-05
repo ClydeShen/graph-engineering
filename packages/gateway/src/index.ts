@@ -23,6 +23,8 @@ import { buildScopeReadRoute } from './routes/scope-read.js';
 import { buildHealthRoute } from './routes/health.js';
 import { buildTopologyRoute } from './routes/topology.js';
 import { buildMemoryRoute } from './routes/memory.js';
+import { buildMcpRoute } from './routes/mcp.js';
+import { buildAgentsRoute } from './routes/agents.js';
 import { OpenAICompatibleProvider } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
@@ -52,6 +54,8 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildTopologyRoute(pool));
   app.route('/v1', buildMemoryRoute(pool, gatewayLlmProvider));
+  app.route('/', buildMcpRoute(pool));
+  app.route('/', buildAgentsRoute(pool));
 
   return app;
 }

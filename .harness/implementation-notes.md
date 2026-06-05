@@ -72,3 +72,32 @@ Plan 03-06 的 SubScopeResultWorker 从 payload 中读取该值。
 当子 Scope 分区没有任何事件时（理论上不可能，但防御性处理），
 `childFinalVersionHash` 回退到 `ZERO_HASH`。这与 `nestScope` 的 `plan_created`
 事件用 `ZERO_HASH` 作为 predecessor 的语义一致。
+
+---
+
+## Phase 3 — Plan 03-05 Active Notes
+
+### wait_all_tasks timeout behavior (2026-06-05)
+
+Decision: On timeout, `wait_all_tasks` returns `{ timed_out: true, completed: string[], pending: string[] }`.
+Implementation: polling loop with 2-second interval, bounded by deadline from `timeout_s`.
+LISTEN/NOTIFY aggregation is architecturally correct (D-5 / ADR 09 Pulse-Fetch pattern) but requires
+a persistent pg-listen subscription that complicates stateless MCP transport design.
+For Phase 3 stateless transport (`sessionIdGenerator: undefined`), polling is the safer choice.
+
+Partial-completion semantics (what to return if some tasks complete before timeout) are deferred to
+Phase 4 per CONTEXT.md §Deferred and RESEARCH.md Open Question 3 resolution.
+
+Referenced by: Plan 03-05 Task 2 (wait_all_tasks tool), PLAN.md §"must_haves"
+
+### MCP transport import path (2026-06-05)
+
+The RESEARCH.md mentions `@modelcontextprotocol/sdk/server/web.js` as an import path, but this module
+does not exist in SDK v1.29.0. The correct path is:
+- `@modelcontextprotocol/sdk/server/mcp.js` → McpServer
+- `@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js` → WebStandardStreamableHTTPServerTransport
+- `@modelcontextprotocol/sdk/server/streamableHttp.js` → StreamableHTTPServerTransport (Node.js wrapper)
+
+We use `webStandardStreamableHttp.js` directly (Web Standards API, compatible with Hono/Bun).
+`enableJsonResponse: true` is set so POST /mcp/messages returns JSON (not SSE stream), which makes
+GATE4-4 tests simpler to assert against.
