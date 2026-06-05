@@ -46,3 +46,29 @@ LLMProvider/EmbeddingProvider 接口已从 `packages/workers/src/llm/` 迁移到
 `packages/shared/src/llm/`，并从 `@graph/shared` 统一导出。
 `packages/workers/src/llm/` 目录已删除。VERIFICATION.md §D3 已过时。
 Commit `44f842c`。
+
+---
+
+## Phase 3 Plan 03-04 决策记录（2026-06-05）
+
+### D-03-04-1: triggerTaskId 不存储在 scope_lineage
+
+ADR 23 §1 中展示的 `scope_lineage` 表有 `trigger_task_id` 列，但 migration 005
+的实际 schema 是 `(scope_id, parent_scope_id, depth, intent, status)`，无此列。
+
+决策：`triggerTaskId` 不写入 DB。`createSubScope` 接收后通过 `void triggerTaskId`
+明确记录意图（非遗漏）。调用方在子 Scope 关闭时将 `triggerTaskId` 传给 `resolveSubScope`，
+后者将其嵌入 `sub_scope_resolved` payload 的 `trigger_task_id` 字段。
+Plan 03-06 的 SubScopeResultWorker 从 payload 中读取该值。
+
+### D-03-04-2: SUB_SCOPE_TOPIC 从 pulse-fetch.ts 导出
+
+`graph::scope::sub_scope_resolved` 作为 `SUB_SCOPE_TOPIC` 常量从
+`packages/control-plane/src/pulse-fetch.ts` 导出，供 Plan 03-06 直接 import。
+避免跨文件 magic string 重复导致不一致。
+
+### D-03-04-3: resolveSubScope 的 ZERO_HASH 防御性回退
+
+当子 Scope 分区没有任何事件时（理论上不可能，但防御性处理），
+`childFinalVersionHash` 回退到 `ZERO_HASH`。这与 `nestScope` 的 `plan_created`
+事件用 `ZERO_HASH` 作为 predecessor 的语义一致。

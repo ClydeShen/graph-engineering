@@ -73,7 +73,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 - [x] 03-01-PLAN.md — Wave 0 schema: migration 007 (agent_registry + intent_embedding + cross_domain_cluster_id) + ProceduralMemoryWorker intent_embedding + RED test scaffolds
 - [x] 03-02-PLAN.md — CrossScopePatternDiscoveryWorker (union-find clustering + discover.worker body)
 - [x] 03-03-PLAN.md — FrontierScheduler skill-matching extension (opt-in GIN && filter)
-- [ ] 03-04-PLAN.md — Nested scope activation (Control Plane sub-scope creation + sub_scope_resolved injection + Pulse-Fetch routing)
+- [x] 03-04-PLAN.md — Nested scope activation (Control Plane sub-scope creation + sub_scope_resolved injection + Pulse-Fetch routing)
 - [ ] 03-05-PLAN.md — MCP Server (7 tools) + transport mount + AgentCard endpoints
 - [ ] 03-06-PLAN.md — SubScopeResultWorker + internal Worker AgentCard bootstrap (D-2)
 - [ ] 03-07-PLAN.md — Gate 4 integration tests (GATE4-1 through GATE4-5)
@@ -94,5 +94,5 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 |-------|----------------|--------|-----------|
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
 | 2. Memory & Retrieval | 8/8 | Complete | 2026-06-04 |
-| 3. Pattern Discovery + MCP Bridging | 3/7 | In progress | - |
+| 3. Pattern Discovery + MCP Bridging | 4/7 | In progress | - |
 | 4. External Integrations | 0/TBD | Not started | - |
