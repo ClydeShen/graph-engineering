@@ -90,6 +90,30 @@ Phase 4 per CONTEXT.md §Deferred and RESEARCH.md Open Question 3 resolution.
 
 Referenced by: Plan 03-05 Task 2 (wait_all_tasks tool), PLAN.md §"must_haves"
 
+---
+
+## Phase 3 — Plan 03-06 Active Notes
+
+### D-2 AgentCard Bootstrap — Stable UUIDs + Skill Vocabulary (2026-06-05)
+
+Internal Worker AgentCards inserted at boot (packages/workers/src/index.ts):
+
+| Worker | Stable agent_id | Skills |
+|---|---|---|
+| FrontierSchedulerWorker | a1000000-0000-4000-8000-000000000001 | task-routing, task-dispatch |
+| EpisodicMemoryWorker | a1000000-0000-4000-8000-000000000002 | memory-storage, episodic-recall |
+| SemanticMemoryWorker | a1000000-0000-4000-8000-000000000003 | memory-storage, semantic-retrieval |
+| ProceduralMemoryWorker | a1000000-0000-4000-8000-000000000004 | memory-storage, template-learning |
+| ConflictResolverWorker | a1000000-0000-4000-8000-000000000005 | conflict-resolution |
+| SubScopeResultWorker | a1000000-0000-4000-8000-000000000006 | scope-resolution, result-synthesis |
+| PatternDiscoveryWorker | a1000000-0000-4000-8000-000000000007 | pattern-discovery, cross-domain-clustering |
+
+Skill vocabulary is intentionally coarse — one or two terms per Worker. Fine-grained skills
+can be added in Phase 4 once FrontierScheduler routing precision needs are clear (CONTEXT.md §Claude's Discretion).
+
+All inserts use `ON CONFLICT (agent_id) DO NOTHING` so re-boots produce no duplicates (T-03-06-02).
+Wrapped in try/catch: boot failure of agent_registry does not crash the Worker process.
+
 ### MCP transport import path (2026-06-05)
 
 The RESEARCH.md mentions `@modelcontextprotocol/sdk/server/web.js` as an import path, but this module
