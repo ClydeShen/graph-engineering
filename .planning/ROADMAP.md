@@ -70,7 +70,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
   4. (GATE4-4) External Agent (MCP client) can call `spawn_subtask` + `claim_next_task` + `complete_task` against a live graph-os instance
   5. (GATE4-5) FrontierScheduler dispatches tasks by skill match (`required_skills[]` against `agent_registry.skills` via GIN), not arbitrary assignment
 **Plans**: 7 plans
-- [ ] 03-01-PLAN.md — Wave 0 schema: migration 007 (agent_registry + intent_embedding + cross_domain_cluster_id) + ProceduralMemoryWorker intent_embedding + RED test scaffolds
+- [x] 03-01-PLAN.md — Wave 0 schema: migration 007 (agent_registry + intent_embedding + cross_domain_cluster_id) + ProceduralMemoryWorker intent_embedding + RED test scaffolds
 - [ ] 03-02-PLAN.md — CrossScopePatternDiscoveryWorker (union-find clustering + discover.worker body)
 - [ ] 03-03-PLAN.md — FrontierScheduler skill-matching extension (opt-in GIN && filter)
 - [ ] 03-04-PLAN.md — Nested scope activation (Control Plane sub-scope creation + sub_scope_resolved injection + Pulse-Fetch routing)
@@ -94,5 +94,5 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 |-------|----------------|--------|-----------|
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
 | 2. Memory & Retrieval | 8/8 | Complete | 2026-06-04 |
-| 3. Pattern Discovery + MCP Bridging | 0/7 | Not started | - |
+| 3. Pattern Discovery + MCP Bridging | 1/7 | In progress | - |
 | 4. External Integrations | 0/TBD | Not started | - |
