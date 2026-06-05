@@ -8,7 +8,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 
 - [ ] **Phase 1: Core Graph Engine** — PostgreSQL schema, Control Plane daemon, Worker framework, HTTP Gateway, Frontier Scheduler, Context Assembly
 - [ ] **Phase 2: Memory & Retrieval** — BM25+RRF hybrid retrieval, MemorySynthesizer, full ConflictResolverWorker, reflection track
-- [ ] **Phase 3: Pattern Discovery** — WL graph kernel, topology embeddings, CrossScopePatternDiscovery, nested scopes activation
+- [ ] **Phase 3: Pattern Discovery + MCP Bridging** — WL graph kernel, topology embeddings, CrossScopePatternDiscovery, nested scopes activation, MCP Server + agent_registry skill routing
 - [ ] **Phase 4: External Integrations** — MCP adapter, Pi sandbox rehearsal mode, distributed locks
 
 ## Phase Details
@@ -59,15 +59,24 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 - 02-07-PLAN.md — Working memory SHA-256 dedup + ConflictResolverWorker LLM merge
 - 02-08-PLAN.md — Gate 3 integration tests G3-1 through G3-7
 
-### Phase 3: Pattern Discovery
-**Goal**: WL graph kernel with topology_embedding computation, CrossScopePatternDiscoveryWorker, nested Scope activation (ADR 23 Phase 3 stubs removed), SubScopeResultWorker.
+### Phase 3: Pattern Discovery + MCP Bridging
+**Goal**: WL graph kernel with topology_embedding computation and cross-domain clustering (CrossScopePatternDiscoveryWorker writing `cross_domain_cluster_id`), nested Scope activation (ADR 23 stubs removed: child `scope_closed` → `sub_scope_resolved` → SubScopeResultWorker), and a cross-protocol MCP Server bridging layer (7 MCP tools, `agent_registry` with GIN skill matching, FrontierScheduler skill-routing extension, AgentCard endpoints) so external Agents interact with the causal ledger via standard protocols.
 **Depends on**: Phase 2
-**Requirements**: TBD
+**Requirements**: [GATE4-1, GATE4-2, GATE4-3, GATE4-4, GATE4-5]
 **Success Criteria** (what must be TRUE):
-  1. Two topologically equivalent scopes from different domains have `topology_embedding` cosine similarity > 0.90
-  2. CrossScopePatternDiscoveryWorker writes `cross_domain_cluster_id` for matching template pairs
-  3. Nested scopes fully activate: child scope `scope_closed` propagates to parent via `sub_scope_resolved`
-**Plans**: TBD
+  1. (GATE4-1) Two topologically equivalent scopes from different domains have `topology_embedding` cosine similarity > 0.90
+  2. (GATE4-2) CrossScopePatternDiscoveryWorker writes `cross_domain_cluster_id` for matching template pairs (topology cosine > 0.90 AND intent distance > 0.50)
+  3. (GATE4-3) Nested scopes fully activate: child scope `scope_closed` propagates to parent via `sub_scope_resolved` and the parent spawning task advances
+  4. (GATE4-4) External Agent (MCP client) can call `spawn_subtask` + `claim_next_task` + `complete_task` against a live graph-os instance
+  5. (GATE4-5) FrontierScheduler dispatches tasks by skill match (`required_skills[]` against `agent_registry.skills` via GIN), not arbitrary assignment
+**Plans**: 7 plans
+- [ ] 03-01-PLAN.md — Wave 0 schema: migration 007 (agent_registry + intent_embedding + cross_domain_cluster_id) + ProceduralMemoryWorker intent_embedding + RED test scaffolds
+- [ ] 03-02-PLAN.md — CrossScopePatternDiscoveryWorker (union-find clustering + discover.worker body)
+- [ ] 03-03-PLAN.md — FrontierScheduler skill-matching extension (opt-in GIN && filter)
+- [ ] 03-04-PLAN.md — Nested scope activation (Control Plane sub-scope creation + sub_scope_resolved injection + Pulse-Fetch routing)
+- [ ] 03-05-PLAN.md — MCP Server (7 tools) + transport mount + AgentCard endpoints
+- [ ] 03-06-PLAN.md — SubScopeResultWorker + internal Worker AgentCard bootstrap (D-2)
+- [ ] 03-07-PLAN.md — Gate 4 integration tests (GATE4-1 through GATE4-5)
 
 ### Phase 4: External Integrations
 **Goal**: MCP adapter with per-event-type cognitive translation tools, Pi SDK `runtime.fork()` sandbox rehearsal mode, distributed lock for ConflictResolverWorker (replacing in-memory Phase 1 implementation).
@@ -85,5 +94,5 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 |-------|----------------|--------|-----------|
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
 | 2. Memory & Retrieval | 8/8 | Complete | 2026-06-04 |
-| 3. Pattern Discovery | 0/TBD | Not started | - |
+| 3. Pattern Discovery + MCP Bridging | 0/7 | Not started | - |
 | 4. External Integrations | 0/TBD | Not started | - |
