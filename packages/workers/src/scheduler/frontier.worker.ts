@@ -14,7 +14,7 @@
  */
 
 import type { Pool } from 'pg';
-import { MAX_PARALLELISM } from '@shared/constants';
+import { MAX_PARALLELISM, AGENT_HEARTBEAT_TTL_S } from '@shared/constants';
 import { TokenBucket } from './token-bucket.js';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +61,7 @@ export const FRONTIER_PRIORITY_SQL = `
       unlocks_count,
       spawned_by,
       last_active_at,
+      payload,
       LEAST(
         EXTRACT(EPOCH FROM (NOW() - created_at))::numeric * 10,
         20
@@ -73,6 +74,7 @@ export const FRONTIER_PRIORITY_SQL = `
     id,
     entity_id,
     event_type,
+    payload,
     (
       base_priority * 10
       + age_bonus
@@ -83,6 +85,27 @@ export const FRONTIER_PRIORITY_SQL = `
   FROM frontier_nodes
   ORDER BY dynamic_score DESC, created_at ASC
   LIMIT $2
+`;
+
+/**
+ * Skill availability check — does at least one active, fresh-heartbeat agent
+ * exist whose skills overlap the task's required_skills?
+ *
+ * $1 — required_skills as text[]
+ * $2 — AGENT_HEARTBEAT_TTL_S (passed as parameter; not hardcoded)
+ *
+ * GIN index idx_agent_registry_skills (migration 007) makes && O(log N).
+ * Returns 1 row if a match exists, 0 rows if none.
+ *
+ * Per D-1: this is the ONLY routing signal. assigned_agent_id is forbidden.
+ */
+export const SKILL_MATCH_SQL = `
+  SELECT 1
+  FROM agent_registry
+  WHERE status = 'active'
+    AND skills && $1::text[]
+    AND last_heartbeat > NOW() - ($2 || ' seconds')::interval
+  LIMIT 1
 `;
 
 /** Mark selected frontier nodes as pending_dispatch (idempotent guard). */
@@ -150,9 +173,13 @@ export class FrontierSchedulerWorker {
    * When the gate passes:
    *  1. Count active workers for the scope.
    *  2. If remaining slots > 0, run Top-K priority SQL.
-   *  3. Atomically mark selected rows as pending_dispatch.
+   *  3. Partition candidates: tasks without required_skills pass through
+   *     unchanged (Pitfall 4 opt-in rule); tasks with required_skills are
+   *     gated on an agent_registry GIN skill-match check (D-1).
+   *  4. Atomically mark eligible rows as pending_dispatch.
    *
    * No LLM call anywhere in this method — dispatch path is LLM-free (ADR 31).
+   * No assigned_agent_id / preferred_agent is ever read (D-1 invariant).
    */
   async onFrontierChanged(scopeId: string): Promise<void> {
     if (!this.bucket.tryAcquire()) {
@@ -169,6 +196,8 @@ export class FrontierSchedulerWorker {
     }
 
     // Select Top-K frontier nodes by dynamic_score.
+    // FRONTIER_PRIORITY_SQL now returns `payload` (TEXT) so we can parse
+    // required_skills; all score arithmetic is byte-for-byte unchanged (ADR 31).
     const frontierResult = await this.pool.query(FRONTIER_PRIORITY_SQL, [
       scopeId,
       remaining,
@@ -178,9 +207,59 @@ export class FrontierSchedulerWorker {
       return;
     }
 
-    const ids = frontierResult.rows.map((r) => r.id);
+    // Partition: passthrough vs. skill-gated rows.
+    const eligibleIds: number[] = [];
 
-    // Atomically mark as pending_dispatch (AND status guard prevents double-dispatch).
-    await this.pool.query(DISPATCH_SQL, [ids]);
+    for (const row of frontierResult.rows) {
+      // Parse payload — TEXT column per ADR 02.
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(row.payload as string) as Record<string, unknown>;
+      } catch {
+        // Malformed payload: treat as no required_skills → passthrough.
+      }
+
+      // D-1 violation guard: log and ignore forbidden assignment fields.
+      if ('assigned_agent_id' in parsed || 'preferred_agent' in parsed) {
+        console.warn(
+          '[FrontierScheduler] D-1 violation: task payload contains forbidden ' +
+            'assignment field (assigned_agent_id / preferred_agent). ' +
+            'Field ignored — only required_skills is honored.',
+          { id: row.id },
+        );
+        // Strip the forbidden fields; routing continues via required_skills only.
+        delete parsed['assigned_agent_id'];
+        delete parsed['preferred_agent'];
+      }
+
+      const requiredSkills = parsed['required_skills'];
+
+      // Opt-in: tasks without required_skills (or empty array) pass through
+      // unchanged (Pitfall 4 — preserves legacy dispatch for all existing tasks).
+      if (!Array.isArray(requiredSkills) || requiredSkills.length === 0) {
+        eligibleIds.push(row.id as number);
+        continue;
+      }
+
+      // Skill-gated: check agent_registry for an active, fresh-heartbeat agent
+      // whose skills overlap the task's required_skills (GIN && operator, D-1).
+      const matchResult = await this.pool.query(SKILL_MATCH_SQL, [
+        requiredSkills,
+        String(AGENT_HEARTBEAT_TTL_S),
+      ]);
+
+      if (matchResult.rows.length > 0) {
+        eligibleIds.push(row.id as number);
+      }
+      // No match → task remains pending_scheduling for the next dispatch cycle.
+    }
+
+    if (eligibleIds.length === 0) {
+      return;
+    }
+
+    // Atomically mark eligible rows as pending_dispatch (AND status guard
+    // prevents double-dispatch on concurrent scheduler firings).
+    await this.pool.query(DISPATCH_SQL, [eligibleIds]);
   }
 }
