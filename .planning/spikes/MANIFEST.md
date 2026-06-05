@@ -17,3 +17,27 @@
 |---|------|------|---------|-------------|
 | 001 | gate-demo-runner | standard | ✓ VALIDATED | readline CLI 可引导用户完成 Gate 测试，JSON schema 足够捕捉 blocker 信号 |
 | 002 | feedback-phase-analyzer | standard | ✓ VALIDATED | 关键词匹配 + 场景规则足以提取 phase 调整信号，无需 LLM |
+| 003 | shadow-adapter | standard | ✓ VALIDATED | `sql.startsWith('WITH new_version AS')` 精确拦截 OCC 写，SELECT 穿透，NOTIFY 隔离免费 |
+| 004 | pi-extension | standard | ✓ VALIDATED | Pi ExtensionAPI 可注册 spawn_task/complete_task，/fork 激活 InMemoryShadowAdapter，无需活跃 Pi 实例 |
+| 005 | connect-pi | standard | ✓ VALIDATED | 原子写 + backup + 幂等检查，agentmemory stub 升级为完整自动安装 |
+
+## Pi Sandbox — Phase 4 Architecture (from spikes 003–005)
+
+Pi = `@earendil-works/pi-coding-agent`（外部 AI coding agent，非我们自己的组件）
+
+```
+packages/
+  pi-extension/           ← Spike 004 的生产实现
+    src/index.ts          ← ExtensionAPI entry (spawn_task, complete_task, /fork, /fork-end)
+    package.json          ← { "pi": { "extensions": ["./src/index.ts"] } }
+
+  shared/src/
+    write-guard.ts        ← InMemoryShadowAdapter（Spike 003 的生产实现）
+
+  cli/src/connect/
+    pi.ts                 ← connect-pi CLI（Spike 005 的生产实现）
+```
+
+**双轨生命周期:**
+- Interactive Mode: Pi + 我们的扩展 → `PostgresWriteAdapter` → PostgreSQL → DB Trigger → NOTIFY → real Workers
+- Rehearsal Mode: `/fork <entryId>` → `runtime.fork()` + `InMemoryShadowAdapter.proxy` → `Map<string,ShadowEntry[]>` → `/fork-end` → `clear()` 阅后即焚
