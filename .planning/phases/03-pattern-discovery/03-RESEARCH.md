@@ -34,7 +34,7 @@ SSE Push is a latency optimization only; push signals carry no task content.
 State written to ledger (PostgreSQL), not process memory. Forbidden patterns: globally unique guardian daemon, central state server, in-process task state cache.
 
 **D-6: Circular Dependency is a Design Error (LOCKED)**
-Agent task dependencies MUST form a DAG. FrontierScheduler detects `spawned_by` chains at dispatch time and refuses to dispatch dependency tasks to a blocked agent.
+Agent task dependencies MUST form a DAG. Phase 3 backstop is Watchdog TTL (D-5). spawned_by chain detection at dispatch time is DEFERRED to Phase 4 per user decision 2026-06-03.
 
 **D-7: Claude Internal Sub-Agent Scheduling NOT Managed by graph-os (LOCKED)**
 Claude manages its own sub-agent scheduling. graph-os only sees `spawn_subtask` calls. Fan-in via `wait_all_tasks(task_ids, timeout_s)` using PostgreSQL LISTEN/NOTIFY.
@@ -582,22 +582,16 @@ app.get('/mcp/sse', async (c) => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `procedural_memory` have an `intent_embedding` column?**
-   - What we know: ADR 25 references `intent_embedding` for the cross-domain guard query. Migration 003 shows `topology_embedding vector(128)` but no `intent_embedding`.
-   - What's unclear: Was `intent_embedding` added in Phase 2? If so, which vector dimension (1536 for OpenAI-compatible)?
-   - Recommendation: Check migration 006 and ProceduralMemoryWorker INSERT statement before implementing CrossScopePatternDiscovery. If missing, add in migration 007 or skip the intent-distance guard (use topology similarity alone with a stricter threshold).
+   - **RESOLVED by Plan 03-01:** Column does NOT exist in migrations 003 or 006. Migration 007 adds `intent_embedding vector(1536)` to procedural_memory. ProceduralMemoryWorker is extended to compute and write it on every template INSERT (nullable on provider failure).
 
 2. **How does SubScopeResultWorker receive sub_scope_resolved — via iii-sdk topic or direct pg-listen?**
-   - What we know: ADR 23 says CP direct-writes to parent partition and "总线感知到此事件后，激活 SubScopeResultWorker 订阅" (bus detects it and activates subscription). This implies iii-sdk routing.
-   - What's unclear: The iii-sdk `durable:subscriber` topic pattern — does it route by `event_type` column value, or by a separate topic string? The existing Pulse-Fetch routes all events to `graph::scheduler::frontier` regardless of event_type.
-   - Recommendation: Extend Pulse-Fetch to check `event_type = 'sub_scope_resolved'` and route to a separate `graph::scope::sub_scope_resolved` topic for SubScopeResultWorker.
+   - **RESOLVED by Plans 03-04 + 03-06:** SubScopeResultWorker uses a durable:subscriber on topic `graph::scope::sub_scope_resolved` (a custom topic string, not an event_type enum). Pulse-Fetch is extended in Plan 03-04 Task 2 to route rows with event_type='sub_scope_resolved' to this topic, bypassing the frontier topic.
 
 3. **wait_all_tasks timeout behavior**
-   - What we know: D-7 says wait_all_tasks uses LISTEN/NOTIFY. Timeout behavior is deferred.
-   - What's unclear: On timeout, does the tool return partial results or an error? This affects Zod output schema.
-   - Recommendation: Return an error object `{ timed_out: true, completed: string[], pending: string[] }` on timeout. Defer partial-completion semantics to Phase 4 integration tests.
+   - **RESOLVED by Plan 03-05:** On timeout, the tool returns an error object `{ timed_out: true, completed: string[], pending: string[] }`. Partial-completion return semantics deferred to Phase 4 per CONTEXT.md.
 
 ---
 
@@ -634,7 +628,7 @@ app.get('/mcp/sse', async (c) => {
 |--------|----------|-----------|-------------------|-------------|
 | GATE4-1 | Two topologically equivalent scopes have topology_embedding cosine > 0.90 | unit | `vitest run packages/workers/src/memory/wl-embedding.test.ts` | ❌ Wave 0 |
 | GATE4-2 | CrossScopePatternDiscoveryWorker writes cross_domain_cluster_id | integration (skip without DB) | `vitest run packages/workers/src/patterns/cross-scope.test.ts` | ❌ Wave 0 |
-| GATE4-3 | Nested scope: child scope_closed propagates to parent via sub_scope_resolved | integration (skip without DB) | `vitest run packages/control-plane/src/nesting.test.ts` | ❌ Wave 0 |
+| GATE4-3 | Nested scope: child scope_closed propagates to parent via sub_scope_resolved | integration (skip without DB) | `vitest run packages/control-plane/src/nesting.test.ts` | ❌ Wave 2 (created by Plan 03-04) |
 | GATE4-4 | MCP client can call spawn_subtask + claim_next_task + complete_task | integration (skip without DB) | `vitest run packages/gateway/src/routes/mcp.test.ts` | ❌ Wave 0 |
 | GATE4-5 | FrontierScheduler dispatches by skill match | unit | `vitest run packages/workers/src/scheduler/frontier.test.ts` | ❌ Wave 0 (extend existing) |
 
