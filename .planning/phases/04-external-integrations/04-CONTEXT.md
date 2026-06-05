@@ -108,9 +108,20 @@ SELECT pg_try_advisory_lock(hashtext($1)::bigint)
 
 ## 5. Pi Integration — Pi Terminal + Pi Sandbox + Connect CLI
 
-**Decision: Pi = `@earendil-works/pi-coding-agent` (external AI coding agent)**
+**Decision: Pi = `@earendil-works/pi-coding-agent` (external AI coding agent, NOT our own component)**
 
-Pi is NOT our own component. We build a Pi *extension* package.
+Pi is a third-party minimal terminal coding harness by Earendil Inc. (`npm install -g @earendil-works/pi-coding-agent`). Users run `pi` to enter its TUI — analogous to Claude Code but with an open extension system. We build a Pi *extension* package that plugs into Pi's extension loader.
+
+**Pi 不是 hermes，也不是我们最终目标：** Pi 是 Phase 4 的一个集成点（coding 场景），hermes 是整个项目的长远愿景（Phase 5+）。两者独立。
+
+### 修正：Pi ExtensionAPI 真实接口（经 WebFetch 验证）
+
+| ctx 类型 | 适用场景 | fork() 可用？ |
+|---|---|---|
+| `ExtensionContext` | 事件处理器（`pi.on()`） | ❌ 无 runtime 属性，无 fork() |
+| `ExtensionCommandContext` | 命令处理器（`registerCommand` handler） | ✅ `ctx.fork(entryId)` 直接调用 |
+
+**首选激活路径：** `session_before_fork` 事件 — 用户运行 Pi 内置 `/fork <entryId>` 时自动触发，无需自定义命令。
 
 ### Architecture
 
@@ -132,7 +143,8 @@ packages/cli/src/connect/
 |---|---|---|
 | `spawn_task` | Pi tool | Calls graph MCP, uses shadow proxy in rehearsal |
 | `complete_task` | Pi tool | Calls graph MCP, uses shadow proxy in rehearsal |
-| `/fork <entryId>` | Pi command | `runtime.fork(entryId)` + activates `InMemoryShadowAdapter` |
+| `session_before_fork` event | hook | Pi native `/fork` → activates `InMemoryShadowAdapter` |
+| `/fork-ext <entryId>` | Pi command | `ctx.fork(entryId)` (ExtensionCommandContext) + shadow (explicit override path) |
 | `/fork-end` | Pi command | `shadow.clear()` — 阅后即焚 |
 | `tool_call` event | Guard hook | Blocks `rm`, `git push`, `git commit`, `psql` in rehearsal mode |
 
@@ -155,7 +167,7 @@ Interactive Mode:
   Pi → our extension tools → PostgresWriteAdapter → pool.query()
     → DB TRIGGER → NOTIFY graph_event_ready → real Workers
 
-Rehearsal Mode (/fork <entryId>):
+Rehearsal Mode (Pi native /fork <entryId> OR /fork-ext <entryId>):
   Pi → runtime.fork(entryId) → InMemoryShadowAdapter.proxy
     → Map<string, ShadowEntry[]>  (writes)
     → real pool                   (reads, passthrough)
@@ -181,7 +193,22 @@ Rehearsal Mode (/fork <entryId>):
 | 004 pi-extension | ExtensionAPI tool/command registration, /fork lifecycle | ✓ VALIDATED |
 | 005 connect-pi | Atomic install to ~/.pi/agent/extensions/, idempotent settings patch | ✓ VALIDATED |
 
-All spike code at `.planning/spikes/003–005/`. Commit `0d75edb`.
+All spike code at `.planning/spikes/003–005/`. Commits `0d75edb` + `c91afdd`.
+
+---
+
+## Pi 与 hermes 的关系（架构定位）
+
+| 维度 | Pi | hermes |
+|---|---|---|
+| 本质 | 第三方 coding agent terminal (Earendil Inc.) | 完整自我改进 AI agent (NousResearch) |
+| 语言 | TypeScript | Python |
+| 与我们的关系 | Phase 4 集成目标（build Pi extension） | 项目长远愿景（我们最终想达到的样子） |
+| 时间线 | Phase 4 | Phase 5+ |
+| 集成方式 | 我们提供 Pi extension，Pi 加载它 | 我们的图可成为 hermes MemoryManager 的 external provider |
+| 覆盖场景 | 编程工作流（coding-focused） | 通用 AI agent（multi-platform, self-improving） |
+
+**hermes 是愿景，Pi 是工具。** hermes 有 `MemoryManager`（one external plugin provider at a time），未来我们的执行图可以作为其记忆后端。但 Phase 4 不集成 hermes — Phase 4 只集成 Pi 和 Claude Code (MCP)。
 
 ---
 
