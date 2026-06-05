@@ -195,4 +195,4 @@ Event sourcing is a storage pattern. This system uses append-only events as stor
 | [`docs/RFC_v4.md`](docs/RFC_v4.md) | Full design rationale, architecture, and specification |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Component diagrams, sequence flows, data model |
 | [`CONTEXT.md`](CONTEXT.md) | Domain glossary — precise definitions for all system terms |
-| [`docs/ADR_v4.md`](docs/ADR_v4.md) | All 23 Architectural Decision Records |
+| [`docs/ADR_v4.md`](docs/ADR_v4.md) | Architectural Decision Records ADR 01–42 (core) + supplements in `docs/adr/` |
