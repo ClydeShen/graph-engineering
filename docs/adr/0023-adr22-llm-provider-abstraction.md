@@ -26,20 +26,35 @@ status: accepted
 
 ### 2. Provider 抽象接口
 
-在 iii-engine 层统一实现两个 Provider 接口，所有 LLM/Embedding 调用经此抽象，不允许在 Worker 或业务代码中直接构造 HTTP 请求：
+Provider 接口定义在 `@graph/shared/src/llm/provider.interface.ts`，所有 LLM/Embedding 调用经此抽象，不允许在 Worker 或业务代码中直接构造 HTTP 请求：
 
 ```typescript
+// packages/shared/src/llm/provider.interface.ts
+
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface EmbedResult {
+  vector: number[];
+  /** 始终为 false — 嵌入调用不计入 Worker token 预算（ADR 22 D-1） */
+  countedAgainstBudget: false;
+}
+
 // 推理模型（用于 Worker 推理、冲突合并、模板提炼）
 interface LLMProvider {
-  complete(messages: ChatMessage[], options?: LLMOptions): Promise<string>;
+  chat(messages: ChatMessage[], opts?: { temperature?: number }): Promise<string>;
 }
 
 // 嵌入模型（用于 mem::reflect、记忆写入向量化）
+// Phase 1：仅单条 embed()。embedBatch() 未实现，按需补充。
 interface EmbeddingProvider {
-  embed(text: string): Promise<number[]>;          // 单条
-  embedBatch(texts: string[]): Promise<number[][]>; // 批量
+  embed(text: string): Promise<EmbedResult>;
 }
 ```
+
+`EmbedResult.countedAgainstBudget: false` 是类型级保证：调用方无需手动判断，TypeScript 编译层面确认嵌入调用不扣减 W_max。
 
 ### 3. 支持的 Provider 实现（iii-engine 配置驱动）
 
@@ -69,7 +84,7 @@ embedding:
 | Apple MLX (macOS) | OpenAI-compatible wrapper（mlx-lm serve） | macOS 本地 |
 | Anthropic Claude | 原生 API（可选适配） | 云端生产 |
 
-**实现策略**：Phase 1 只实现 OpenAI-compatible 一种 Provider，覆盖 ollama/llama.cpp/lmstudio/OpenAI/任意兼容端点。其他 Provider 按需适配，接口不变。
+**实现策略**：Phase 1 只实现 OpenAI-compatible 一种 Provider（`OpenAICompatibleProvider`，位于 `@graph/shared`），覆盖 ollama/llama.cpp/lmstudio/OpenAI/任意兼容端点。其他 Provider 按需适配，接口不变。
 
 ### 4. 当前系统中必须使用 LLM 的位置（显式清单）
 
