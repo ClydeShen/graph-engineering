@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Pool } from 'pg';
+import type { EmbeddingProvider } from '@graph/shared';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => `[guarded]:${s}`),
@@ -18,6 +19,14 @@ import { occWrite } from '@graph/shared';
 import { computeWLEmbedding } from './wl-embedding.js';
 import { ProceduralMemoryWorker, PROCEDURAL_TRIGGER_CONFIG } from './procedural.worker.js';
 
+/** Helper: build a mock EmbeddingProvider returning a 1536-dim vector. */
+function makeMockLlm(vector?: number[]): EmbeddingProvider {
+  const v = vector ?? new Array(1536).fill(0.5);
+  return {
+    embed: vi.fn().mockResolvedValue({ vector: v, countedAgainstBudget: false as const }),
+  };
+}
+
 describe('ProceduralMemoryWorker', () => {
   let mockQuery: ReturnType<typeof vi.fn>;
   let pool: Pool;
@@ -32,7 +41,7 @@ describe('ProceduralMemoryWorker', () => {
   });
 
   it('onSynthesizerOutput calls computeWLEmbedding and includes vector as bracketed pgvector literal in params', async () => {
-    const worker = new ProceduralMemoryWorker(pool);
+    const worker = new ProceduralMemoryWorker(pool, makeMockLlm());
     await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'intent text', nodes, edges);
 
     expect(vi.mocked(computeWLEmbedding)).toHaveBeenCalledWith(nodes, edges);
@@ -43,8 +52,8 @@ describe('ProceduralMemoryWorker', () => {
     expect(embeddingParam).toBeDefined();
   });
 
-  it('onSynthesizerOutput inserts into procedural_memory with topology_embedding as $5', async () => {
-    const worker = new ProceduralMemoryWorker(pool);
+  it('onSynthesizerOutput inserts into procedural_memory with topology_embedding as $5 and intent_embedding as $6', async () => {
+    const worker = new ProceduralMemoryWorker(pool, makeMockLlm());
     await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'intent text', nodes, edges);
 
     expect(mockQuery).toHaveBeenCalledWith(
@@ -52,12 +61,15 @@ describe('ProceduralMemoryWorker', () => {
       expect.anything(),
     );
     const params = mockQuery.mock.calls[0][1] as unknown[];
-    expect(params).toHaveLength(5);
+    expect(params).toHaveLength(6);
+    // topology_embedding ($5, index 4) — WL kernel output
     expect(params[4]).toMatch(/^\[.*\]$/);
+    // intent_embedding ($6, index 5) — semantic embedding (non-null on success)
+    expect(params[5]).toMatch(/^\[.*\]$/);
   });
 
   it('onSynthesizerOutput calls occWrite with eventType memory_updated after INSERT', async () => {
-    const worker = new ProceduralMemoryWorker(pool);
+    const worker = new ProceduralMemoryWorker(pool, makeMockLlm());
     await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'intent text', nodes, edges);
 
     expect(vi.mocked(occWrite)).toHaveBeenCalledOnce();
@@ -68,7 +80,7 @@ describe('ProceduralMemoryWorker', () => {
   });
 
   it('onSynthesizerOutput applies writeGuard to both content ($2) and intent_description ($3)', async () => {
-    const worker = new ProceduralMemoryWorker(pool);
+    const worker = new ProceduralMemoryWorker(pool, makeMockLlm());
     await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'raw intent', nodes, edges);
 
     const params = mockQuery.mock.calls[0][1] as unknown[];
@@ -77,13 +89,48 @@ describe('ProceduralMemoryWorker', () => {
   });
 
   it('reinforce() updates success_count = success_count + 1 and last_used_at for given template_id', async () => {
-    const worker = new ProceduralMemoryWorker(pool);
+    const worker = new ProceduralMemoryWorker(pool, makeMockLlm());
     await worker.reinforce('template-uuid-123');
 
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('success_count = success_count + 1'),
       ['template-uuid-123'],
     );
+  });
+
+  it('intent_embedding ($6) is a bracketed literal distinct from topology_embedding ($5), and llm.embed called with intentDescription', async () => {
+    // topology mock returns 128-dim all-ones-normalized; llm returns 1536-dim all-0.5
+    const mockLlm = makeMockLlm(new Array(1536).fill(0.5));
+    const worker = new ProceduralMemoryWorker(pool, mockLlm);
+    await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'my intent text', nodes, edges);
+
+    // llm.embed was called with the intentDescription string
+    expect(mockLlm.embed).toHaveBeenCalledWith('my intent text');
+
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    const topologyLiteral = params[4] as string;
+    const intentLiteral = params[5] as string;
+
+    // Both are bracketed vector literals
+    expect(topologyLiteral).toMatch(/^\[.*\]$/);
+    expect(intentLiteral).toMatch(/^\[.*\]$/);
+
+    // They are NOT the same string (topology is 128-dim WL; intent is 1536-dim semantic)
+    expect(intentLiteral).not.toBe(topologyLiteral);
+  });
+
+  it('intent_embedding ($6) is null when llm.embed throws, topology_embedding ($5) still written', async () => {
+    const failingLlm: EmbeddingProvider = {
+      embed: vi.fn().mockRejectedValue(new Error('provider down')),
+    };
+    const worker = new ProceduralMemoryWorker(pool, failingLlm);
+    await worker.onSynthesizerOutput('scope-1', 'entity-1', '0'.repeat(64), {}, 'intent text', nodes, edges);
+
+    const params = mockQuery.mock.calls[0][1] as unknown[];
+    // topology_embedding ($5) must never be null
+    expect(params[4]).toMatch(/^\[.*\]$/);
+    // intent_embedding ($6) falls back to null on provider failure
+    expect(params[5]).toBeNull();
   });
 
   it('PROCEDURAL_TRIGGER_CONFIG has durable:subscriber type, correct function_id, and topic', () => {

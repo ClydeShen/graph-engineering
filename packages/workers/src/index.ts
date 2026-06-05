@@ -152,7 +152,7 @@ worker.registerTrigger(TTL_CRON_TRIGGER);
 // graph::memory::procedural — durable:subscriber on graph::memory::synthesizer::output
 // Stores WL-embedded workflow templates into procedural_memory.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const proceduralWorker = new ProceduralMemoryWorker(pool);
+const proceduralWorker = new ProceduralMemoryWorker(pool, llmProvider);
 worker.registerFunction('graph::memory::procedural', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
