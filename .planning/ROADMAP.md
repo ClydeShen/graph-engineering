@@ -74,7 +74,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 - [x] 03-02-PLAN.md — CrossScopePatternDiscoveryWorker (union-find clustering + discover.worker body)
 - [x] 03-03-PLAN.md — FrontierScheduler skill-matching extension (opt-in GIN && filter)
 - [x] 03-04-PLAN.md — Nested scope activation (Control Plane sub-scope creation + sub_scope_resolved injection + Pulse-Fetch routing)
-- [ ] 03-05-PLAN.md — MCP Server (7 tools) + transport mount + AgentCard endpoints
+- [x] 03-05-PLAN.md — MCP Server (7 tools) + transport mount + AgentCard endpoints
 - [ ] 03-06-PLAN.md — SubScopeResultWorker + internal Worker AgentCard bootstrap (D-2)
 - [ ] 03-07-PLAN.md — Gate 4 integration tests (GATE4-1 through GATE4-5)
 
