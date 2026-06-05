@@ -1,22 +1,27 @@
 /**
- * Spike 004: Pi Extension entry point
+ * Spike 004 (corrected): Pi Extension entry point
  *
- * Validates:
- * 1. Pi ExtensionAPI can register spawn_task / complete_task as Pi tools
- * 2. session_start event wires up shadow adapter activation
- * 3. /fork command triggers runtime.fork() + InMemoryShadowAdapter swap
- * 4. tool_call hook intercepts dangerous operations in rehearsal mode
+ * API corrections from https://pi.dev/docs/latest/extensions:
+ * - ctx in event handlers: ExtensionContext (NO fork, NO runtime)
+ * - ctx in command handlers: ExtensionCommandContext (HAS ctx.fork() directly)
+ * - session_before_fork event: hook into Pi's own built-in /fork command
  *
- * In production this imports from @earendil-works/pi-coding-agent.
- * In this spike it uses the local type shim.
+ * Two-path fork activation:
+ * A) User runs Pi's native /fork <entryId> → session_before_fork event fires → shadow activates
+ * B) Our /fork-ext <entryId> command → ctx.fork(entryId) + shadow activates (explicit override)
+ *
+ * /fork-end command → shadow.clear() (阅后即焚)
  */
 
-import type { ExtensionAPI, ExtensionContext } from './pi-types.shim.js';
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  ExtensionCommandContext,
+} from './pi-types.shim.js';
 import { InMemoryShadowAdapter } from '../../../003-shadow-adapter/scripts/shadow-adapter.js';
 
 // ---------------------------------------------------------------------------
-// Shadow adapter state — lives for the lifetime of a rehearsal session.
-// Activated by /fork, destroyed on session end or /fork-end.
+// Shadow adapter state — module singleton for the Pi extension session
 // ---------------------------------------------------------------------------
 
 let activeShadow: InMemoryShadowAdapter | null = null;
@@ -29,27 +34,34 @@ export function getShadow(): InMemoryShadowAdapter | null {
   return activeShadow;
 }
 
+function activateShadow(entryId: string, ctx: ExtensionContext): void {
+  if (activeShadow) return; // guard re-entry
+  const mockRealPool = { query: async () => ({ rows: [], rowCount: 0 }) };
+  activeShadow = new InMemoryShadowAdapter(mockRealPool);
+  ctx.ui.notify(
+    `🟡 Rehearsal mode ACTIVE — forked from ${entryId}. Writes → shadow only.`,
+    'info',
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Graph Runtime tool definitions (what Pi exposes to the agent)
+// Graph Runtime URL
 // ---------------------------------------------------------------------------
 
 const GRAPH_URL = process.env['GRAPH_RUNTIME_URL'] ?? 'http://localhost:4000';
 
-async function callMcp(tool: string, args: Record<string, unknown>, shadow: InMemoryShadowAdapter | null) {
-  // In rehearsal mode: writes go to shadow, reads still hit real graph
-  // In interactive mode: all calls go to real graph MCP endpoint
-  const mode = shadow ? 'rehearsal' : 'interactive';
+async function callMcp(tool: string, args: Record<string, unknown>) {
   return {
-    mode,
+    mode: activeShadow ? 'rehearsal' : 'interactive',
     tool,
     args,
     endpoint: `${GRAPH_URL}/mcp`,
-    shadow_entries: shadow?.getEntries().length ?? 0,
+    shadow_entries: activeShadow?.getEntries().length ?? 0,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Extension factory — default export called by Pi on load
+// Extension factory
 // ---------------------------------------------------------------------------
 
 export default function graphRuntimeExtension(pi: ExtensionAPI) {
@@ -57,14 +69,18 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
   // --- session_start: announce mode ---
   pi.on('session_start', async (_event, ctx: ExtensionContext) => {
     const mode = isRehearsalActive() ? '🟡 REHEARSAL' : '🟢 INTERACTIVE';
-    ctx.ui.notify(`Graph Runtime connected [${mode}] → ${GRAPH_URL}`, 'info');
+    ctx.ui.notify(`Graph Runtime [${mode}] → ${GRAPH_URL}`, 'info');
   });
 
-  // --- tool_call: guard destructive ops in rehearsal mode ---
+  // --- session_before_fork: hook into Pi's OWN /fork command ---
+  // When user runs Pi's built-in /fork <entryId>, we activate shadow BEFORE the fork
+  pi.on('session_before_fork', async (event, ctx: ExtensionContext) => {
+    activateShadow(event.entryId, ctx);
+  });
+
+  // --- tool_call: guard destructive ops in rehearsal ---
   pi.on('tool_call', async (event, ctx: ExtensionContext) => {
     if (!isRehearsalActive()) return;
-
-    // In rehearsal, block bash commands that could affect the real filesystem
     if (event.toolName === 'bash') {
       const cmd = (event.input['command'] as string) ?? '';
       if (cmd.match(/\b(rm|git push|git commit|psql)\b/)) {
@@ -81,18 +97,18 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: 'spawn_task',
     label: 'Spawn Task',
-    description: 'Spawn a new task node in the execution graph. In rehearsal mode, writes to shadow only.',
+    description: 'Spawn a task in the execution graph. In rehearsal mode, writes to shadow only.',
     parameters: {
       type: 'object',
       properties: {
-        scope_id: { type: 'string', description: 'Scope UUID' },
-        title: { type: 'string', description: 'Task title' },
-        payload: { type: 'object', description: 'Task payload' },
+        scope_id: { type: 'string' },
+        title: { type: 'string' },
+        payload: { type: 'object' },
       },
       required: ['scope_id', 'title'],
     },
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = await callMcp('spawn_task', params as Record<string, unknown>, activeShadow);
+      const result = await callMcp('spawn_task', params as Record<string, unknown>);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         details: result,
@@ -104,18 +120,18 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: 'complete_task',
     label: 'Complete Task',
-    description: 'Mark a task as complete in the execution graph.',
+    description: 'Mark a task complete in the execution graph.',
     parameters: {
       type: 'object',
       properties: {
-        entity_id: { type: 'string', description: 'Entity UUID to complete' },
-        scope_id: { type: 'string', description: 'Scope UUID' },
-        result: { type: 'object', description: 'Completion result payload' },
+        entity_id: { type: 'string' },
+        scope_id: { type: 'string' },
+        result: { type: 'object' },
       },
       required: ['entity_id', 'scope_id'],
     },
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = await callMcp('complete_task', params as Record<string, unknown>, activeShadow);
+      const result = await callMcp('complete_task', params as Record<string, unknown>);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         details: result,
@@ -123,39 +139,30 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
     },
   });
 
-  // --- /fork command: enter rehearsal mode ---
-  pi.registerCommand('fork', {
-    description: 'Enter rehearsal mode: fork from entry-id, shadow writes, read-through PostgreSQL',
-    handler: async (args: string, ctx: ExtensionContext) => {
+  // --- /fork-ext command: explicit rehearsal activation (alternative to Pi's /fork) ---
+  // ctx here is ExtensionCommandContext — ctx.fork() is available directly
+  pi.registerCommand('fork-ext', {
+    description: 'Activate rehearsal mode: fork from entry-id + shadow writes',
+    handler: async (args: string, ctx: ExtensionCommandContext) => {
       const entryId = args.trim();
       if (!entryId) {
-        ctx.ui.notify('Usage: /fork <entry-id>', 'warn');
+        ctx.ui.notify('Usage: /fork-ext <entry-id>', 'warn');
         return;
       }
       if (activeShadow) {
-        ctx.ui.notify('Already in rehearsal mode. Run /fork-end to exit first.', 'warn');
+        ctx.ui.notify('Already in rehearsal. Run /fork-end to exit first.', 'warn');
         return;
       }
-
-      // Activate shadow adapter (swaps write path)
-      // In production: realPool comes from the extension's service registry
-      const mockRealPool = { query: async () => ({ rows: [], rowCount: 0 }) };
-      activeShadow = new InMemoryShadowAdapter(mockRealPool);
-
-      // Pi's fork creates a new session branching from entryId
-      await ctx.runtime.fork(entryId);
-
-      ctx.ui.notify(
-        `🟡 Rehearsal mode ACTIVE — forked from ${entryId}. All writes → shadow only.`,
-        'info',
-      );
+      // ctx.fork() is on ExtensionCommandContext — not ctx.runtime.fork()
+      await ctx.fork(entryId);
+      activateShadow(entryId, ctx);
     },
   });
 
-  // --- /fork-end command: destroy shadow, return to interactive ---
+  // --- /fork-end command: destroy shadow (阅后即焚) ---
   pi.registerCommand('fork-end', {
     description: 'Exit rehearsal mode: destroy shadow entries (阅后即焚)',
-    handler: async (_args: string, ctx: ExtensionContext) => {
+    handler: async (_args: string, ctx: ExtensionCommandContext) => {
       if (!activeShadow) {
         ctx.ui.notify('Not in rehearsal mode.', 'warn');
         return;
