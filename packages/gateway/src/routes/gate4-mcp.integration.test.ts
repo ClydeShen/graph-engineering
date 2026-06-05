@@ -102,12 +102,21 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const { scope_id } = (await scopeRes.json()) as { scope_id: string };
     scopeId = scope_id;
 
+    // Get the plan_created version_hash — this is the correct predecessor for the first task_spawned.
+    // ZERO_HASH is already owned by plan_created in the OCC chain; using it as predecessor
+    // for spawn_subtask would trigger an OCC conflict and demote the write to conflict_detected.
+    const { rows: [planRow] } = await pool.query<{ version_hash: string }>(
+      `SELECT version_hash FROM execution_event_log WHERE scope_id = $1 LIMIT 1`,
+      [scopeId],
+    );
+    const planHash = planRow?.version_hash ?? '0'.repeat(64);
+
     // ── Step 2: register_agent with skills ['typescript'] ────────────────────
     const uniqueAgentId = randomUUID();
     const registerRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 2,
@@ -142,7 +151,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const spawnRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 3,
@@ -151,7 +160,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
             name: 'spawn_subtask',
             arguments: {
               scope_id,
-              predecessor_hash: '0'.repeat(64),
+              predecessor_hash: planHash,
               required_skills: ['typescript'],
               payload: { description: 'GATE4-4 spawned task' },
             },
@@ -182,7 +191,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const d1GuardRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 4,
@@ -208,7 +217,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const claimRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 5,
@@ -242,7 +251,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const completeRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 6,

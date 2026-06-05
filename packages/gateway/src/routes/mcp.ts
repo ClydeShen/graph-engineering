@@ -5,10 +5,13 @@
  *   GET  /mcp/sse      — SSE push stream (latency optimization only; carries no task content per D-4)
  *   POST /mcp/messages — JSON-RPC tool calls
  *
- * ONE McpServer + ONE transport (stateless, sessionIdGenerator: undefined).
- * Created once in buildMcpRoute() and shared across all requests (Pitfall 2).
+ * STATELESS MODE: fresh transport + server per request (SDK requirement).
+ * WebStandardStreamableHTTPServerTransport sets _hasHandledRequest=true after the
+ * first call and throws on any subsequent call in stateless mode (sessionIdGenerator: undefined).
+ * The McpServer also guards against double connect() with "Already connected" error.
+ * Solution: create fresh instances per request, closing over the shared pool.
  *
- * @see .planning/phases/03-pattern-discovery/03-RESEARCH.md §Pattern 1 + §Pitfall 2
+ * @see node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/honoWebStandardStreamableHttp.js
  * @see ADR 24 — HTTP Gateway spec
  */
 
@@ -20,36 +23,29 @@ import { buildMcpServer } from '../mcp/server.js';
 export function buildMcpRoute(pool: Pool): Hono {
   const app = new Hono();
 
-  // Create ONE McpServer + ONE transport (stateless) — shared across all requests (Pitfall 2).
-  const mcpServer = buildMcpServer(pool);
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless mode — no per-session state
-    enableJsonResponse: true,      // return JSON for POST (not SSE stream) for simpler test assertions
-  });
-
-  // Connect server to transport once at boot.
-  // Capture the Promise so each handler can await readiness before processing the first request.
-  // tools/list is served locally by the transport and does not require the connection;
-  // tools/call dispatches to the server via event emitters and DOES require it.
-  const connectionReady = mcpServer.connect(transport);
-
   // ── GET /mcp/sse — SSE push stream ─────────────────────────────────────
   // D-4: SSE carries no task content, only availability signals.
   app.get('/mcp/sse', async (c) => {
-    await connectionReady;
-    const response = await transport.handleRequest(c.req.raw);
-    return response;
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    const mcpServer = buildMcpServer(pool);
+    await mcpServer.connect(transport);
+    return transport.handleRequest(c.req.raw);
   });
 
   // ── POST /mcp/messages — JSON-RPC tool call entry point ─────────────────
   app.post('/mcp/messages', async (c) => {
-    await connectionReady;
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    const mcpServer = buildMcpServer(pool);
     try {
-      const response = await transport.handleRequest(c.req.raw);
-      return response;
+      await mcpServer.connect(transport);
+      return await transport.handleRequest(c.req.raw);
     } catch (err) {
-      // MCP SDK should catch tool errors internally; this guard prevents
-      // unhandled SDK exceptions from leaking as 500 to the client.
       return c.json(
         { jsonrpc: '2.0', id: null, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } },
         200,

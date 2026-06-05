@@ -37,18 +37,21 @@ export class SubScopeResultWorker {
       [child_scope_id, child_final_version_hash],
     );
 
-    // Step 3: Look up parent's task_spawned node hash for trigger_task_id
-    const parentNodeResult = await this.pool.query<{ version_hash: string }>(
+    // Step 3: Use parent's tail version_hash as predecessor.
+    // resolveSubScope wrote sub_scope_resolved using the parent's tail at that point,
+    // so the tail is now sub_scope_resolved. Writing memory_updated after it avoids
+    // the OCC conflict that would occur if we re-used the task_spawned predecessor slot.
+    const parentTailResult = await this.pool.query<{ version_hash: string }>(
       `SELECT version_hash
        FROM execution_event_log
-       WHERE scope_id = $1 AND entity_id = $2 AND event_type = 'task_spawned'
+       WHERE scope_id = $1
        ORDER BY id DESC
        LIMIT 1`,
-      [parent_scope_id, trigger_task_id],
+      [parent_scope_id],
     );
 
     const parentPredecessorHash =
-      parentNodeResult.rows[0]?.version_hash ?? '0'.repeat(64);
+      parentTailResult.rows[0]?.version_hash ?? '0'.repeat(64);
 
     // Error path: child final node not found (T-03-06-01 backstop — do NOT throw)
     if (childResult.rows.length === 0) {

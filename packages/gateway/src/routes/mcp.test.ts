@@ -111,11 +111,19 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
       expect(scopeRes.status).toBe(201);
       const { scope_id } = (await scopeRes.json()) as { scope_id: string };
 
+      // Get plan_created version_hash — correct predecessor for first task_spawned.
+      // ZERO_HASH is owned by plan_created; reusing it causes OCC conflict.
+      const { rows: [planRow] } = await pool.query<{ version_hash: string }>(
+        `SELECT version_hash FROM execution_event_log WHERE scope_id = $1 LIMIT 1`,
+        [scope_id],
+      );
+      const planHash = planRow?.version_hash ?? '0'.repeat(64);
+
       // Step 2: spawn_subtask — writes task_spawned event, returns task_id
       const spawnRes = await app.fetch(
         new Request('http://localhost/mcp/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 2,
@@ -124,7 +132,7 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
               name: 'spawn_subtask',
               arguments: {
                 scope_id,
-                predecessor_hash: '0'.repeat(64),
+                predecessor_hash: planHash,
                 required_skills: ['test-skill'],
                 payload: { test: true },
               },
@@ -142,7 +150,7 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
       const claimRes = await app.fetch(
         new Request('http://localhost/mcp/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 3,
@@ -160,7 +168,7 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
       const completeRes = await app.fetch(
         new Request('http://localhost/mcp/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 4,
