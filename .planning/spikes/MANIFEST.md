@@ -20,6 +20,11 @@
 | 003 | shadow-adapter | standard | ✓ VALIDATED | `sql.startsWith('WITH new_version AS')` 精确拦截 OCC 写，SELECT 穿透，NOTIFY 隔离免费 |
 | 004 | pi-extension | standard | ✓ VALIDATED | Pi ExtensionAPI 可注册 spawn_task/complete_task，/fork 激活 InMemoryShadowAdapter，无需活跃 Pi 实例 |
 | 005 | connect-pi | standard | ✓ VALIDATED | 原子写 + backup + 幂等检查，agentmemory stub 升级为完整自动安装 |
+| 006 | mem0-zep-letta-fit | research | ✗ INVALIDATED | All 3 assume they are SSOT; incompatible with append-only PostgreSQL execution graph. Custom 4-layer build justified (CoALA arXiv:2309.02427) |
+| 007a | canonical-json-fss | standard | ✓ VALIDATED | fast-json-stable-stringify is byte-for-byte identical to custom canonicalJson() across 22 test cases incl. -0, unicode, nested objects |
+| 007b | canonical-json-rfc | standard | ✓ VALIDATED | canonical-json (RFC 8785) is byte-for-byte identical across 23 test cases incl. float edge cases (1e308, 5e-324) |
+| 008 | token-bucket-limiter | standard | ✓ VALIDATED (migration NOT recommended) | limiter.TokenBucket achieves parity with pre-fill fix, but migration adds npm dep + non-drop-in API for zero functional gain |
+| 009 | dead-occwrite-removal | standard | ✓ VALIDATED | occWrite in graph-handle.ts exported but zero external callers — inlined into write() and dead export removed; 163 tests pass |
 
 ## Pi Sandbox — Phase 4 Architecture (from spikes 003–005)
 

@@ -39,7 +39,6 @@ export interface GraphHandle {
 
 /**
  * Concrete GraphHandle backed by a pg Pool.
- * Delegates write() to the OCC Writable CTE (occWrite).
  */
 export class GraphHandleImpl implements GraphHandle {
   readonly scopeId: string;
@@ -51,35 +50,21 @@ export class GraphHandleImpl implements GraphHandle {
   }
 
   async write(event: GraphWriteEvent): Promise<WriteResult> {
-    return occWrite(this.pool, event);
+    const { scope_id, entity_id, event_type, predecessor_hash, canonical_json_text } = event;
+    const result = await this.pool.query(
+      OCC_WRITE_SQL(partitionTable(scope_id)),
+      [scope_id, entity_id, predecessor_hash, canonical_json_text, event_type],
+    );
+    const row = result.rows[0];
+    return {
+      version_hash: row.version_hash as string,
+      event_type: row.event_type as WriteResult['event_type'],
+      occ_result: row.occ_result as 'won' | 'demoted',
+    };
   }
 
   async query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]> {
     const result = await this.pool.query<T>(sql, params);
     return result.rows;
   }
-}
-
-/**
- * OCC Writable CTE — executes the append-only insert with SHA-256 hash chain.
- *
- * Delegates to the canonical OCC_WRITE_SQL template (ADR 11, ADR 02):
- *   - First writer wins (occ_result='won').
- *   - Second writer's event is appended as conflict_detected (occ_result='demoted').
- *   - Targets the per-scope partition via partitionTable() so ON CONFLICT
- *     resolves against the partition-local UNIQUE constraint (ADR 01, ADR 11).
- */
-export async function occWrite(pool: Pool, event: GraphWriteEvent): Promise<WriteResult> {
-  const { scope_id, entity_id, event_type, predecessor_hash, canonical_json_text } = event;
-  const result = await pool.query(
-    OCC_WRITE_SQL(partitionTable(scope_id)),
-    [scope_id, entity_id, predecessor_hash, canonical_json_text, event_type],
-  );
-
-  const row = result.rows[0];
-  return {
-    version_hash: row.version_hash as string,
-    event_type: row.event_type as WriteResult['event_type'],
-    occ_result: row.occ_result as 'won' | 'demoted',
-  };
 }
