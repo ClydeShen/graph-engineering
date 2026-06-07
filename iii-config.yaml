@@ -14,3 +14,35 @@ workers:
       exporter: memory
       logs_enabled: true
       logs_console_output: true
+      sampling_ratio: 0.1   # ADR agentmemory issue #519: full sampling caused 137 GB log loop
+
+  - name: iii-queue
+    config:
+      adapter:
+        name: builtin        # required for durable:subscriber topic routing
+
+  - name: iii-pubsub
+    config:
+      adapter:
+        name: local          # required for durable:subscriber delivery
+
+  - name: iii-state
+    config:
+      adapter:
+        name: kv
+        config:
+          store_method: file_based
+          file_path: .iii-state   # persistent KV for trigger registration
+
+# DISABLED for local UAT (2026-06-07): block requires both `watch` AND `exec`
+# (a long-running command sequence — iii-exec spawns/manages external processes,
+# it does not "auto-restart Workers on change" as the original comment claimed).
+# `dev.mjs` already spawns workers directly via tsx; no `exec` target was ever
+# designed for this block. Engine refuses to boot with `missing field 'exec'`.
+# See .harness/analysis/uat-journey-2026-06-07.md for the full finding.
+#  - name: iii-exec
+#    config:
+#      watch:
+#        - src/**/*.ts
+#      exec:
+#        - <undetermined — needs design decision>
