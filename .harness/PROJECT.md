@@ -1,17 +1,19 @@
-# Project: Graph-Native Agent Runtime
+# Project: Memex — Graph-Native Agent Runtime
+
+> "The human mind operates by association." — Vannevar Bush, *As We May Think* (1945)
 
 ## Vision
 
-A system for discovering reusable workflows from execution graphs — not designing them. There is no workflow layer. Memory, workflow, context, and state are all views of the same append-only event graph. The context window is a projection of the graph; the graph is the permanent state. Workflows emerge as statistical patterns from accumulated cognitive traces, including cross-domain structures that are invisible at the level of individual tasks.
+A system for discovering reusable workflows from execution trails — not designing them. Inspired by Vannevar Bush's 1945 Memex concept: knowledge organized as associative trails, not hierarchical indexes. There is no workflow layer. Memory, workflow, context, and state are all views of the same append-only Trail Mesh. The context window is a projection of the graph; the Trail Mesh is the permanent record. Workflows emerge as statistical patterns from accumulated trails, including cross-domain topologies that are invisible at the level of individual tasks.
 
 ## Goals
 
-- Append-only execution graph (PostgreSQL) as single source of truth for all state
-- Context assembly as causal projection from graph lineage, not prompt engineering
-- Workflow pattern discovery from execution history — across task types, not just within them
+- Append-only Trail Mesh (PostgreSQL) as single source of truth for all state
+- Context assembly as causal trail projection from graph lineage, not prompt engineering
+- Trail Discovery: workflow pattern emergence from execution history — across task types, not just within them
 - Multi-agent coordination with automatic conflict resolution (no exceptions, no lost work)
-- Long-term memory as emergent graph views (episodic, semantic, procedural) — not a separate product
-- Full causal auditability: every outcome traceable to the event that caused it
+- Crystallization: LLM distillation of raw trails into durable Lessons with Ebbinghaus reinforcement
+- Full causal auditability: every outcome traceable to the Association that caused it
 
 ## Status
 
