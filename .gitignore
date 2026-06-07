@@ -1,5 +1,3 @@
-.harness/phases/*/.continue-here.json
-
 # Dependencies
 node_modules/
 

@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "phase": "01-discuss",
+  "task": "specimen-analysis",
+  "status": "in_progress",
+  "last_updated": "2026-06-01T04:45:00.000Z",
+  "current_state": "ADR 29 (Worker/Tool/Knowledge/Connector 四元边界) 已写入。agentmemory 深度分析完成 (arch + patterns 两份报告)。标本库 D:\\Repo\\specimens\\ 建立，4个项目全部 roam indexed。下一步：分析 hermes-agent / iii / gsd-2。",
+  "completed_work": [
+    "Pre-Phase-1 比较研究：Cayley / Peregrine / GraphVite / codegraph / kli",
+    "G1-G8 缺陷识别与分类（G5-G8 Phase 1 阻断，G1-G4 推迟）",
+    "ADR 26：Event-as-Snapshot 哲学（docs/adr/0028-adr26-event-as-snapshot-philosophy.md）",
+    "ADR 27：Worker 执行生命周期状态机（docs/adr/0029-adr27-worker-lifecycle-state-machine.md）",
+    "ADR 28：调度规约与操作确定性（docs/adr/0030-adr28-scheduling-spec-and-operational-determinism.md）",
+    "ADR 29：Worker/Tool/Knowledge/Connector 四元边界（docs/adr/0031-adr29-worker-tool-knowledge-boundaries.md）",
+    "ADR_v4.md 第九层目录 + 29 条 ADR 总计",
+    "agentmemory 深度分析 — arch 报告：C:\\Temp\\agentmemory-analysis-arch.md",
+    "agentmemory 深度分析 — patterns 报告：C:\\Temp\\agentmemory-analysis-patterns.md（7 个设计模式 with file:line）",
+    "标本库建立：D:\\Repo\\specimens\\（agentmemory/hermes-agent/iii/gsd-2，roam indexed）",
+    "D:\\Repo\\specimens\\specimens.json + update.ps1 — 注册表与批量更新脚本"
+  ],
+  "remaining_work": [
+    "分析 hermes-agent（health 75/100）：架构对标 vision，找出 universal agent runtime 的接口抽象",
+    "分析 iii engine core（17k symbols）：sdk.registerFunction 内部机制 + durable:subscriber 实现",
+    "分析 gsd-2（health 62/100）：planning/execution phase 结构 + skill orchestration 模式",
+    "整合三份标本分析 → 对 ADR 29 实施的具体建议 / 补充 ADR",
+    "填补未决问题追踪 P1/P2 项，运行 /gsd-plan-phase 1"
+  ],
+  "decisions_made": [
+    "G8: Event-as-Snapshot 锁定——memory_updated 是完整快照，禁止 fold/reduce",
+    "G5: Worker 四阶段状态机——Knapsack 失败二分（OOM链路 vs 重入队 N=3）",
+    "G6: 收敛判定纯代数 SQL，禁止概率/时间窗口",
+    "G7: Max_Parallelism 由 iii-config.yaml 动态推导；单写者互斥防止 ConflictResolverWorker 重复实例化",
+    "ADR 29: api:: / mem:: 命名是架构承重墙，transport 层不碰业务逻辑",
+    "ADR 29: TriggerAction.Void() 用于 LLM 路径——热路径零 LLM 是强制设计原则",
+    "ADR 29: 在图原生系统中 audit trail IS execution graph（recordAudit = 冗余层）",
+    "ADR 29: Frontier 分数公式 priority×10 + age_bonus(≤20) + unlocks_count×5 + spawned_by_bonus(3) + active_bonus(15)",
+    "标本库位置锁定：D:\\Repo\\specimens\\（永久，非 C:\\Temp）"
+  ],
+  "blockers": [],
+  "context": "Project: Graph-Native Agent Runtime (ClydeShen/graph-engineering). 29 ADRs locked. 标本库 roam index 已就绪，直接用 roam MCP tools with root: D:\\Repo\\specimens\\<name> 分析。agentmemory 报告在 C:\\Temp\\agentmemory-analysis-*.md。",
+  "next_action": "用 roam_understand + roam_explore 分析 hermes-agent 架构（root: D:\\Repo\\specimens\\hermes-agent），对照项目 vision 找出 universal agent runtime 的接口抽象设计。"
+}

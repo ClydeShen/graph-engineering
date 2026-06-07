@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "phase": "03-execute",
+  "task": "side-manual-testing",
+  "status": "in_progress",
+  "last_updated": "2026-06-03T06:30:00.000Z",
+  "current_state": "npm run dev 可正常启动全部 4 个服务。端口 4001 (iii) / 4000 (gateway)。用户正在手动测试和理解系统。",
+  "completed_work": [
+    "scripts/dev.mjs 创建 — 顺序启动 iii→workers→ctrl→gateway，pino JSON 解析，端口清理",
+    "package.json 加 dev 脚本",
+    "gateway startup log (gateway.ready) 添加",
+    "iii-gate1.yaml 合并入 iii-config.yaml，删除冗余文件",
+    "fix: pulse-fetch 路由 worker::plan_created → graph::scheduler::frontier",
+    "fix: frontier DISPATCH_SQL scheduled_at → dispatched_at",
+    "端口从 49134/3000 改为 4001/4000（原端口被本地其他程序占用）",
+    "commit d5cf76c — dev tooling + bug fixes",
+    "commit 196006b — port fix 4001/4000"
+  ],
+  "remaining_work": [
+    "用户继续手动测试系统 (Scenario A-E，参考上一 session 的测试指南)",
+    "系统可视化方案 design（side-visualization 任务）",
+    "Phase 2 Day 0 commit: D3 — LLMProvider/EmbeddingProvider 移到 packages/shared/src/llm/",
+    "Phase 2 planning (/gsd-plan-phase)",
+    "Phase 2 实现 + Gate 2 E2E 测试"
+  ],
+  "decisions_made": [
+    "iii 默认端口 4001，Gateway 默认端口 4000（49134/3000 被本地其他程序占用）",
+    "iii-gate1.yaml 删除，内容合并到 iii-config.yaml（iii-exec/iii-http/llm 配置全部去掉）",
+    "pulse-fetch 直接调用 graph::scheduler::frontier，不用 worker::{event_type} 命名",
+    "服务启动顺序：iii(0s) → workers(+2s) → ctrl+gateway(+5s)，避免 pulse-replay 时 worker 未就绪"
+  ],
+  "blockers": [],
+  "context": "npm run dev 全部就绪。iii 4001，Gateway http://localhost:4000。Docker PostgreSQL 在 5432。手动测试指南在上一 session 对话中（Scenario A-E curl 命令）。",
+  "next_action": "运行 npm run dev，用 Invoke-RestMethod 执行 Scenario A-E 手动测试，观察各服务日志。"
+}

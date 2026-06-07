@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "phase": "04-external-integrations",
+  "task": "hermes-graph-comparison",
+  "status": "completed",
+  "last_updated": "2026-06-07T11:00:00.000Z",
+  "current_state": "Phase 4 implementation complete. Hermes-agent research report cross-validated (19/19 citations confirmed, 1 stale comment noted). Full gap analysis written comparing hermes-agent to current graph-runtime.",
+  "completed_work": [
+    "Phase 4 tasks T1–T6 implemented (iii-config, pg_try_advisory_lock, InMemoryShadowAdapter, CrystallizeWorker, pi-extension, connect CLI)",
+    "Hermes-agent deep research report: .harness/analysis/hermes-agent-deep-research-report.md",
+    "Hermes citation verification: all 19 file:line citations confirmed; DANGEROUS_PATTERNS comment says 47 but actual list has 54 (stale comment)",
+    "Hermes vs graph-runtime gap analysis: .harness/analysis/hermes-graph-comparison.md"
+  ],
+  "remaining_work": [],
+  "decisions_made": [
+    "Gap analysis identified 5 directly-integrable features (P0-P2): multi-provider LLM abstraction, MCP client consumer, agentskills.io pattern export, command approval safety, notification delivery routing",
+    "Gap analysis identified 5 functional extensions (P2-P4): messaging gateway, Docker isolation, user modeling, TUI, DM pairing",
+    "P0 items flagged: (1) LLM provider abstraction blocks adoption lock-in; (2) command approval is a security gap in current MCP tool dispatch",
+    "agentskills.io export from LessonSaveWorker is high-leverage and low-effort (~30 lines) — recommended for next phase",
+    "Voice (STT/TTS), video gen, s6-overlay, OpenClaw migration: not applicable to graph-runtime paradigm"
+  ],
+  "blockers": [],
+  "context": "The hermes-agent research was done as a reference study for what a mature production agent runtime looks like. The graph-runtime is at a much earlier stage (core append-only graph + workers + MCP gateway done). The comparison document gives a prioritized roadmap for closing the gap.",
+  "next_action": "Review .harness/analysis/hermes-graph-comparison.md and decide which P0/P1 items to include in Phase 5 planning."
+}

@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "phase": "03-pattern-discovery",
+  "task": 7,
+  "total_tasks": 7,
+  "status": "completed",
+  "last_updated": "2026-06-05T22:30:00.000Z",
+  "current_state": "Phase 3 integration fix COMPLETE. All 3 GATE4 failures resolved. 183 tests passing, 5 pre-existing tests/integration/ failures (not our code). Ready for UAT update + Phase 4 planning.",
+  "completed_work": [
+    "GATE4-4/4b: mcp.ts — fresh server+transport per request (stateless SDK requirement); add text/event-stream to Accept headers",
+    "GATE4-4: gate4-mcp.integration.test.ts — use plan_created version_hash as spawn_subtask predecessor (not ZERO_HASH)",
+    "GATE4-4b: mcp.test.ts — same ZERO_HASH predecessor fix",
+    "GATE4-3: sub-scope-result.worker.ts — use parent tail as predecessor for memory_updated (avoids OCC conflict with sub_scope_resolved)",
+    "All changes committed: 289c4ba fix(phase3): resolve 3 GATE4 integration test failures",
+    "migration 010 (sub_scope_resolved check constraint), vector dims, BM25 fallback, nesting.ts payload parse — from previous session"
+  ],
+  "remaining_work": [
+    "Update UAT (03-UAT.md): mark GATE4-3/4/5 as PASS",
+    "Tick wave checkboxes in GitHub issue #23",
+    "Run /gsd-plan-phase 4"
+  ],
+  "decisions_made": [
+    "Stateless MCP transport requires fresh server+transport per request — cannot share one instance across POST calls",
+    "spawn_subtask must use plan_created version_hash as predecessor, not ZERO_HASH (plan_created owns that slot)",
+    "SubScopeResultWorker reads parent tail as predecessor for memory_updated, not trigger_task version_hash (resolveSubScope already used that slot)",
+    "tests/integration/ failures (queue/hash-chain/idempotency/occ) are pre-existing harness bugs — not caused by Phase 3"
+  ],
+  "blockers": [],
+  "context": "Phase 3 is fully complete. All GATE4 gate tests pass. The only remaining failures are pre-existing bugs in tests/integration/ (non-UUID scope IDs, hash mismatch) — confirmed unrelated to our changes.",
+  "next_action": "Run /session-start, update 03-UAT.md to mark GATE4-3/4/5 as PASS, tick GitHub issue #23 wave checkboxes, then run /gsd-plan-phase 4."
+}

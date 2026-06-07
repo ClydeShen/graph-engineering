@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "phase": "side-branch",
+  "task": 2,
+  "total_tasks": 2,
+  "status": "in_progress",
+  "last_updated": "2026-06-05T12:00:00.000Z",
+  "current_state": "设计讨论完成，DESIGN.md 已输出。待决问题 4 项。Phase 3 规划阻塞于 ADR 编号和 skills 粒度决策。",
+  "completed_work": [
+    "验证 arch doc 与 ADR 01-37 的一致性",
+    "澄清 agentmemory 不接入 graph-os",
+    "Research A2A 协议规范和 MCP async 模式",
+    "锁定 Method B（技能路由，禁止显式 agent_id）",
+    "确认 pull 为主、SSE push 为可选",
+    "对齐核心哲学：账本即协调者，无中央守护进程",
+    "讨论循环依赖死锁场景 → 锁定设计约束 D-6",
+    "讨论执行方死亡场景 → Watchdog + 账本接续",
+    "讨论 Claude 并行子 Agent 场景 → 内部调度不由 graph-os 管理",
+    "输出完整设计文档 .harness/phases/side-branch/DESIGN.md（D-1 ~ D-7 + 新组件规范）"
+  ],
+  "decisions_made": [
+    "D-1: Method B 锁定 — task_spawned 只声明 required_skills，FrontierScheduler 集中裁决",
+    "D-2: AgentCard 通用化 — 内部 Worker 和外部 Agent 统一注册 agent_registry",
+    "D-3: 三协议并存 — MCP（Claude/Codex/Pi）、A2A（第三方）、iii WebSocket（内部）",
+    "D-4: Pull 为主，SSE Push 为可选延迟优化",
+    "D-5: 账本即协调者，无中央守护进程，进程崩溃不丢状态",
+    "D-6: 循环依赖是设计错误，FrontierScheduler 在 dispatch 时做 DAG 校验",
+    "D-7: Claude 内部子 Agent 调度不由 graph-os 管理，fan-in 通过 wait_all_tasks 工具聚合"
+  ],
+  "remaining_work": [
+    "运行 /gsd-plan-phase 3（范围：MCP 桥接层 + CrossScopePatternDiscovery）"
+  ],
+  "blockers": [],
+  "context": "设计文档见 .harness/phases/side-branch/DESIGN.md。4 个待决问题可以在 Phase 3 规划时同步解决，不一定需要提前全部锁定。",
+  "next_action": "run /gsd-plan-phase 3 then compact"
+}

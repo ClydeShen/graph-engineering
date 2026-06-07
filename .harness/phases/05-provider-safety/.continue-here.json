@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "phase": "05-provider-safety",
+  "task": null,
+  "status": "planned",
+  "last_updated": "2026-06-07T11:30:00.000Z",
+  "current_state": "Phase 5 and Phase 6 plans written. No implementation started. Next session should begin executing Phase 5 T1.",
+  "completed_work": [
+    "Hermes-agent deep research report: .harness/analysis/hermes-agent-deep-research-report.md (all 9 questions, file:line citations, cross-validated)",
+    "Hermes citation verification: 19/19 citations confirmed; DANGEROUS_PATTERNS comment says 47 but actual list has 54 (stale comment in source)",
+    "Hermes vs graph-runtime gap analysis: .harness/analysis/hermes-graph-comparison.md",
+    "Phase 5 plan written: .harness/phases/05-provider-safety/05-PLAN.md (T1–T5, 4 implementation tasks + checkpoint)",
+    "Phase 6 plan written: .harness/phases/06-extensions/06-PLAN.md (T1–T7, 6 implementation tasks + checkpoint)",
+    "ROADMAP.md updated with phases 04 (complete), 05, 06"
+  ],
+  "remaining_work": [
+    "Phase 5 T1: packages/shared/src/llm/anthropic.provider.ts + llm/index.ts + LLM_PROVIDER env var switch in workers/index.ts",
+    "Phase 5 T2: packages/shared/src/command-gate.ts (12 HARDLINE + 54 DANGEROUS patterns) + tests + hook comment in mcp/server.ts",
+    "Phase 5 T3: LessonSaveWorker skill export to skills/<fingerprint_id>/SKILL.md on confidence >= SKILL_EXPORT_THRESHOLD",
+    "Phase 5 T4: packages/shared/src/notify.ts + webhook POST in CrystallizeWorker + LessonSaveWorker",
+    "Phase 5 T5: manual verification checkpoint (8 checks)",
+    "Phase 6: all 7 tasks (McpClientWorker, execute_bash, gateway-bot, UserProfileWorker, pairing, TUI, checkpoint)"
+  ],
+  "decisions_made": [
+    "Phase 5 = P0+P1 from gap analysis: AnthropicProvider, CommandGate, agentskills.io export, webhook notify",
+    "Phase 6 = P2-P4: MCP client inbound, execute_bash (gated by EXECUTE_BASH_ENABLED=false default), Telegram+Discord gateway, UserProfileWorker (internal, no Honcho dep), cryptographic pairing, read-only TUI",
+    "AnthropicProvider uses raw fetch() matching openai-compatible.provider.ts pattern — no @anthropic-ai/sdk dep",
+    "CommandGate ports 54 DANGEROUS patterns (overrides stale '47' comment in hermes source); hermes-specific patterns adapted to graph-runtime context",
+    "SKILL_EXPORT_THRESHOLD default 0.7; one-time export on confidence-crossing, not every reinforcement",
+    "UserProfileWorker uses stable scope UUID '00000000-0000-4000-8000-000000000001' dedicated to user profiles",
+    "execute_bash tool registered only when EXECUTE_BASH_ENABLED=true (default false) to prevent unintended RCE",
+    "Agent pairing is in-process Map (not PostgreSQL-persisted); loses on restart by design (hermes analogy)"
+  ],
+  "blockers": [],
+  "context": "Phase 4 is complete. Phases 5 and 6 are derived from a hermes-agent reference study (full report at .harness/analysis/hermes-agent-deep-research-report.md). The LLMProvider interface and OpenAICompatibleProvider already exist in packages/shared/src/llm/ — Phase 5 T1 is additive only. All 7 MCP tools in packages/gateway/src/mcp/server.ts are graph-write tools (no bash execution) — CommandGate (T2) is pre-wired infrastructure for the execute_bash tool added in Phase 6 T2.",
+  "next_action": "Begin Phase 5 T1: create packages/shared/src/llm/anthropic.provider.ts implementing LLMProvider with Anthropic Messages API (raw fetch, anthropic-version header, max_tokens 4096), then create packages/shared/src/llm/index.ts re-export barrel, add export to packages/shared/src/index.ts, and wire LLM_PROVIDER env var switch in packages/workers/src/index.ts."
+}
