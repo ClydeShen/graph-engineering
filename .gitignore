@@ -1,1 +1,33 @@
 .harness/phases/*/.continue-here.json
+
+# Dependencies
+node_modules/
+
+# roam runtime artifacts (generated, not source)
+.roam/index.db
+.roam/index.db-shm
+.roam/index.db-wal
+.roam/mcp_receipts/
+.roam/responses/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment (commit .env.example instead)
+.env
+.env.*.local
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
