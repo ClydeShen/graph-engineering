@@ -27,7 +27,6 @@
 - [Console 收敛为 graph projection](project_console-unifies-to-graph-projection.md) — 多页面 dashboard 收敛为「graph projection + Connector」两个已锁定原语；LLM 设置例外已解决
 - [Memex 终极产品 = Hermes 级端到端系统](project_memex-final-product-is-hermes-like-e2e.md) — 愿景级（MemexCore 已存在，MemexShell 尚未建）；现阶段 dashboard/TUI/connector 是垫脚石
 - [Token budget 设计已结案](project_token-budget-design-concluded.md) — over-design，2026-06-07 关闭，无新证据不重开
-- [跨机续接需求](project_user-needs-cross-machine-continuity.md) — .continue-here.json 已 track（6741ad5）+ 本文件镜像机制；transcript/原始 memory 仍仅限本机
 - [设计漂移时回锚原始设计](feedback_reanchor-on-original-design-when-drifted.md) — 多轮讨论感觉跑偏时，回到 ADR/vision 源头比较「姿态」而非细节
 - [删除悬空设计引用 (YAGNI)](feedback_remove-dangling-design-references-yagni.md) — 引用不存在的 ADR/决策号 → 直接删除，不要回填定义
 - [区分值变更与类型变更成本](feedback_value-vs-type-change-cost.md) — 评估「可配置化」成本前先读代码，区分冻结的值（廉价）与选定的类型（昂贵）
