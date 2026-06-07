@@ -1,6 +1,6 @@
 ---
 name: graph-enginerring-design-verification
-description: Graph-Native Runtime ADR verification status, key decisions, and harness config (repo: ClydeShen/graph-engineering)
+description: "Graph-Native Runtime ADR verification status, key decisions, and harness config (repo: ClydeShen/graph-engineering)"
 metadata: 
   node_type: memory
   type: project

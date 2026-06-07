@@ -4,10 +4,6 @@
 - [设计验证](project_graph-enginerring-design-verification.md) — 23 ADRs 锁定，ADR 02 jsonb::text REFUTED，tokio-postgres poll_message，P0-A/B/C 全解
 - [范式定位](project_graph-enginerring-paradigm-shift.md) — 核心身份：workflow discovery，非 graph runtime；4 范式规则锁定；no workflow layer
 
-## Phase 1 grill 经验
-- [Plan B queue adapter grill](lesson/2026-05-28-plan-b-queue-adapter-fixes.md) — PgQueueAdapter 结构性修复 7 项
-- [Plan C graph topology grill](lesson/2026-05-28-plan-c-graph-topology-fixes.md) — graph topology forgetting 结构性修复 8 项
-
 ## Phase 1 实现偏差教训
 - [语义列值完整性](lesson/2026-06-03-semantic-column-integrity.md) — 存储层物理列值必须忠实承载语义，禁止用 payload 字段替代一等公民列值（"因果降维泄露"）
 - [状态维度分离](lesson/2026-06-03-state-dimension-separation.md) — 状态值设计前先问"哪几个维度"，维度不同则状态值必须分开，单值多维是状态机崩溃前兆
