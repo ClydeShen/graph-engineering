@@ -20,7 +20,7 @@ import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/fr
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ConflictResolverWorker } from './concrete/conflict-resolver.worker.js';
 import { EpisodicMemoryWorker, EPISODIC_TRIGGER_CONFIG } from './memory/episodic.worker.js';
-import { OpenAICompatibleProvider } from '@graph/shared';
+import { createLLMProvider, OpenAICompatibleProvider, type LLMApi } from '@graph/shared';
 import { SemanticMemoryWorker, SEMANTIC_TRIGGER_CONFIG } from './memory/semantic.worker.js';
 import {
   MemorySynthesizerWorker,
@@ -88,9 +88,19 @@ void (async () => {
   }
 })();
 
-const llmProvider = new OpenAICompatibleProvider({
-  baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
+const llmProvider = createLLMProvider({
+  api: (process.env['LLM_API'] ?? 'openai-completions') as LLMApi,
   model: process.env['LLM_MODEL'] ?? 'llama3',
+  baseUrl: process.env['LLM_BASE_URL'],
+  apiKey: process.env['LLM_API_KEY'] ?? '',
+  maxTokens: process.env['LLM_MAX_TOKENS'] ? Number(process.env['LLM_MAX_TOKENS']) : undefined,
+});
+
+// Anthropic has no embeddings endpoint — embedding always uses openai-completions.
+const embeddingProvider = new OpenAICompatibleProvider({
+  api: 'openai-completions',
+  model: process.env['EMBEDDING_MODEL'] ?? process.env['LLM_MODEL'] ?? 'llama3',
+  baseUrl: process.env['LLM_BASE_URL'],
   apiKey: process.env['LLM_API_KEY'] ?? '',
 });
 
@@ -201,7 +211,7 @@ worker.registerTrigger(TTL_CRON_TRIGGER);
 // graph::memory::procedural — durable:subscriber on graph::memory::synthesizer::output
 // Stores WL-embedded workflow templates into procedural_memory.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const proceduralWorker = new ProceduralMemoryWorker(pool, llmProvider);
+const proceduralWorker = new ProceduralMemoryWorker(pool, embeddingProvider);
 worker.registerFunction('graph::memory::procedural', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;

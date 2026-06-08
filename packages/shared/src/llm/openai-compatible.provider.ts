@@ -9,35 +9,28 @@
  */
 
 import type { ChatMessage, EmbedResult, EmbeddingProvider, LLMProvider } from './provider.interface.js';
-
-export interface ProviderConfig {
-  /** Base URL, e.g. http://localhost:11434 (ollama) or https://api.openai.com */
-  baseUrl: string;
-  /** Model name, e.g. "llama3" or "gpt-4o" */
-  model: string;
-  /** API key — sourced from iii-config.yaml env interpolation, never a literal */
-  apiKey: string;
-}
+import type { LLMProviderConfig } from './types.js';
 
 export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider {
-  private readonly config: ProviderConfig;
+  private readonly config: LLMProviderConfig;
 
-  constructor(config: ProviderConfig) {
+  constructor(config: LLMProviderConfig) {
     this.config = config;
   }
 
   async chat(messages: ChatMessage[], opts?: { temperature?: number }): Promise<string> {
     // LLM CALL — justified by ADR 22 (Workers call provider interface, not raw HTTP)
-    const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+    const res = await fetch(`${this.config.baseUrl ?? 'http://localhost:11434'}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${this.config.apiKey ?? ''}`,
       },
       body: JSON.stringify({
         model: this.config.model,
         messages,
         temperature: opts?.temperature ?? 0.7,
+        max_tokens: this.config.maxTokens ?? 4096,
       }),
     });
 
@@ -51,11 +44,11 @@ export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider 
 
   async embed(text: string): Promise<EmbedResult> {
     // LLM CALL — justified by ADR 22 (embedding calls excluded from Worker token budget)
-    const res = await fetch(`${this.config.baseUrl}/v1/embeddings`, {
+    const res = await fetch(`${this.config.baseUrl ?? 'http://localhost:11434'}/v1/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${this.config.apiKey ?? ''}`,
       },
       body: JSON.stringify({
         model: this.config.model,

@@ -17,7 +17,7 @@ const MODEL = 'llama3';
 const API_KEY = 'test-key-injected';
 
 function makeProvider() {
-  return new OpenAICompatibleProvider({ baseUrl: BASE_URL, model: MODEL, apiKey: API_KEY });
+  return new OpenAICompatibleProvider({ api: 'openai-completions', baseUrl: BASE_URL, model: MODEL, apiKey: API_KEY });
 }
 
 describe('OpenAICompatibleProvider', () => {

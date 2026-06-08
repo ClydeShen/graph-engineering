@@ -32,6 +32,7 @@ import { logger } from '@shared/logger';
 const DEFAULT_W_MAX = 4096;
 
 const gatewayLlmProvider = new OpenAICompatibleProvider({
+  api: 'openai-completions',
   baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
   model: process.env['LLM_MODEL'] ?? 'llama3',
   apiKey: process.env['LLM_API_KEY'] ?? '',

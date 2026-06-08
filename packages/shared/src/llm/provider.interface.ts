@@ -9,10 +9,8 @@
  * @see ADR 22 — LLM Provider Abstraction
  */
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+import type { ChatMessage } from './types.js';
+export type { ChatMessage };
 
 export interface EmbedResult {
   vector: number[];

@@ -114,6 +114,32 @@ can be added in Phase 4 once FrontierScheduler routing precision needs are clear
 All inserts use `ON CONFLICT (agent_id) DO NOTHING` so re-boots produce no duplicates (T-03-06-02).
 Wrapped in try/catch: boot failure of agent_registry does not crash the Worker process.
 
+---
+
+## Phase 04-plugs — LLM Provider SOLID Refactor (2026-06-09)
+
+### Decisions not covered by spec
+
+**1. `ProceduralMemoryWorker` uses `EmbeddingProvider`, not `LLMProvider`** — discovered during tsc. The 05-PLAN.md "embedding split" note was wrong about `SemanticMemoryWorker` (which uses only `LLMProvider`), but `ProceduralMemoryWorker` does take `EmbeddingProvider`. Fix: added a separate `embeddingProvider` instance in `workers/index.ts` using `OpenAICompatibleProvider` directly (always `openai-completions` — Anthropic has no embeddings endpoint). `llmProvider` from `createLLMProvider()` routes to `AnthropicProvider` when `LLM_API=anthropic-messages`.
+
+**2. `EMBEDDING_MODEL` env var** — `embeddingProvider` reads `process.env['EMBEDDING_MODEL']` (falls back to `LLM_MODEL`). Allows embedding model to differ from chat model when using a dedicated embedding endpoint.
+
+**3. `gateway/index.ts` uses `OpenAICompatibleProvider` directly** — gateway has its own `gatewayLlmProvider`. Added `api: 'openai-completions'` to satisfy `LLMProviderConfig`. If gateway needs Anthropic in future, wire `createLLMProvider()` there.
+
+**4. `ProviderConfig` removed from export surface** — replaced by `LLMProviderConfig`. Only one call site needed updating (`gateway/index.ts`). tsc confirmed no other packages imported `ProviderConfig` by name.
+
+### Local LLM env var reference
+
+| Provider | `LLM_API` | `LLM_BASE_URL` | `LLM_MODEL` |
+|---|---|---|---|
+| Ollama (default) | `openai-completions` | `http://localhost:11434` | `llama3` |
+| vLLM | `openai-completions` | `http://localhost:8000` | `<model>` |
+| LM Studio | `openai-completions` | `http://localhost:1234` | `<model>` |
+| DeepSeek | `openai-completions` | `https://api.deepseek.com` | `deepseek-chat` |
+| Anthropic (Phase 5+) | `anthropic-messages` | _(default: api.anthropic.com)_ | `claude-haiku-4-5-20251001` |
+
+---
+
 ### MCP transport import path (2026-06-05)
 
 The RESEARCH.md mentions `@modelcontextprotocol/sdk/server/web.js` as an import path, but this module
