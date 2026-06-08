@@ -30,6 +30,8 @@ import {
 } from './memory/synthesizer.worker.js';
 import { ProceduralMemoryWorker, PROCEDURAL_TRIGGER_CONFIG } from './memory/procedural.worker.js';
 import { SubScopeResultWorker, SUB_SCOPE_RESULT_TRIGGER_CONFIG } from './nested/sub-scope-result.worker.js';
+import { CrystallizeWorker, CRYSTALLIZE_TRIGGER_CONFIG } from './memory/crystallize.worker.js';
+import { LessonSaveWorker, LESSON_SAVE_TRIGGER_CONFIG } from './memory/lesson-save.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -72,7 +74,13 @@ void (async () => {
          ARRAY['scope-resolution', 'result-synthesis'], 'iii', NULL, '{}', 'active'),
         ('a1000000-0000-4000-8000-000000000007', 'PatternDiscoveryWorker',
          'WL graph kernel cross-domain pattern clustering (ADR 25, ADR 37)',
-         ARRAY['pattern-discovery', 'cross-domain-clustering'], 'iii', NULL, '{}', 'active')
+         ARRAY['pattern-discovery', 'cross-domain-clustering'], 'iii', NULL, '{}', 'active'),
+        ('a1000000-0000-4000-8000-000000000008', 'CrystallizeWorker',
+         'Real-time LLM digest on scope close: episodic traces → Crystal entity (Phase 4)',
+         ARRAY['memory-storage', 'crystallization'], 'iii', NULL, '{}', 'active'),
+        ('a1000000-0000-4000-8000-000000000009', 'LessonSaveWorker',
+         'Content-addressed lesson dedup with Ebbinghaus confidence reinforcement (Phase 4)',
+         ARRAY['memory-storage', 'lesson-dedup'], 'iii', NULL, '{}', 'active')
       ON CONFLICT (agent_id) DO NOTHING
     `);
   } catch {
@@ -93,7 +101,7 @@ const llmProvider = new OpenAICompatibleProvider({
 const worker = registerWorker(III_URL, { workerName: 'graph-workers' });
 
 // graph::conflict-resolver — Phase 2: LLM-assisted semantic merge (ADR 22)
-const conflictResolverWorker = new ConflictResolverWorker(llmProvider);
+const conflictResolverWorker = new ConflictResolverWorker(llmProvider, pool);
 worker.registerFunction('graph::conflict-resolver', async (payload: unknown) => {
   const p = payload as { entity_id: string; payload_a: string; payload_b: string };
   return conflictResolverWorker.onConflict(p.entity_id, p.payload_a, p.payload_b);
@@ -232,6 +240,24 @@ worker.registerFunction('graph::scope::sub-scope-result', async (payload: unknow
   return { written: true };
 });
 worker.registerTrigger(SUB_SCOPE_RESULT_TRIGGER_CONFIG);
+
+// graph::memory::crystallize — durable:subscriber on graph::scope::closed
+// Real-time LLM digest: episodic records → Crystal entity → triggers lesson-save (Phase 4 T4)
+const crystallizeWorker = new CrystallizeWorker(pool, llmProvider, worker);
+worker.registerFunction('graph::memory::crystallize', async (payload: unknown) => {
+  const p = payload as { scope_id: string; entity_id: string; predecessor_hash: string };
+  return crystallizeWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);
+});
+worker.registerTrigger(CRYSTALLIZE_TRIGGER_CONFIG);
+
+// graph::memory::lesson-save — durable:subscriber triggered by CrystallizeWorker
+// Content-addressed dedup + Ebbinghaus confidence reinforcement (Phase 4 T4)
+const lessonSaveWorker = new LessonSaveWorker(pool);
+worker.registerFunction('graph::memory::lesson-save', async (payload: unknown) => {
+  const p = payload as { content: string; confidence?: number };
+  return lessonSaveWorker.onLessonSave(p);
+});
+worker.registerTrigger(LESSON_SAVE_TRIGGER_CONFIG);
 
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();

@@ -1,22 +1,23 @@
+import type { Pool } from 'pg';
 import { writeGuard } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 
-const ActiveResolverRegistry = new Map<string, boolean>();
-
 export class ConflictResolverWorker {
-  private readonly llm: LLMProvider;
-
-  constructor(llm: LLMProvider) {
-    this.llm = llm;
-  }
+  constructor(
+    private readonly llm: LLMProvider,
+    private readonly pool: Pool,
+  ) {}
 
   async onConflict(
     entityId: string,
     payloadA: string,
     payloadB: string,
   ): Promise<{ merged: string } | { skipped: true }> {
-    if (ActiveResolverRegistry.get(entityId)) return { skipped: true };
-    ActiveResolverRegistry.set(entityId, true);
+    const { rows } = await this.pool.query<{ pg_try_advisory_lock: boolean }>(
+      'SELECT pg_try_advisory_lock(hashtext($1)::bigint)',
+      [entityId],
+    );
+    if (!rows[0].pg_try_advisory_lock) return { skipped: true };
     try {
       // LLM CALL — ADR 22 (semantic conflict resolution; deterministic merge is insufficient)
       const merged = await this.llm.chat([
@@ -25,7 +26,7 @@ export class ConflictResolverWorker {
       ]);
       return { merged };
     } finally {
-      ActiveResolverRegistry.delete(entityId);
+      await this.pool.query('SELECT pg_advisory_unlock(hashtext($1)::bigint)', [entityId]);
     }
   }
 }
