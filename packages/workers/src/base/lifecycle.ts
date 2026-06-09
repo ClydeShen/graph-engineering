@@ -116,6 +116,9 @@ export class PhaseGuardedHandle implements GraphHandle {
   }
 }
 
+/** Typed outcome of a Worker lifecycle run. */
+export type LifecycleResult = 'done' | 'suspended' | 'exhausted';
+
 /**
  * Run the full 4-phase Worker lifecycle.
  *
@@ -123,18 +126,16 @@ export class PhaseGuardedHandle implements GraphHandle {
  * no-write-during-Processing invariant at runtime.
  *
  * Knapsack failure bifurcation is applied when onRunning throws:
- *  - size-cause → escalate to OOM chain immediately
- *  - load-cause → re-queue (tracked by caller); this function throws after MAX_LOAD_REQUEUE
+ *  - size-cause → call onFailed, return 'exhausted' immediately
+ *  - load-cause → retry up to MAX_LOAD_REQUEUE times; return 'exhausted' when budget is gone
  *
- * @param worker       The Worker instance
- * @param ctx          Execution context (contains the real GraphHandle)
- * @param loadAttempt  Current load-cause re-queue attempt (0-indexed, default 0)
+ * @param worker  The Worker instance
+ * @param ctx     Execution context (contains the real GraphHandle)
  */
 export async function runLifecycle(
   worker: Worker,
   ctx: WorkerExecutionContext,
-  loadAttempt = 0,
-): Promise<void> {
+): Promise<LifecycleResult> {
   const guard = new PhaseGuardedHandle(ctx.graph);
   const guardedCtx: WorkerExecutionContext = { ...ctx, graph: guard };
 
@@ -142,33 +143,26 @@ export async function runLifecycle(
   guard.setPhase('Initializing');
   await worker.onScheduled(guardedCtx);
 
-  // Phase 2: Processing — write() is FORBIDDEN
+  // Phase 2: Processing — write() is FORBIDDEN; re-queue loop is internalized
   guard.setPhase('Processing');
-  try {
-    await worker.onRunning(guardedCtx);
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    const cause = classifyKnapsackFailure(error);
+  let loadAttempt = 0;
+  while (true) {
+    try {
+      await worker.onRunning(guardedCtx);
+      break;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const cause = classifyKnapsackFailure(error);
 
-    if (cause === 'size') {
-      // Size-caused failure: escalate to OOM chain immediately (no re-queue)
-      guard.setPhase('Writing');
-      await worker.onFailed(guardedCtx, error);
-      guard.setPhase('Terminated');
-      throw Object.assign(error, { knapsackCause: 'size', escalated: true });
+      if (cause === 'size' || loadAttempt >= MAX_LOAD_REQUEUE) {
+        guard.setPhase('Writing');
+        await worker.onFailed(guardedCtx, error);
+        guard.setPhase('Terminated');
+        return 'exhausted';
+      }
+
+      loadAttempt++;
     }
-
-    // Load-caused failure: re-queue up to MAX_LOAD_REQUEUE times
-    if (loadAttempt >= MAX_LOAD_REQUEUE) {
-      // Exhausted re-queue budget — escalate to OOM chain
-      guard.setPhase('Writing');
-      await worker.onFailed(guardedCtx, error);
-      guard.setPhase('Terminated');
-      throw Object.assign(error, { knapsackCause: 'load', escalated: true, loadAttempt });
-    }
-
-    // Still within re-queue budget — throw for caller to re-queue
-    throw Object.assign(error, { knapsackCause: 'load', escalated: false, loadAttempt });
   }
 
   // Phase 3: Writing — write() IS permitted
@@ -182,4 +176,5 @@ export async function runLifecycle(
 
   // Phase 4: Terminated
   guard.setPhase('Terminated');
+  return 'done';
 }

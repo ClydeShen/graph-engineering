@@ -4,8 +4,8 @@
  * Verifies:
  * 1. write() during Processing phase is rejected (LifecycleViolationError)
  * 2. write() during Writing phase succeeds
- * 3. Load-cause failure re-queues up to MAX_LOAD_REQUEUE (3), then escalates
- * 4. Size-cause failure escalates immediately without re-queue
+ * 3. Load-cause failure retries up to MAX_LOAD_REQUEUE+1 times then returns 'exhausted'
+ * 4. Size-cause failure returns 'exhausted' immediately without retry
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -88,7 +88,8 @@ describe('Worker lifecycle — phase enforcement', () => {
     const ctx = makeCtx(graph);
     const worker = new WriteDuringProcessingWorker();
 
-    await expect(runLifecycle(worker, ctx)).rejects.toThrow();
+    const result = await runLifecycle(worker, ctx);
+    expect(result).toBe('exhausted');
     expect(caughtError).toBeInstanceOf(LifecycleViolationError);
     expect((caughtError as unknown as LifecycleViolationError).message).toContain('Processing');
     // The real graph.write() must NOT have been called
@@ -117,18 +118,20 @@ describe('Worker lifecycle — phase enforcement', () => {
     const ctx = makeCtx(graph);
     const worker = new WriteInCompletedWorker();
 
-    await runLifecycle(worker, ctx);
+    const result = await runLifecycle(worker, ctx);
+    expect(result).toBe('done');
     expect(graph.write).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('Knapsack failure bifurcation', () => {
-  it('size-cause failure escalates immediately (no re-queue)', async () => {
+  it('size-cause failure returns exhausted immediately without retry', async () => {
     const sizeError = new Error('context_length_exceeded: too many tokens');
 
     class SizeFailWorker extends Worker {
+      callCount = 0;
       async onScheduled(_ctx: WorkerExecutionContext) {}
-      async onRunning(_ctx: WorkerExecutionContext) { throw sizeError; }
+      async onRunning(_ctx: WorkerExecutionContext) { this.callCount++; throw sizeError; }
       async onCompleted(_ctx: WorkerExecutionContext) {}
       async onFailed(_ctx: WorkerExecutionContext, _err: Error) {}
       async onConflicted(_ctx: WorkerExecutionContext) {}
@@ -138,17 +141,18 @@ describe('Knapsack failure bifurcation', () => {
     const ctx = makeCtx(graph);
     const worker = new SizeFailWorker();
 
-    const err = await runLifecycle(worker, ctx, 0).catch(e => e) as Error & { knapsackCause: string; escalated: boolean };
-    expect(err.knapsackCause).toBe('size');
-    expect(err.escalated).toBe(true);
+    const result = await runLifecycle(worker, ctx);
+    expect(result).toBe('exhausted');
+    expect(worker.callCount).toBe(1); // no retry on size-cause
   });
 
-  it('load-cause failure re-queues — does not escalate before MAX_LOAD_REQUEUE', async () => {
+  it('load-cause failure retries MAX_LOAD_REQUEUE+1 times then returns exhausted', async () => {
     const loadError = new Error('connection timeout');
 
     class LoadFailWorker extends Worker {
+      callCount = 0;
       async onScheduled(_ctx: WorkerExecutionContext) {}
-      async onRunning(_ctx: WorkerExecutionContext) { throw loadError; }
+      async onRunning(_ctx: WorkerExecutionContext) { this.callCount++; throw loadError; }
       async onCompleted(_ctx: WorkerExecutionContext) {}
       async onFailed(_ctx: WorkerExecutionContext, _err: Error) {}
       async onConflicted(_ctx: WorkerExecutionContext) {}
@@ -158,20 +162,21 @@ describe('Knapsack failure bifurcation', () => {
     const ctx = makeCtx(graph);
     const worker = new LoadFailWorker();
 
-    // Attempts 0, 1, 2 should NOT escalate
-    for (let attempt = 0; attempt < MAX_LOAD_REQUEUE; attempt++) {
-      const err = await runLifecycle(worker, ctx, attempt).catch(e => e) as Error & { knapsackCause: string; escalated: boolean };
-      expect(err.knapsackCause).toBe('load');
-      expect(err.escalated).toBe(false);
-    }
+    const result = await runLifecycle(worker, ctx);
+    expect(result).toBe('exhausted');
+    expect(worker.callCount).toBe(MAX_LOAD_REQUEUE + 1);
   });
 
-  it('load-cause failure escalates after MAX_LOAD_REQUEUE attempts', async () => {
+  it('success after transient load failure returns done', async () => {
     const loadError = new Error('connection timeout');
+    let callCount = 0;
 
-    class LoadFailWorker extends Worker {
+    class FlakyWorker extends Worker {
       async onScheduled(_ctx: WorkerExecutionContext) {}
-      async onRunning(_ctx: WorkerExecutionContext) { throw loadError; }
+      async onRunning(_ctx: WorkerExecutionContext) {
+        callCount++;
+        if (callCount < 2) throw loadError; // fail once, then succeed
+      }
       async onCompleted(_ctx: WorkerExecutionContext) {}
       async onFailed(_ctx: WorkerExecutionContext, _err: Error) {}
       async onConflicted(_ctx: WorkerExecutionContext) {}
@@ -179,12 +184,11 @@ describe('Knapsack failure bifurcation', () => {
 
     const graph = makeMockGraphHandle();
     const ctx = makeCtx(graph);
-    const worker = new LoadFailWorker();
+    const worker = new FlakyWorker();
 
-    // Attempt MAX_LOAD_REQUEUE (=3) should escalate
-    const err = await runLifecycle(worker, ctx, MAX_LOAD_REQUEUE).catch(e => e) as Error & { knapsackCause: string; escalated: boolean };
-    expect(err.knapsackCause).toBe('load');
-    expect(err.escalated).toBe(true);
+    const result = await runLifecycle(worker, ctx);
+    expect(result).toBe('done');
+    expect(callCount).toBe(2); // failed once, succeeded on second attempt
   });
 
   it('classifyKnapsackFailure identifies size vs load', () => {
