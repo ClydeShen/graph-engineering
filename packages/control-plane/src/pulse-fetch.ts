@@ -82,17 +82,23 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
   for (const row of missed.rows) {
     log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
-    // sub_scope_resolved routes to its own topic — NOT the frontier topic (ADR 23)
-    if (row.event_type === 'sub_scope_resolved') {
-      await iiiWorker.trigger({
-        function_id: SUB_SCOPE_TOPIC,
-        payload: { scope_id: row.scope_id, event_id: row.id },
-      });
-    } else {
-      await iiiWorker.trigger({
-        function_id: 'graph::scheduler::frontier',
-        payload: { scope_id: row.scope_id },
-      });
+    try {
+      // sub_scope_resolved routes to its own topic — NOT the frontier topic (ADR 23)
+      if (row.event_type === 'sub_scope_resolved') {
+        await iiiWorker.trigger({
+          function_id: SUB_SCOPE_TOPIC,
+          payload: { scope_id: row.scope_id, event_id: row.id },
+        });
+      } else {
+        await iiiWorker.trigger({
+          function_id: 'graph::scheduler::frontier',
+          payload: { scope_id: row.scope_id },
+        });
+      }
+    } catch (err) {
+      // function_not_found during replay means the subscriber worker hasn't registered yet.
+      // HWM has already advanced — skip this event and continue. Non-fatal.
+      log.warn({ event_id: row.id, event_type: row.event_type, err }, LOG_EVENTS.PULSE_REPLAY + ' trigger skipped — function not found');
     }
   }
 
@@ -141,17 +147,21 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
 
     // Route by event_type: sub_scope_resolved gets its own dedicated topic (ADR 23).
     // All other event types route to Frontier Scheduler as before.
-    if (event.event_type === 'sub_scope_resolved') {
-      await iiiWorker.trigger({
-        function_id: SUB_SCOPE_TOPIC,
-        payload: { scope_id: event.scope_id, event_id: event.id },
-      });
-    } else {
-      // Route to Frontier Scheduler — passes scope_id for priority queue update
-      await iiiWorker.trigger({
-        function_id: 'graph::scheduler::frontier',
-        payload: { scope_id: event.scope_id },
-      });
+    try {
+      if (event.event_type === 'sub_scope_resolved') {
+        await iiiWorker.trigger({
+          function_id: SUB_SCOPE_TOPIC,
+          payload: { scope_id: event.scope_id, event_id: event.id },
+        });
+      } else {
+        // Route to Frontier Scheduler — passes scope_id for priority queue update
+        await iiiWorker.trigger({
+          function_id: 'graph::scheduler::frontier',
+          payload: { scope_id: event.scope_id },
+        });
+      }
+    } catch (err) {
+      log.warn({ event_id: event.id, event_type: event.event_type, err }, LOG_EVENTS.PULSE_ERROR + ' trigger failed — subscriber may not be registered');
     }
   });
 
