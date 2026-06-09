@@ -44,7 +44,7 @@ export class GatewayBot {
 }
 
 // Entrypoint when run directly
-const { Pool } = await import('pg');
-const pool = new Pool({ connectionString: process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/graph' });
+const { Pool: PgPool } = await import('pg');
+const pool = new PgPool({ connectionString: process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/graph' });
 const bot = new GatewayBot(pool);
 await bot.start();
