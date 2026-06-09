@@ -93,7 +93,8 @@ export async function assembleContext(
   const contextBudget = Math.max(0, wMax - stableTokens - volatileTokens);
 
   // Layer 2: Knapsack causal lineage projection
-  let contextEvents = await knapsackSlice(graph, scopeId, rootHash, contextBudget);
+  // dropped is available for Phase 08 CCR marker injection; ignored here (ADR 13 supplement)
+  let contextEvents = (await knapsackSlice(graph, scopeId, rootHash, contextBudget)).kept;
 
   // Apply overflow discarder if knapsack result exceeds remaining budget
   const contextTokens = contextEvents.reduce(

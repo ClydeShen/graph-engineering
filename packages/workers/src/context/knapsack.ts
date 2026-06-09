@@ -25,6 +25,21 @@ export interface KnapsackGraph {
   getSiblings(scopeId: string, excludeHash: string): EventLogNode[];
 }
 
+/** Events kept within budget and events dropped beyond it. */
+export interface KnapsackSliceResult {
+  kept: EventLogNode[];
+  dropped: EventLogNode[];
+}
+
+/**
+ * Algorithm configuration for knapsackSlice.
+ * Extensible: add new strategy values without changing call sites.
+ * Phase 08 will add 'smart-crusher' (headroom SmartCrusher pattern).
+ */
+export interface KnapsackConfig {
+  strategy?: 'newest-first';
+}
+
 /**
  * Knapsack Slicing algorithm.
  *
@@ -33,18 +48,23 @@ export interface KnapsackGraph {
  * Horizontal axis: adds pending/conflict_detected sibling events in the same scope.
  * Budget: packs events newest-first until cumulative countTokens would exceed wMax.
  *
+ * Returns both kept and dropped events. Dropped events are available for
+ * Phase 08 CCR marker injection (headroom pattern — <<ccr:HASH>> sentinel).
+ *
  * @param graph  Read-only graph accessor (no write permission required).
  * @param scopeId  The Scope being projected.
  * @param rootHash  The version_hash of the most-recent event (N_current).
  * @param wMax  Maximum token budget for the context slice.
- * @returns Events in reverse-chronological order (newest first), within budget.
+ * @param config  Optional algorithm config. Default strategy: 'newest-first'.
+ * @returns kept events (within budget) and dropped events (beyond budget).
  */
 export async function knapsackSlice(
   graph: KnapsackGraph,
   scopeId: string,
   rootHash: string,
-  wMax: number
-): Promise<EventLogNode[]> {
+  wMax: number,
+  _config?: KnapsackConfig
+): Promise<KnapsackSliceResult> {
   // --- Vertical axis: walk predecessor_hash chain to N_root ---
   const causalChain: EventLogNode[] = [];
   let currentHash = rootHash;
@@ -68,17 +88,25 @@ export async function knapsackSlice(
   const candidates = [...causalChain, ...siblings_sorted];
 
   // --- Budget: greedy newest-first pack up to wMax ---
-  const result: EventLogNode[] = [];
+  const kept: EventLogNode[] = [];
+  const dropped: EventLogNode[] = [];
   let budget = wMax;
+  let budgetExhausted = false;
 
   for (const event of candidates) {
+    if (budgetExhausted) {
+      dropped.push(event);
+      continue;
+    }
     const tokens = countTokens(event.payload);
     if (tokens > budget) {
-      break;
+      budgetExhausted = true;
+      dropped.push(event);
+    } else {
+      kept.push(event);
+      budget -= tokens;
     }
-    result.push(event);
-    budget -= tokens;
   }
 
-  return result;
+  return { kept, dropped };
 }
