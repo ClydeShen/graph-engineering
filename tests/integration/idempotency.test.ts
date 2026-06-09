@@ -20,6 +20,7 @@ const TEST_SCOPE_NODASH = TEST_SCOPE_ID.replace(/-/g, '');
 
 describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)', () => {
   const pool = getTestPool();
+  let prevHash = ZERO_HASH;
 
   beforeAll(async () => {
     await runMigrations(pool);
@@ -67,22 +68,24 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
   it('second insert with same version_hash affects 0 rows', async () => {
     const entityId = randomUUID();
     const payload = { idempotency: 'test', key: 'value' };
+    const predecessorForBoth = prevHash;
 
     // First write — inserts successfully
     const first = await occWriteIdempotent(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: predecessorForBoth,
       payload,
     });
     expect(first).not.toBeNull();
     expect(first!.occ_result).toBe('won');
+    prevHash = first!.version_hash;
 
-    // Second write — same inputs produce the same version_hash; ON CONFLICT DO NOTHING
+    // Second write — same (entity, predecessor, payload) → same version_hash → ON CONFLICT DO NOTHING
     const second = await occWriteIdempotent(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: predecessorForBoth,
       payload,
     });
 
@@ -93,17 +96,21 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
   it('total row count stays 1 after duplicate attempt', async () => {
     const entityId = randomUUID();
     const payload = { idempotency: 'count-check', value: 99 };
+    const predecessorForThisWrite = prevHash;
+
+    const firstWrite = await occWriteIdempotent(pool, {
+      scopeId: TEST_SCOPE_ID,
+      entityId,
+      predecessorHash: predecessorForThisWrite,
+      payload,
+    });
+    expect(firstWrite).not.toBeNull();
+    prevHash = firstWrite!.version_hash;
 
     await occWriteIdempotent(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
-      payload,
-    });
-    await occWriteIdempotent(pool, {
-      scopeId: TEST_SCOPE_ID,
-      entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: predecessorForThisWrite,
       payload,
     });
 
@@ -122,11 +129,12 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
     // while occWriteIdempotent silently drops duplicates.
     const entityId = randomUUID();
     const payload = { role: 'control' };
+    const contendedHash = prevHash;
 
     const first = await occWrite(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: contendedHash,
       eventType: 'memory_updated',
       payload,
     });
@@ -137,10 +145,11 @@ describe.skipIf(skipIfNoDb())('idempotency — ON CONFLICT DO NOTHING (REQ-18)',
     const second = await occWrite(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: contendedHash,
       eventType: 'memory_updated',
       payload: { role: 'challenger' },
     });
     expect(second.occ_result).toBe('demoted');
+    prevHash = first.version_hash;
   });
 });

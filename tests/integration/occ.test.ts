@@ -21,6 +21,7 @@ const TEST_SCOPE_NODASH = TEST_SCOPE_ID.replace(/-/g, '');
 
 describe.skipIf(skipIfNoDb())('OCC causal inversion integration (REQ-02)', () => {
   const pool = getTestPool();
+  let prevHash = ZERO_HASH;
 
   beforeAll(async () => {
     await runMigrations(pool);
@@ -70,19 +71,20 @@ describe.skipIf(skipIfNoDb())('OCC causal inversion integration (REQ-02)', () =>
     const entityId = randomUUID();
     const payloadA = { writer: 'A', value: 1 };
     const payloadB = { writer: 'B', value: 2 };
+    const contendedHash = prevHash;
 
     const [resultA, resultB] = await Promise.all([
       occWrite(pool, {
         scopeId: TEST_SCOPE_ID,
         entityId,
-        predecessorHash: ZERO_HASH,
+        predecessorHash: contendedHash,
         eventType: 'memory_updated',
         payload: payloadA,
       }),
       occWrite(pool, {
         scopeId: TEST_SCOPE_ID,
         entityId,
-        predecessorHash: ZERO_HASH,
+        predecessorHash: contendedHash,
         eventType: 'memory_updated',
         payload: payloadB,
       }),
@@ -94,35 +96,37 @@ describe.skipIf(skipIfNoDb())('OCC causal inversion integration (REQ-02)', () =>
 
     expect(wonResults).toHaveLength(1);
     expect(demotedResults).toHaveLength(1);
+    // The loser's version_hash (conflict_detected row) is the available leaf — the winner's hash
+    // is immediately consumed by the conflict_detected row as its predecessor_hash.
+    prevHash = demotedResults[0].version_hash;
   });
 
   it('demoted predecessor_hash equals winner version_hash (causal inversion)', async () => {
+    // Sequential writes so the second write's winner CTE always sees the first's committed row.
+    // Causal inversion semantics are the same; it() 1 already covers concurrent detection.
     const entityId = randomUUID();
-    const payloadA = { writer: 'causal-A', ts: Date.now() };
-    const payloadB = { writer: 'causal-B', ts: Date.now() };
+    const contendedHash = prevHash;
 
-    const [resultA, resultB] = await Promise.all([
-      occWrite(pool, {
-        scopeId: TEST_SCOPE_ID,
-        entityId,
-        predecessorHash: ZERO_HASH,
-        eventType: 'memory_updated',
-        payload: payloadA,
-      }),
-      occWrite(pool, {
-        scopeId: TEST_SCOPE_ID,
-        entityId,
-        predecessorHash: ZERO_HASH,
-        eventType: 'memory_updated',
-        payload: payloadB,
-      }),
-    ]);
+    const winner = await occWrite(pool, {
+      scopeId: TEST_SCOPE_ID,
+      entityId,
+      predecessorHash: contendedHash,
+      eventType: 'memory_updated',
+      payload: { writer: 'causal-A' },
+    });
+    expect(winner.occ_result).toBe('won');
 
-    const winner = [resultA, resultB].find((r) => r.occ_result === 'won')!;
-    const loser = [resultA, resultB].find((r) => r.occ_result === 'demoted')!;
+    const loser = await occWrite(pool, {
+      scopeId: TEST_SCOPE_ID,
+      entityId,
+      predecessorHash: contendedHash,
+      eventType: 'memory_updated',
+      payload: { writer: 'causal-B' },
+    });
+    expect(loser.occ_result).toBe('demoted');
+    prevHash = loser.version_hash;
 
-    // Causal inversion: the loser's row in the DB should have its predecessor_hash
-    // rewritten to point at the winner's version_hash
+    // Causal inversion: the loser's conflict_detected row in DB points at winner's version_hash
     const dbRow = await pool.query<{
       predecessor_hash: string;
       event_type: string;

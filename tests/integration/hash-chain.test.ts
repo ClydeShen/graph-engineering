@@ -23,6 +23,7 @@ const TEST_SCOPE_NODASH = TEST_SCOPE_ID.replace(/-/g, '');
 
 describe.skipIf(skipIfNoDb())('hash-chain integration (REQ-02)', () => {
   const pool = getTestPool();
+  let prevHash = ZERO_HASH;
 
   beforeAll(async () => {
     await runMigrations(pool);
@@ -74,24 +75,26 @@ describe.skipIf(skipIfNoDb())('hash-chain integration (REQ-02)', () => {
     const result = await occWrite(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: prevHash,
       eventType: 'memory_updated',
       payload: { action: 'test', value: 42 },
     });
 
     expect(result.version_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.occ_result).toBe('won');
+    prevHash = result.version_hash;
   });
 
   it('TS canonicalJson ↔ pgcrypto digest() produce identical hash', async () => {
     const entityId = randomUUID();
     const payload = { z_key: 'last', a_key: 'first', nested: { b: 2, a: 1 } };
+    const predecessorForThisWrite = prevHash;
 
     // 1. Write via occWrite (hash computed by pgcrypto)
     const result = await occWrite(pool, {
       scopeId: TEST_SCOPE_ID,
       entityId,
-      predecessorHash: ZERO_HASH,
+      predecessorHash: predecessorForThisWrite,
       eventType: 'memory_updated',
       payload,
     });
@@ -106,11 +109,12 @@ describe.skipIf(skipIfNoDb())('hash-chain integration (REQ-02)', () => {
         ),
         'hex'
       ) AS computed_hash`,
-      [TEST_SCOPE_ID, entityId, ZERO_HASH, canonicalText]
+      [TEST_SCOPE_ID, entityId, predecessorForThisWrite, canonicalText]
     );
 
     const computedHash = dbResult.rows[0].computed_hash;
     expect(computedHash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.version_hash).toBe(computedHash);
+    prevHash = result.version_hash;
   });
 });
