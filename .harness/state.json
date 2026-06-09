@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "in_progress",
-    "started_at": "2026-06-09T11:40:00.000Z",
-    "last_session": "2026-06-09T12:00:00.000Z",
-    "last_active": "2026-06-09T12:00:00.000Z"
+    "status": "idle",
+    "started_at": "2026-06-09T14:00:00.000Z",
+    "last_session": "2026-06-09T14:30:00.000Z",
+    "last_active": "2026-06-09T14:30:00.000Z"
   },
   "position": {
-    "phase": "04-plugs",
-    "active": "P1+P2 complete, P3 verify passed — ready to commit and advance to Phase 5",
-    "resume_file": ".harness/phases/04-plugs/.continue-here.json",
-    "stopped_at": "04-plugs P1 (7 files: types.ts, factory.ts, llm/index.ts, provider.interface.ts, openai-compatible.provider.ts, shared/index.ts, workers/index.ts) + P2 (05-PLAN.md T1/T2/T3 corrections + 06-PLAN.md T7 fix) complete. tsc+vitest: zero regressions. Ready to commit 04-plugs and start Phase 5."
+    "phase": "05-provider-safety",
+    "active": "Phase 5 — AnthropicProvider + CommandGate + skill export",
+    "resume_file": ".harness/phases/05-provider-safety/.continue-here.json",
+    "stopped_at": "04-plugs complete (e0cad38). pi-extension shim replaced with real Pi SDK imports. LLMProviderConfig extends Pick<PiProviderConfig,'baseUrl'|'apiKey'>. tsc+vitest: 0 errors, 163 pass. Ready for Phase 5 T1."
   }
 }

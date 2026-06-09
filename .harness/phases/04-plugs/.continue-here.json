@@ -1,45 +1,25 @@
 {
   "version": "1.0",
   "phase": "04-plugs",
-  "task": null,
+  "task": "complete",
   "status": "complete",
-  "last_updated": "2026-06-09T12:30:00.000Z",
-  "current_state": "P1 (7 files), P2 (05-PLAN.md T1/T2/T3 + 06-PLAN.md T7), P3 (tsc+vitest zero regression) all complete. Ready to commit and begin Phase 5.",
+  "last_updated": "2026-06-09T14:30:00.000Z",
+  "current_state": "All 04-plugs work committed. P1+P2+P3 in 504f824. Pi SDK DRY tasks in e0cad38.",
   "completed_work": [
-    "Existing code read: lesson-save.worker.ts, workers/index.ts, openai-compatible.provider.ts, provider.interface.ts, crystallize.worker.ts, server.ts, semantic.worker.ts",
-    "Pi SDK docs fetched (/earendil-works/pi via context7): AgentMessage types, ProviderConfig, ProviderModelConfig — confirmed LLMApi naming alignment",
-    "hermes tools/approval.py read: 12 HARDLINE + 54 DANGEROUS patterns captured in full",
-    "Gap analysis complete: T1 embedding concern wrong (no worker uses EmbeddingProvider), T2 needs full pattern list, T3 needs threshold-crossing fix (no extra query), T3 created-path stays 0.5 (Option A)",
-    "04-plugs-PLAN.md written: .harness/phases/04-plugs/04-plugs-PLAN.md",
-    "ROADMAP.md updated: 04-plugs section added between Phase 04 and Phase 05",
-    "state.json updated: phase=04-plugs, active=planned"
+    "P1: 7 files created/modified (types.ts, factory.ts, llm/index.ts, provider.interface.ts, openai-compatible.provider.ts, shared/index.ts, workers/index.ts) — commit 504f824",
+    "P2: 05-PLAN.md T1/T2/T3 corrected, 06-PLAN.md T7 T6-SUPERSEDED fix",
+    "P3: tsc + vitest 163 pass, zero regression",
+    "TASK A: pi-extension/src/pi-types.shim.ts converted from hand-written declarations to re-exports from @earendil-works/pi-coding-agent for 5 types; ExtensionAPI kept local (TypeBox constraint); fixed 3x notify() 'warn'→'warning' — commit e0cad38",
+    "TASK B: LLMProviderConfig extends Pick<PiProviderConfig,'baseUrl'|'apiKey'>; @earendil-works/pi-coding-agent added to @graph/shared package.json — commit e0cad38",
+    "Final tsc: 0 errors. vitest: 163 passed, 0 failures."
   ],
-  "remaining_work": [
-    "NEXT SESSION FIRST: verify all three plans are consistent as a whole (04-plugs-PLAN.md vs 05-PLAN.md vs 06-PLAN.md) before executing anything",
-    "P1: Create packages/shared/src/llm/types.ts (LLMApi, LLMProviderConfig, ChatMessage)",
-    "P1: Create packages/shared/src/llm/factory.ts (createLLMProvider — anthropic stub only)",
-    "P1: Create packages/shared/src/llm/index.ts (barrel)",
-    "P1: Modify packages/shared/src/llm/provider.interface.ts (remove ChatMessage, re-export from types)",
-    "P1: Modify packages/shared/src/llm/openai-compatible.provider.ts (ProviderConfig→LLMProviderConfig, maxTokens)",
-    "P1: Modify packages/shared/src/index.ts (llm barrel replace)",
-    "P1: Modify packages/workers/src/index.ts:91-95 (createLLMProvider + LLM_API env var)",
-    "P2: Update 05-PLAN.md T1 section (new 7-file design)",
-    "P2: Update 05-PLAN.md T2 section (reference Appendix A, 54 patterns)",
-    "P2: Update 05-PLAN.md T3 section (threshold-crossing AC fix, created=0.5 clarification)",
-    "P3: tsc + vitest zero-regression verification",
-    "Then: execute Phase 5 (T1→T5)"
-  ],
+  "remaining_work": [],
   "decisions_made": [
-    "T3 created-path: keep INSERT hardcoded 0.5 (Option A) — lessons earn export through reinforcement, not first appearance; payload.confidence exists for future use",
-    "LLM_API env var replaces LLM_PROVIDER — operators set LLM_API_KEY regardless of provider type",
-    "LLMApi type adopts Pi SDK naming: 'openai-completions' | 'anthropic-messages' — avoids future MemexShell type conflict",
-    "ChatMessage stays as LLM wire format (NOT Pi SDK AgentMessage) — Pi SDK has no system role, we need it",
-    "No worker uses EmbeddingProvider — SemanticMemoryWorker constructor is (pool, LLMProvider) only — no embedding split needed",
-    "factory.ts anthropic-messages branch throws stub in 04-plugs; Phase 5 T1 replaces throw with AnthropicProvider",
-    "hermes-specific patterns adapted: hermes→graph-runtime (6 patterns), pkill targets updated, PROJECT_CONFIG_PATH extended to include iii-config.yaml",
-    "MEMEX_ENV_PATH replaces HERMES_ENV_PATH (adapts ~/.hermes/ → ~/.memex/)"
+    "ExtensionAPI kept local in shim: Pi SDK's version requires TypeBox TSchema (nested dep, not resolvable from pi-extension's scope); simplified facade is correct",
+    "LLMProviderConfig extends Pick<PiProviderConfig,'baseUrl'|'apiKey'> — explicit type link so Pi SDK breaking changes surface at compile time; architectural dep (Core→Pi SDK) accepted per user decision",
+    "notify() level: 'warn' → 'warning' to match Pi SDK ExtensionContext.ui.notify(message, type?)"
   ],
   "blockers": [],
-  "context": "04-plugs is a pre-Phase-5 prerequisite refactor. All three task waves are in 04-plugs-PLAN.md. Appendix A contains the full 54 DANGEROUS + 12 HARDLINE pattern reference for Phase 5 T2 CommandGate implementation. The plans (04-plugs, 05, 06) have NOT been cross-verified yet — do this first in the next session before executing P1.",
-  "next_action": "Verify the three plans (04-plugs-PLAN.md, 05-PLAN.md, 06-PLAN.md) are internally consistent and non-overlapping, then execute P1."
+  "context": "04-plugs was a pre-phase refactor for Phase 5. All structural prerequisites are done. Phase 5 T1 can proceed.",
+  "next_action": "Move to Phase 5. See .harness/phases/05-provider-safety/05-PLAN.md. Start T1: create packages/shared/src/llm/anthropic.provider.ts and fill the AnthropicProvider stub in factory.ts."
 }
