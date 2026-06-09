@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-09T16:00:00.000Z",
-    "last_session": "2026-06-09T16:15:00.000Z",
-    "last_active": "2026-06-09T16:15:00.000Z"
+    "last_session": "2026-06-09T16:30:00.000Z",
+    "last_active": "2026-06-09T16:30:00.000Z"
   },
   "position": {
-    "phase": "06-extensions",
-    "active": "Phase 6 verified-complete. All docs synced. Next: plan Phase 7 (codebase structure + ROADMAP 未来架构改进方向).",
-    "resume_file": ".harness/phases/06-extensions/.continue-here.json",
-    "stopped_at": "harness-verify-before-move complete — Phase 6 docs synced (db8c2b3), implementation-notes updated with Phase 5+6 decisions, 215 tests pass, tsc clean. GitHub Issue #23 label update pending user approval. Next: /gsd-plan-phase 7 for structure improvement sprint."
+    "phase": "07-architecture",
+    "active": "Phase 6 fully verified and pushed. Advancing to Phase 7 planning.",
+    "resume_file": ".harness/phases/07-architecture/.continue-here.json",
+    "stopped_at": "harness-verify-before-move complete (19e4355 pushed). Issue #23 closed, #10 on-hold. Next session: /gsd-plan-phase 7 — centralized types, WebSocket/SSE, global config."
   }
 }

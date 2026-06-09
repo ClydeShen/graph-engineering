@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "phase": "07-architecture",
+  "task": "planning",
+  "status": "in_progress",
+  "last_updated": "2026-06-09T16:30:00.000Z",
+  "current_state": "Phase 6 verified and pushed. Phase 7 not yet planned. ROADMAP.md §未来架构改进方向 lists 6 candidate items. Next step is /gsd-plan-phase 7 to scope and plan.",
+  "completed_work": [
+    "Phase 6 verification sweep (harness-verify-before-move): all 10 steps passed",
+    "Doc sync committed (db8c2b3): implementation-notes Phase 5+6 decisions, 03-UAT.md complete, UI-SPEC.md stale phrase removed",
+    "Harness state updated (8879166): phase advanced to 07-architecture",
+    "Analysis docs committed (19e4355): 10 Hermes research + UAT artifacts tracked; search_*.json + dev-stack.log gitignored",
+    "GitHub: Issue #23 (Phase 3) closed with UAT evidence comment; Issue #10 (Pi Sandbox) relabeled status:on-hold",
+    "Pushed origin/master: a0e3959..19e4355 (11 commits)"
+  ],
+  "remaining_work": [
+    "Run /gsd-plan-phase 7 to create 07-PLAN.md covering ROADMAP.md §未来架构改进方向 candidates",
+    "Phase 7 candidate items (from ROADMAP.md, not yet scoped):",
+    "  1. LLM Provider registry + FallbackProvider (ADR-22 extension)",
+    "  2. WebSocket/SSE real-time API (new ADR — Gateway WS handler, MemexTerminal stream)",
+    "  3. Centralized types package @graph/types (core / api / shell three-layer split)",
+    "  4. Global config.json (~/.memex/config.json — provider registry, channel tokens, gateway port)",
+    "  5. SKILL.md progressive loading + ClawHub format compat (Phase 5 T3 extension)",
+    "  6. CrystallizeWorker surgical distillation (nanobot Dream delta-not-overwrite principle)"
+  ],
+  "decisions_made": [
+    "Phase 7 name: 07-architecture (not 07-shell — Shell is post-architecture; Core improvements come first)",
+    "Roam health score 5/100 dominated by load-bearing architectural bottlenecks (graph prop, buildApp, occWrite) — not actionable standalone refactors; improvement comes as natural side-effect of @graph/types and config layer work",
+    "T7 manual smoke tests (execute_bash, MCP client, Telegram, pairing) — deferred to Phase 7 or async; no live infra available in this session",
+    "Issue #15 (Graph-OS Console) stays open — Dashboard is MemexShell Phase 7+ work"
+  ],
+  "blockers": [],
+  "context": "Code baseline: 215 unit tests pass / 36 skipped (DB-gated) / tsc clean / origin up to date. ROADMAP.md has 6 未来架构改进方向 items all documented with rationale. The plan phase should scope to 1-2 items per wave to keep each wave within 1 context window.",
+  "next_action": "Run /gsd-plan-phase 7 to scope and plan Phase 7 — start with the ROADMAP.md §未来架构改进方向 list and pick the highest-leverage items for Phase 7 vs Phase 8+."
+}
