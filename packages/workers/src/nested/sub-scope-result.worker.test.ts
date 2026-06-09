@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Pool } from 'pg';
+import { StubTrailReader } from '../base/trail-reader.js';
 
 vi.mock('@graph/shared', () => ({
   occWrite: vi.fn().mockResolvedValue({
@@ -25,40 +26,37 @@ const BASE_PAYLOAD = {
   parent_scope_id: PARENT_SCOPE_ID,
 };
 
+const MOCK_CHILD_NODE = {
+  id: '1', scope_id: CHILD_SCOPE_ID, entity_id: 'e1',
+  event_type: 'memory_updated', predecessor_hash: '0'.repeat(64),
+  version_hash: CHILD_FINAL_HASH, payload: '{"result":"child done"}',
+  status: 'completed', base_priority: 0, unlocks_count: 0,
+  spawned_by: null, last_active_at: null, created_at: new Date(),
+} as never;
+
 describe('SubScopeResultWorker', () => {
-  let mockQuery: ReturnType<typeof vi.fn>;
+  let reader: StubTrailReader;
   let pool: Pool;
   let mockChat: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockChat = vi.fn().mockResolvedValue('synthesized result summary');
-    // Default: child node found + parent task_spawned found
-    mockQuery = vi.fn()
-      .mockResolvedValueOnce({
-        rows: [{ payload: { result: 'child done' }, event_type: 'memory_updated' }],
-        rowCount: 1,
-      })
-      .mockResolvedValueOnce({
-        rows: [{ version_hash: PARENT_TASK_HASH }],
-        rowCount: 1,
-      });
-    pool = { query: mockQuery } as unknown as Pool;
+    reader = new StubTrailReader();
+    vi.spyOn(reader, 'getVersionByHash').mockResolvedValue(MOCK_CHILD_NODE);
+    vi.spyOn(reader, 'getTailVersionHash').mockResolvedValue(PARENT_TASK_HASH);
+    pool = { query: vi.fn() } as unknown as Pool;
   });
 
-  it('(a) reads child node by child_final_version_hash from child scope partition', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+  it('(a) reads child node by child_final_version_hash from child scope', async () => {
+    const worker = new SubScopeResultWorker(reader, pool, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
-    expect(mockQuery).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('version_hash = $2'),
-      [CHILD_SCOPE_ID, CHILD_FINAL_HASH],
-    );
+    expect(reader.getVersionByHash).toHaveBeenCalledWith(CHILD_SCOPE_ID, CHILD_FINAL_HASH);
   });
 
   it('(b) calls LLM with child final node content', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+    const worker = new SubScopeResultWorker(reader, pool, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
     expect(mockChat).toHaveBeenCalledOnce();
@@ -72,7 +70,7 @@ describe('SubScopeResultWorker', () => {
   });
 
   it('(c) occWrites memory_updated to PARENT scope with result_summary', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+    const worker = new SubScopeResultWorker(reader, pool, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
     expect(vi.mocked(occWrite)).toHaveBeenCalledOnce();
@@ -91,18 +89,15 @@ describe('SubScopeResultWorker', () => {
   });
 
   it('(d) child-not-found path writes error memory_updated to parent and does NOT throw', async () => {
-    const emptyQuery = vi.fn()
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // child not found
-      .mockResolvedValueOnce({ rows: [{ version_hash: PARENT_TASK_HASH }], rowCount: 1 });
-    const emptyPool = { query: emptyQuery } as unknown as Pool;
-    const worker = new SubScopeResultWorker(emptyPool, { chat: mockChat });
+    vi.spyOn(reader, 'getVersionByHash').mockResolvedValue(null);
+    const worker = new SubScopeResultWorker(reader, pool, { chat: mockChat });
 
     await expect(worker.onSubScopeResolved(BASE_PAYLOAD)).resolves.toBeUndefined();
 
     expect(mockChat).not.toHaveBeenCalled();
     expect(vi.mocked(occWrite)).toHaveBeenCalledOnce();
     expect(vi.mocked(occWrite)).toHaveBeenCalledWith(
-      emptyPool,
+      pool,
       expect.objectContaining({
         scopeId: PARENT_SCOPE_ID,
         eventType: 'memory_updated',

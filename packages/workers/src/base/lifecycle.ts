@@ -103,11 +103,16 @@ export class PhaseGuardedHandle implements GraphHandle {
     return this.inner.write(event);
   }
 
-  query<T extends import('pg').QueryResultRow = import('pg').QueryResultRow>(
-    sql: string,
-    params?: unknown[],
-  ): Promise<T[]> {
-    return this.inner.query<T>(sql, params);
+  getVersionByHash(scopeId: string, versionHash: string) {
+    return this.inner.getVersionByHash(scopeId, versionHash);
+  }
+
+  getTailVersionHash(scopeId: string) {
+    return this.inner.getTailVersionHash(scopeId);
+  }
+
+  getEpisodicRecords(scopeId: string, opts?: import('./trail-reader.js').TrailReaderOptions) {
+    return this.inner.getEpisodicRecords(scopeId, opts);
   }
 }
 

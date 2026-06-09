@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
+import { PoolTrailReader } from '../base/trail-reader.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 const skip = !DATABASE_URL;
@@ -307,7 +308,7 @@ describe('GATE4-3: nested scope round trip', () => {
       embed: async () => ({ vector: [], countedAgainstBudget: false as const }),
     };
 
-    const worker = new SubScopeResultWorker(pool, mockLlm as never);
+    const worker = new SubScopeResultWorker(new PoolTrailReader(pool), pool, mockLlm as never);
     await worker.onSubScopeResolved({
       child_scope_id: childScopeId,
       trigger_task_id: triggerTaskId,

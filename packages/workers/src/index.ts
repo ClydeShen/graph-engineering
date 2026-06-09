@@ -16,6 +16,7 @@
 import { randomUUID } from 'crypto';
 import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
+import { PoolTrailReader } from './base/trail-reader.js';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ConflictResolverWorker } from './concrete/conflict-resolver.worker.js';
@@ -43,6 +44,7 @@ const III_URL = process.env['III_URL'] ?? 'ws://localhost:49134';
 const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/graph';
 
 const pool = new Pool({ connectionString: DATABASE_URL });
+const trailReader = new PoolTrailReader(pool);
 
 // ---------------------------------------------------------------------------
 // D-2 AgentCard universalization — boot-time idempotent INSERT for all
@@ -156,7 +158,7 @@ worker.registerTrigger(EPISODIC_TRIGGER_CONFIG);
 // graph::memory::semantic — durable:subscriber on graph::scope::closed
 // Distils episodic records into semantic_memory via LLM on scope close.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const semanticWorker = new SemanticMemoryWorker(pool, llmProvider);
+const semanticWorker = new SemanticMemoryWorker(trailReader, pool, llmProvider);
 worker.registerFunction('graph::memory::semantic', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -170,7 +172,7 @@ worker.registerTrigger(SEMANTIC_TRIGGER_CONFIG);
 
 // graph::memory::synthesizer — cron 2AM, batch distillation episodic→procedural
 // Queries distinct scope_ids with recent episodic records; synthesizes each independently.
-const synthesizerWorker = new MemorySynthesizerWorker(pool, llmProvider);
+const synthesizerWorker = new MemorySynthesizerWorker(trailReader, pool, llmProvider);
 worker.registerFunction('graph::memory::synthesizer', async (_payload: unknown) => {
   const { rows: scopeRows } = await pool.query<{ scope_id: string }>(
     `SELECT DISTINCT scope_id FROM episodic_memory
@@ -247,7 +249,7 @@ worker.registerTrigger(PROCEDURAL_TRIGGER_CONFIG);
 // graph::scope::sub-scope-result — durable:subscriber on graph::scope::sub_scope_resolved
 // Reads child final node, calls LLM to synthesize result_summary, writes memory_updated
 // to the parent scope so the spawning task advances to completed (ADR 23 step 3).
-const subScopeResultWorker = new SubScopeResultWorker(pool, llmProvider);
+const subScopeResultWorker = new SubScopeResultWorker(trailReader, pool, llmProvider);
 worker.registerFunction('graph::scope::sub-scope-result', async (payload: unknown) => {
   const p = payload as {
     child_scope_id: string;
@@ -262,7 +264,7 @@ worker.registerTrigger(SUB_SCOPE_RESULT_TRIGGER_CONFIG);
 
 // graph::memory::crystallize — durable:subscriber on graph::scope::closed
 // Real-time LLM digest: episodic records → Crystal entity → triggers lesson-save (Phase 4 T4)
-const crystallizeWorker = new CrystallizeWorker(pool, llmProvider, worker);
+const crystallizeWorker = new CrystallizeWorker(trailReader, pool, llmProvider, worker);
 worker.registerFunction('graph::memory::crystallize', async (payload: unknown) => {
   const p = payload as { scope_id: string; entity_id: string; predecessor_hash: string };
   return crystallizeWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);

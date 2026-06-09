@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { writeGuard } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
 
 export const SYNTHESIZER_CRON_TRIGGER = {
   type: 'cron' as const,
@@ -33,26 +34,21 @@ type SynthesisResult =
 
 export class MemorySynthesizerWorker {
   readonly base_priority = 1;
+  private readonly reader: TrailReader;
   private readonly pool: Pool;
   private readonly llm: LLMProvider;
 
-  constructor(pool: Pool, llm: LLMProvider) {
+  constructor(reader: TrailReader, pool: Pool, llm: LLMProvider) {
+    this.reader = reader;
     this.pool = pool;
     this.llm = llm;
   }
 
   async runSynthesis(scopeId: string): Promise<SynthesisResult> {
-    const { rows } = await this.pool.query<{ scope_id: string; content: string }>(
-      `SELECT scope_id, content FROM episodic_memory
-       WHERE created_at > NOW() - INTERVAL '25 hours'
-         AND scope_id = $1
-       ORDER BY created_at ASC
-       LIMIT 100`,
-      [scopeId],
-    );
-    if (rows.length === 0) return { skipped: true };
+    const records = await this.reader.getEpisodicRecords(scopeId, { sinceHours: 25, limit: 100 });
+    if (records.length === 0) return { skipped: true };
 
-    const combined = rows.map((r) => r.content).join('\n');
+    const combined = records.join('\n');
     // LLM CALL — ADR 22 (batch distillation; cannot be deterministic)
     const summary = await this.llm.chat([
       {
@@ -71,8 +67,8 @@ export class MemorySynthesizerWorker {
     }
 
     const intentDescription = parsed.intent_description ?? summary;
-    const nodes = rows.map((_, i) => ({ id: `node-${i}`, event_type: 'episodic_trace' }));
-    const edges = rows
+    const nodes = records.map((_, i) => ({ id: `node-${i}`, event_type: 'episodic_trace' }));
+    const edges = records
       .slice(1)
       .map((_, i) => ({ source: `node-${i}`, target: `node-${i + 1}` }));
 

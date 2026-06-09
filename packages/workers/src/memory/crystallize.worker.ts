@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { writeGuard, occWrite, notify } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
 
 export const CRYSTALLIZE_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -10,6 +11,7 @@ export const CRYSTALLIZE_TRIGGER_CONFIG = {
 
 export class CrystallizeWorker {
   constructor(
+    private readonly reader: TrailReader,
     private readonly pool: Pool,
     private readonly llm: LLMProvider,
     private readonly sdk: { trigger(opts: { function_id: string; payload: unknown; action?: unknown }): Promise<unknown> },
@@ -20,13 +22,10 @@ export class CrystallizeWorker {
     entityId: string,
     predecessorHash: string,
   ): Promise<{ skipped: true } | { written: true }> {
-    const { rows } = await this.pool.query<{ content: string }>(
-      `SELECT content FROM episodic_memory WHERE scope_id = $1 ORDER BY created_at ASC`,
-      [scopeId],
-    );
-    if (rows.length === 0) return { skipped: true };
+    const records = await this.reader.getEpisodicRecords(scopeId);
+    if (records.length === 0) return { skipped: true };
 
-    const combined = rows.map((r) => r.content).join('\n');
+    const combined = records.join('\n');
     // LLM CALL — ADR 22 (real-time crystallization per scope close; parallel to 2AM synthesizer)
     const llmOutput = await this.llm.chat([
       { role: 'system', content: 'Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.' },

@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
+import { PoolTrailReader } from '../base/trail-reader.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 const skip = !DATABASE_URL;
@@ -71,7 +72,7 @@ it.skipIf(skip)('G3-2: semantic_memory receives a row after SemanticMemoryWorker
   );
 
   const mockLlm = { chat: async () => 'Distilled fact from G3-2 test' };
-  const worker = new SemanticMemoryWorker(pool, mockLlm as never);
+  const worker = new SemanticMemoryWorker(new PoolTrailReader(pool), pool, mockLlm as never);
   try {
     await worker.onScopeClosed(scopeId, randomUUID(), '0'.repeat(64));
   } catch {
@@ -175,7 +176,7 @@ it.skipIf(skip)('G3-6: Ebbinghaus decay marks stale records with superseded_by =
   expect(staleId).toBeDefined();
 
   const mockLlm = { chat: async () => '' };
-  const worker = new MemorySynthesizerWorker(pool, mockLlm as never);
+  const worker = new MemorySynthesizerWorker(new PoolTrailReader(pool), pool, mockLlm as never);
   await worker.runDecay();
 
   const { rows } = await pool.query<{ superseded_by: string }>(

@@ -12,15 +12,18 @@
  * @see ADR 33 — Scope identity boundary (UUID orthogonality)
  */
 
-import type { Pool, QueryResultRow } from 'pg';
+import type { Pool } from 'pg';
 import type { GraphWriteEvent, WriteResult } from '@shared/types.js';
 import { OCC_WRITE_SQL, partitionTable } from '@shared/sql/occ-writable-cte.sql.js';
+import { PoolTrailReader } from './trail-reader.js';
+import type { TrailReader } from './trail-reader.js';
 
 /**
  * Full read/write graph handle — held exclusively by Workers.
+ * Extends TrailReader: Workers access domain reads via named methods, not raw SQL.
  * Tools MUST NOT receive this interface; they receive ReadOnlyGraphHandle.
  */
-export interface GraphHandle {
+export interface GraphHandle extends TrailReader {
   /** The Scope UUID. Business-task identity; NEVER mutated by context-size operations. */
   readonly scopeId: string;
 
@@ -32,21 +35,18 @@ export interface GraphHandle {
    * @see ADR 27, ADR 36
    */
   write(event: GraphWriteEvent): Promise<WriteResult>;
-
-  /** Execute a read-only SQL query against the graph. */
-  query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]>;
 }
 
 /**
  * Concrete GraphHandle backed by a pg Pool.
+ * Inherits TrailReader methods from PoolTrailReader; adds write() and scopeId.
  */
-export class GraphHandleImpl implements GraphHandle {
+export class GraphHandleImpl extends PoolTrailReader implements GraphHandle {
   readonly scopeId: string;
-  private readonly pool: Pool;
 
   constructor(scopeId: string, pool: Pool) {
+    super(pool);
     this.scopeId = scopeId;
-    this.pool = pool;
   }
 
   async write(event: GraphWriteEvent): Promise<WriteResult> {
@@ -61,10 +61,5 @@ export class GraphHandleImpl implements GraphHandle {
       event_type: row.event_type as WriteResult['event_type'],
       occ_result: row.occ_result as 'won' | 'demoted',
     };
-  }
-
-  async query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]> {
-    const result = await this.pool.query<T>(sql, params);
-    return result.rows;
   }
 }

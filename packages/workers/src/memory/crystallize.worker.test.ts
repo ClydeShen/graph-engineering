@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StubTrailReader } from '../base/trail-reader.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
@@ -8,11 +9,7 @@ vi.mock('@graph/shared', () => ({
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-function makePool(rows: { content: string }[]) {
-  return {
-    query: vi.fn().mockResolvedValue({ rows, rowCount: rows.length }),
-  };
-}
+const mockPool = { query: vi.fn() } as never;
 
 function makeSdk() {
   return { trigger: vi.fn().mockResolvedValue(undefined) };
@@ -27,8 +24,8 @@ describe('CrystallizeWorker', () => {
   });
 
   it('returns { skipped: true } when no episodic records', async () => {
-    const pool = makePool([]);
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, makeSdk());
+    const reader = new StubTrailReader(); // returns [] by default
+    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'ZERO');
 
     expect(result).toEqual({ skipped: true });
@@ -36,9 +33,10 @@ describe('CrystallizeWorker', () => {
   });
 
   it('fires sdk.trigger with confidence: 0.6 when episodic records exist', async () => {
-    const pool = makePool([{ content: 'trace A' }, { content: 'trace B' }]);
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B']);
     const sdk = makeSdk();
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, sdk);
+    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, sdk);
 
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'PRED_HASH');
 
@@ -54,8 +52,9 @@ describe('CrystallizeWorker', () => {
 
   it('passes combined episodic content through writeGuard to LLM', async () => {
     const { writeGuard } = await import('@graph/shared');
-    const pool = makePool([{ content: 'trace X' }]);
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, makeSdk());
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace X']);
+    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 

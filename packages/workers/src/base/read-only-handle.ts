@@ -16,19 +16,19 @@
  * @see ADR 33 — Scope identity orthogonality (REQ-23)
  */
 
-import type { Pool, QueryResultRow } from 'pg';
+import type { Pool } from 'pg';
+import { PoolTrailReader } from './trail-reader.js';
+import type { TrailReader } from './trail-reader.js';
 
 /**
  * Read-only graph handle — the ONLY interface Tools receive.
+ * Extends TrailReader: Tools access domain reads via named methods, not raw SQL.
  * write() is deliberately ABSENT: calling ctx.graph.write() from a Tool
  * is a TypeScript compile error.
  */
-export interface ReadOnlyGraphHandle {
+export interface ReadOnlyGraphHandle extends TrailReader {
   /** The Scope UUID. Business-task identity; NEVER mutated by context-size operations. */
   readonly scopeId: string;
-
-  /** Execute a read-only SQL query against the graph. */
-  query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]>;
 }
 
 /**
@@ -44,23 +44,17 @@ export class SecurityException extends Error {
 
 /**
  * Concrete implementation of ReadOnlyGraphHandle.
+ * Extends PoolTrailReader: inherits all TrailReader methods.
  *
- * Implements only the ReadOnlyGraphHandle interface (no write() in type signature).
  * Provides a non-interface write() method that throws SecurityException — runtime
  * defense against `any`-cast bypasses.
  */
-export class ReadOnlyGraphHandleImpl implements ReadOnlyGraphHandle {
+export class ReadOnlyGraphHandleImpl extends PoolTrailReader implements ReadOnlyGraphHandle {
   readonly scopeId: string;
-  private readonly pool: Pool;
 
   constructor(scopeId: string, pool: Pool) {
+    super(pool);
     this.scopeId = scopeId;
-    this.pool = pool;
-  }
-
-  async query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]> {
-    const result = await this.pool.query<T>(sql, params);
-    return result.rows;
   }
 
   /**

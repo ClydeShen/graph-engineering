@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { createHash } from 'crypto';
 import { writeGuard, occWrite } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
 
 export const SEMANTIC_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -10,22 +11,21 @@ export const SEMANTIC_TRIGGER_CONFIG = {
 } as const;
 
 export class SemanticMemoryWorker {
+  private readonly reader: TrailReader;
   private readonly pool: Pool;
   private readonly llm: LLMProvider;
 
-  constructor(pool: Pool, llm: LLMProvider) {
+  constructor(reader: TrailReader, pool: Pool, llm: LLMProvider) {
+    this.reader = reader;
     this.pool = pool;
     this.llm = llm;
   }
 
   async onScopeClosed(scopeId: string, entityId: string, predecessorHash: string): Promise<void> {
-    const { rows } = await this.pool.query<{ content: string }>(
-      `SELECT content FROM episodic_memory WHERE scope_id = $1 ORDER BY created_at ASC LIMIT 50`,
-      [scopeId],
-    );
-    if (rows.length === 0) return;
+    const records = await this.reader.getEpisodicRecords(scopeId, { limit: 50 });
+    if (records.length === 0) return;
 
-    const combined = rows.map((r) => r.content).join('\n');
+    const combined = records.join('\n');
     // LLM CALL — ADR 22 (distillation from episodic to semantic; cannot be deterministic)
     const fact = await this.llm.chat([
       { role: 'system', content: 'Distill the following execution traces into key facts. Be concise.' },

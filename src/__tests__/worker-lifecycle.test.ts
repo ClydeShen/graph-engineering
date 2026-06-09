@@ -30,7 +30,9 @@ function makeMockGraphHandle(): GraphHandle {
       event_type: 'task_spawned',
       occ_result: 'won',
     } satisfies WriteResult),
-    query: vi.fn().mockResolvedValue([]),
+    getVersionByHash: vi.fn().mockResolvedValue(null),
+    getTailVersionHash: vi.fn().mockResolvedValue('0'.repeat(64)),
+    getEpisodicRecords: vi.fn().mockResolvedValue([]),
   };
 }
 
