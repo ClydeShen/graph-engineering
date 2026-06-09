@@ -20,6 +20,10 @@ coverage/
 *.log
 npm-debug.log*
 
+# Ephemeral analysis artifacts
+.harness/analysis/search_*.json
+.harness/analysis/dev-stack.log
+
 # Environment (commit .env.example instead)
 .env
 .env.*.local
