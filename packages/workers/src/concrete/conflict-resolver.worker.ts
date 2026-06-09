@@ -2,6 +2,8 @@ import type { Pool } from 'pg';
 import { writeGuard } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 
+export const FUNCTION_ID = 'graph::conflict-resolver' as const;
+
 export class ConflictResolverWorker {
   constructor(
     private readonly llm: LLMProvider,

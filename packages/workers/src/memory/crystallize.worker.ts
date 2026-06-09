@@ -4,6 +4,7 @@ import { writeGuard, occWrite, notify } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
+import { LESSON_SAVE_TRIGGER_CONFIG } from './lesson-save.worker.js';
 
 export const CRYSTALLIZE_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -61,7 +62,7 @@ export class CrystallizeWorker {
     await notify({ type: 'crystal', scope_id: scopeId, summary: llmOutput.slice(0, 200) });
 
     await this.sdk.trigger({
-      function_id: 'graph::memory::lesson-save',
+      function_id: LESSON_SAVE_TRIGGER_CONFIG.function_id,
       payload: { content: llmOutput, confidence: 0.6 },
     });
 
