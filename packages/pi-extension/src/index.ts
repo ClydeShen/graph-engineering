@@ -138,11 +138,11 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const entryId = args.trim();
       if (!entryId) {
-        ctx.ui.notify('Usage: /fork-ext <entry-id>', 'warn');
+        ctx.ui.notify('Usage: /fork-ext <entry-id>', 'warning');
         return;
       }
       if (activeShadow) {
-        ctx.ui.notify('Already in rehearsal. Run /fork-end to exit first.', 'warn');
+        ctx.ui.notify('Already in rehearsal. Run /fork-end to exit first.', 'warning');
         return;
       }
       await ctx.fork(entryId);
@@ -155,7 +155,7 @@ export default function graphRuntimeExtension(pi: ExtensionAPI) {
     description: 'Exit rehearsal mode: destroy shadow entries (阅后即焚)',
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       if (!activeShadow) {
-        ctx.ui.notify('Not in rehearsal mode.', 'warn');
+        ctx.ui.notify('Not in rehearsal mode.', 'warning');
         return;
       }
       const count = activeShadow.getEntries().length;

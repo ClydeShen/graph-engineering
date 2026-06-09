@@ -1,12 +1,17 @@
 /**
  * LLM provider type definitions — Pi SDK naming alignment.
  *
+ * LLMProviderConfig explicitly extends Pi SDK ProviderConfig for baseUrl/apiKey
+ * so that any breaking change to those fields surfaces as a compile error here.
+ *
  * LLMApi mirrors Pi SDK ProviderConfig.api field naming.
  * ChatMessage is LLM wire format (NOT Pi SDK AgentMessage).
  *
  * @see Pi SDK AgentMessage for session-management types (user/assistant/toolResult — no system role).
  * @see ADR 22 — LLM Provider Abstraction
  */
+
+import type { ProviderConfig as PiProviderConfig } from '@earendil-works/pi-coding-agent';
 
 /**
  * LLM API protocol selector. Mirrors Pi SDK ProviderConfig.api naming.
@@ -22,17 +27,16 @@ export type LLMApi = 'openai-completions' | 'anthropic-messages';
  * Unified provider config. Workers never read this directly —
  * constructed at the boot entry point (workers/index.ts) and injected.
  *
- * Mirrors Pi SDK ProviderConfig + ProviderModelConfig field naming.
+ * Extends Pi SDK ProviderConfig for baseUrl/apiKey (type-level link, no runtime dep).
+ * api: required LLMApi narrows Pi SDK's optional Api.
+ * model: per-call string (Pi SDK uses models[] registry array on ProviderModelConfig).
+ * maxTokens: per-call limit (Pi SDK ProviderModelConfig.maxTokens is a registry field).
  */
-export interface LLMProviderConfig {
-  /** Protocol selector — Pi SDK ProviderConfig.api naming. */
+export interface LLMProviderConfig extends Pick<PiProviderConfig, 'baseUrl' | 'apiKey'> {
+  /** Protocol selector — required; narrows Pi SDK ProviderConfig.api (optional). */
   api: LLMApi;
   /** Model identifier — Pi SDK ProviderModelConfig.id naming. */
   model: string;
-  /** Base URL. Required for openai-completions; optional for anthropic-messages (default: api.anthropic.com). */
-  baseUrl?: string;
-  /** API key. Sourced from env at boot; never a literal. */
-  apiKey?: string;
   /** Max output tokens — Pi SDK ProviderModelConfig.maxTokens. Default: 4096. */
   maxTokens?: number;
 }
