@@ -1,33 +1,41 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "gsd-phase-5-planning",
-  "status": "ready_to_plan",
-  "last_updated": "2026-06-09T18:00:00.000Z",
-  "current_state": "TrailReader refactor (Candidate B) complete and committed (d9e7e67). Phase 5 Architecture Hardening added to GSD .planning/ROADMAP.md with 6 success criteria (ARCH-01..ARCH-06). GSD phase directory .planning/phases/05-architecture-hardening/ created. Committed as 6cd35f9.",
+  "task": "gsd-phase-5-execution",
+  "status": "ready_to_execute",
+  "last_updated": "2026-06-09T23:55:00.000Z",
+  "current_state": "GSD Phase 5 planning COMPLETE (commit ad72735). 6 ARCH plans written, checker-verified, and committed. Research based on nanobot + hermes-agent specimen analysis (DRY patterns). Ready to execute.",
   "completed_work": [
-    "TrailReader refactor committed d9e7e67: TrailReader interface, PoolTrailReader, StubTrailReader, GraphHandle/ReadOnlyGraphHandle extend TrailReader, 4 workers migrated, tests migrated. 215 pass, tsc clean.",
-    "Phase 5 Architecture Hardening added to .planning/ROADMAP.md with ARCH-01..ARCH-06 success criteria",
-    ".planning/phases/05-architecture-hardening/ directory created",
-    ".planning/STATE.md updated with Roadmap Evolution entry",
-    "Committed 6cd35f9: docs(planning): add Phase 5 Architecture Hardening to GSD roadmap"
+    "TrailReader refactor committed d9e7e67: TrailReader interface, PoolTrailReader, StubTrailReader. 215 tests pass, tsc clean.",
+    "Phase 5 Architecture Hardening added to .planning/ROADMAP.md with ARCH-01..ARCH-06 success criteria (commit 6cd35f9)",
+    "pg_notify wiring: id added to OCC SQL RETURNING, fire-and-forget pg_notify in occ-write.ts",
+    "ctrl boot crash fix and EpisodicMemoryWorker trigger added to pulse-fetch.ts (commits 4f1a4d2, 9af8dd4)",
+    "E2E verified: episodic_memory count increases after task_spawned event with correct predecessor_hash",
+    "/gsd-cleanup: archived phases 01-03 to .planning/milestones/v1.0-phases/ (commit 306ce36)",
+    "/gsd-docs-update: 14 doc files generated (commit 87baeaa)",
+    "GSD Phase 5 planning: RESEARCH.md + PATTERNS.md + 6 ARCH PLAN.md files committed (ad72735)"
   ],
   "remaining_work": [
-    "ARCH-01: LLM Provider registry + FallbackProvider (circuit-breaker failover: timeout/rate_limit/overloaded → failover; auth/context_length/content_filter → direct error)",
-    "ARCH-02: WebSocket/SSE real-time event stream API — Gateway /v1/stream endpoint, MemexTerminal subscription",
-    "ARCH-03: @graph/types centralized package (core/api/shell three-layer split, Pi SDK alignment)",
-    "ARCH-04: ~/.memex/config.json global system config (Gateway port, channel tokens, provider registry with ${ENV_VAR} resolution)",
-    "ARCH-05: SKILL.md progressive loading — two-phase summary+full body strategy",
-    "ARCH-06: CrystallizeWorker surgical distillation — inject existing_lesson_content, output delta only"
+    "ARCH-01: classifyProviderError + FallbackProvider (packages/shared/src/llm/)",
+    "ARCH-02: SSE /v1/stream route (packages/gateway/src/routes/stream.ts)",
+    "ARCH-03: @graph/types leaf package (packages/types/)",
+    "ARCH-04: ~/.memex/config.json loader (packages/shared/src/config/loader.ts)",
+    "ARCH-05: SKILL.md two-phase loading — GET /v1/skills + GET /v1/skills/:id (wave 2, after ARCH-02)",
+    "ARCH-06: CrystallizeWorker delta injection — existing_lesson_content injected before LLM call (wave 2)"
   ],
   "decisions_made": [
     "Phase 7 harness items mapped to GSD Phase 5 (sequential numbering in GSD: 1-4 already existed, 5 is next)",
     "GSD .planning/ROADMAP.md Phase 4 (External Integrations) left as-is — not backfilling completed harness phases 5/6 into GSD",
     "ARCH-01 FallbackProvider error classification: timeout/rate_limit/overloaded → failover; auth/context_length/content_filter → direct throw (no failover)",
-    "TrailReader.pool is protected (not private) to enable GraphHandleImpl/ReadOnlyGraphHandleImpl subclassing",
-    "subagent.ts getTailVersionHash drops conflict_detected filter from original query — accepted tradeoff"
+    "DRY: FailoverReason enum + classifyProviderError() ported from hermes-agent error_classifier.py",
+    "DRY: delta injection pattern from hermes-agent curator.py for ARCH-06",
+    "DRY: two-phase skill loading from hermes-agent skill_bundles.py for ARCH-05",
+    "@graph/types is a leaf package — zero @graph/* deps to prevent circular imports",
+    "CanonicalEventType in @graph/types/api is an intentional controlled duplicate (documented in implementation-notes)",
+    "node:crypto for lesson fingerprints is NOT a pgcrypto violation — pgcrypto constraint applies to OCC version_hash chain only",
+    "05-05 is Wave 2 (depends on 05-02) — both modify packages/gateway/src/index.ts"
   ],
   "blockers": [],
-  "context": "Two tracking systems coexist: harness (.harness/) tracks phases 04-07 with its own numbering; GSD (.planning/) tracks phases 1-4 plus newly added phase 5. They are independent — do not try to reconcile numbering. GSD Phase 5 = harness Phase 07-architecture remaining work.",
-  "next_action": "Run /gsd-plan-phase 5 to research and plan ARCH-01..ARCH-06 using the full GSD research→plan→checker pipeline."
+  "context": "Two tracking systems coexist: harness (.harness/) tracks phases 04-07 with its own numbering; GSD (.planning/) tracks phases 1-5. They are independent — do not try to reconcile numbering. GSD Phase 5 = harness Phase 07-architecture remaining work. Running services use C:\\Temp\\start-workers.cmd and C:\\Temp\\start-ctrl.cmd batch scripts (Windows env inheritance workaround).",
+  "next_action": "Run /gsd-execute-phase 5 to implement ARCH-01..ARCH-06. Wave 1 (01+02+03+04 parallel), then Wave 2 (05+06 after Wave 1 complete)."
 }

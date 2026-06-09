@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-09T23:55:00.000Z",
+  "phase": "05",
+  "phase_name": "Architecture Hardening",
+  "phase_dir": ".planning/phases/05-architecture-hardening",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 6,
+  "status": "paused",
+  "completed_tasks": [],
+  "remaining_tasks": [
+    {"id": 1, "name": "ARCH-01: classifyProviderError + FallbackProvider", "status": "not_started"},
+    {"id": 2, "name": "ARCH-02: SSE /v1/stream route", "status": "not_started"},
+    {"id": 3, "name": "ARCH-03: @graph/types leaf package", "status": "not_started"},
+    {"id": 4, "name": "ARCH-04: ~/.memex/config.json loader", "status": "not_started"},
+    {"id": 5, "name": "ARCH-05: SKILL.md two-phase loading (wave 2)", "status": "not_started"},
+    {"id": 6, "name": "ARCH-06: CrystallizeWorker delta injection (wave 2)", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "CanonicalEventType in @graph/types/api is an intentional controlled duplicate", "rationale": "Cannot import from @graph/shared without circular dep; inline union is the only viable option for a leaf package", "phase": "05"},
+    {"decision": "node:crypto for lesson fingerprints is NOT a pgcrypto violation", "rationale": "pgcrypto constraint (ADR 02) applies to OCC version_hash chain only; lesson-save.worker.ts already uses node:crypto as established precedent", "phase": "05"},
+    {"decision": "05-05 is Wave 2 depending on 05-02", "rationale": "Both modify packages/gateway/src/index.ts; sequential dependency prevents merge conflict", "phase": "05"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-execute-phase 5. Wave 1 (01+02+03+04 parallel), then Wave 2 (05+06).",
+  "context_notes": "Planning session complete. Researched nanobot + hermes-agent specimens. All 6 ARCH plans written, checker-verified (5 blockers found and fixed), committed at ad72735."
+}
