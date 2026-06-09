@@ -12,7 +12,7 @@
 |------|-------|-----------|
 | 1 | T1 McpClientWorker, T2 execute_bash MCP tool | Independent; T1 is read-only addition, T2 depends on CommandGate (Phase 5 T2) |
 | 2 | T3 Messaging gateway (Telegram + Discord), T4 UserProfileWorker | T3 depends on webhook notify (Phase 5 T4) for routing context; T4 depends on mature Crystal stream |
-| 3 | T5 DM pairing, T6 Graph inspection TUI | T5 depends on T3 gateway; T6 is standalone |
+| 3 | T5 DM pairing | T5 depends on T3 gateway; T6 superseded — not implemented |
 | 4 | T7 Manual verification checkpoint | Depends on T1–T6 |
 
 ---
@@ -41,7 +41,7 @@ Reference: MCP spec at `modelcontextprotocol.io/specification/2025-06-18/server/
 - [ ] `MCP_CLIENT_TRIGGER_CONFIG = { type: 'scheduled', function_id: 'graph::integration::mcp-client', config: { cron: '@startup' } }` — runs once at worker startup to connect
 - [ ] `McpClientWorker` constructor: `constructor(private readonly pool: Pool)`
 - [ ] `McpClientWorker.connect()`: reads `MCP_SERVER_URLS` env var (comma-separated HTTP URLs); for each URL creates a `StreamableHTTPClientTransport` and a `Client`; calls `client.connect(transport)`; calls `client.listTools()` to discover available tools; registers each discovered tool as a named iii function `graph::mcp-ext::<serverHost>::<toolName>`
-- [ ] Each registered function, when called with `{ args: Record<string, unknown> }`, calls `client.callTool({ name: toolName, arguments: args })` and writes the result as `occWrite({ eventType: 'memory_updated', payload: { mcp_server: serverUrl, tool: toolName, args, result } })`
+- [ ] Each registered function, when called with `{ args: Record<string, unknown>, scope_id: string, predecessor_hash: string, entity_id: string }`, calls `client.callTool({ name: toolName, arguments: args })` and writes the result as `occWrite({ scopeId: scope_id, entityId: entity_id, predecessorHash: predecessor_hash, eventType: 'memory_updated', payload: { mcp_server: serverUrl, tool: toolName, args, result } })`; returns `{ version_hash }` so the caller can chain subsequent writes
 - [ ] `MCP_SERVER_URLS` not set → `connect()` is a no-op (no error)
 - [ ] Worker registered in `packages/workers/src/index.ts`
 - [ ] New test `packages/workers/src/integrations/mcp-client.worker.test.ts` covers: no-op when `MCP_SERVER_URLS` unset; tool discovery mocked (mock `Client.listTools` returns 2 tools); tool call mocked (mock `Client.callTool` returns `{ content: [{ type: 'text', text: 'result' }] }`); `occWrite` called with correct payload
@@ -56,7 +56,7 @@ Reference: MCP spec at `modelcontextprotocol.io/specification/2025-06-18/server/
 
 Use `StreamableHTTPClientTransport` (Streamable HTTP) not `StdioClientTransport` — the external servers are network-accessible, not subprocess-managed. The transport constructor takes `{ url: URL }`.
 
-The `occWrite` call for each tool result needs a `scopeId` and `predecessorHash`. Since tool calls happen outside a specific scope context, use a dedicated "integration scope" entity: at startup, upsert a scope entity with a stable UUID derived from `createHash('sha256').update('mcp-integration-scope').digest('hex').slice(0, 32)` → format as UUID. This keeps all external tool calls in one auditable scope.
+The `occWrite` call for each tool result writes to the **calling scope** — `scope_id`, `entity_id`, and `predecessor_hash` are supplied by the caller as part of the iii function payload. This ensures the calling agent's context assembly (which projects a single scope UUID) can see the tool result in its next turn. The caller is responsible for managing the chain head: after each tool call, use the returned `version_hash` as `predecessor_hash` for the next write on that entity. If `occWrite` returns `occ_result: 'demoted'`, the caller must reload the current chain head for that entity and retry. Do not use a dedicated integration scope — that makes results invisible to the calling agent.
 
 Each external MCP server connection failure should be caught and logged (not thrown) — partial connectivity is acceptable. Workers continue even if one server is unreachable.
 
@@ -85,12 +85,15 @@ Phase 5 added the CommandGate hook comment in `packages/gateway/src/mcp/server.t
 - [ ] Tool handler calls `checkCommand(command)` before any execution:
   - `{ allowed: false, tier: 'hardline' }` → return `{ isError: true, content: [{ type: 'text', text: 'BLOCKED (hardline): <reason>. Cannot execute.' }] }`
   - `{ allowed: false, tier: 'dangerous' }` → return `{ isError: true, content: [{ type: 'text', text: 'BLOCKED (requires approval): <reason>. Use the graph runtime console to approve.' }] }`
-  - `{ allowed: true }` → execute via `child_process.exec` with `{ timeout: 30000, maxBuffer: 512 * 1024 }`
+  - `{ allowed: true }` → execute via `child_process.exec` with `{ timeout: 30000, maxBuffer: 512 * 1024, cwd: EXECUTE_BASH_CWD, env: scrubEnv(process.env) }`
 - [ ] Execution result (stdout, stderr, exit code) is written to the graph as `occWrite({ eventType: 'memory_updated', payload: { command, stdout, stderr, exit_code } })` using the supplied `scope_id` and `predecessor_hash`
 - [ ] Returns `{ content: [{ type: 'text', text: JSON.stringify({ stdout, stderr, exit_code }) }] }` on success
 - [ ] On execution error (timeout, maxBuffer exceeded): returns `{ isError: true, content: [{ type: 'text', text: JSON.stringify({ error: msg }) }] }`
 - [ ] New test `packages/gateway/src/routes/mcp.test.ts` adds cases: hardline blocked command returns isError; dangerous blocked command returns isError; safe command mocks exec and returns stdout
 - [ ] `EXECUTE_BASH_ENABLED` env var (boolean, default `false`) — tool is only registered when this is `true`. This prevents accidental execution in environments where it's not intended.
+- [ ] `EXECUTE_BASH_CWD` env var (default: `os.tmpdir()`) — all executed commands run in this directory; prevents filesystem traversal to sensitive paths
+- [ ] `scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv` — strips the following keys before passing to exec: `DATABASE_URL`, `LLM_API_KEY`, `GRAPH_RUNTIME_SECRET`, `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `DISCORD_PUBLIC_KEY`
+- [ ] Blocked commands (both `hardline` and `dangerous`) write an audit event: `occWrite({ scopeId: scope_id, entityId: entity_id, predecessorHash: predecessor_hash, eventType: 'memory_updated', payload: { command, status: 'blocked', tier, reason } })` — blocked attempts are first-class graph events, not silent drops
 
 ### Files
 
@@ -101,7 +104,9 @@ Phase 5 added the CommandGate hook comment in `packages/gateway/src/mcp/server.t
 
 `child_process.exec` is Node.js built-in — no new dependency. Use the promisified form: `util.promisify(exec)`. Wrap in try-catch to catch timeout and buffer errors.
 
-Do not implement Docker isolation in this task — that is T3 in Phase 6 original scope. Plain `exec` with CommandGate is the safe baseline; Docker backend is an upgrade path.
+`scrubEnv` strips keys by exact name match — it does not need to be exhaustive, only protect the keys the process itself uses. Pass the result as the `env` option to exec.
+
+Do not implement Docker isolation in this task — plain `exec` with fixed `cwd`, env scrubbing, and CommandGate is the safe baseline for Phase 6. Docker backend is an upgrade path. Explicit scope constraint: `execute_bash` is a single-process prototype; it is not production-hardened remote code execution.
 
 The `EXECUTE_BASH_ENABLED` guard is important: the MCP server is network-accessible. Default-off prevents unintended remote code execution in deployments that don't need it.
 
@@ -137,7 +142,7 @@ Hermes `GatewayRunner` at `gateway/run.py:1676` manages 20+ platforms. Session r
     tsconfig.json
   ```
 - [ ] `session.ts` exports `buildSessionKey(platform: 'telegram' | 'discord', chatId: string): string` → returns `${platform}::${chatId}`
-- [ ] `router.ts` exports `dispatchMessage(sessionKey: string, text: string, pool: Pool): Promise<string>` — calls `occWrite` with `event_type: 'task_spawned'`, `payload: { source: sessionKey, text, required_skills: ['message-handler'] }`, returns `task_id`
+- [ ] `router.ts` exports `dispatchMessage(sessionKey: string, text: string, pool: Pool, sourceMessageId: string): Promise<string>` — calls `occWrite` with `event_type: 'task_spawned'`, `payload: { source: sessionKey, text, required_skills: ['message-handler'], source_message_id: sourceMessageId }`, returns `task_id`; `sourceMessageId` is the platform's native message ID (Telegram `update_id`, Discord `interaction.id`) and serves as the idempotency key for deduplication
 - [ ] `adapters/telegram.ts`:
   - Long-poll mode (default): `startLongPoll(token: string, onMessage: (chatId: string, text: string) => Promise<string>)` — calls `https://api.telegram.org/bot${token}/getUpdates?timeout=30&offset=${offset}` in a loop; passes each message to `onMessage`; sends reply via `sendMessage`
   - Webhook mode: `startWebhook(token: string, webhookUrl: string, port: number, onMessage: ...)` — registers webhook URL via `setWebhook`, listens on `port` for POST updates
@@ -145,10 +150,12 @@ Hermes `GatewayRunner` at `gateway/run.py:1676` manages 20+ platforms. Session r
 - [ ] `adapters/discord.ts`:
   - Outbound: `sendToDiscord(webhookUrl: string, content: string): Promise<void>` — POST to Discord webhook URL
   - Inbound: Discord slash command setup (register `/graph` command via Discord REST API on startup; handle interactions via Express or Hono listener on `DISCORD_PORT`)
+  - Signature verification: every inbound interaction request must pass HMAC-SHA256 signature check using `DISCORD_PUBLIC_KEY` before processing; requests failing verification return HTTP 401 — this is an acceptance criterion, not optional
 - [ ] `index.ts` GatewayBot: reads `TELEGRAM_BOT_TOKEN`, `DISCORD_WEBHOOK_URL`, `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID` env vars; starts configured adapters; wires `notify` (Phase 5 T4) to deliver Crystals/Lessons to the originating chat via `router.ts` session map
 - [ ] `packages/gateway-bot/package.json` `"name": "@graph/gateway-bot"`, `"dependencies": { "@graph/shared": "workspace:*", "hono": "^4" }`
 - [ ] Telegram adapter test: mock `getUpdates` response; verify `dispatchMessage` called; verify `sendMessage` reply sent
-- [ ] Discord adapter test: mock Discord webhook POST; verify 200 response
+- [ ] Discord adapter test: mock Discord webhook POST; verify 200 response; verify that a request with an invalid `X-Signature-Ed25519` / `X-Signature-Timestamp` header returns 401 (signature verification acceptance test)
+- [ ] Router test: verify `dispatchMessage` includes `source_message_id` in the `task_spawned` payload
 
 ### Files
 
@@ -262,7 +269,9 @@ This task adds per-agent pairing ON TOP of the existing Bearer token (which rema
 
 The pairing `Map` is in-process memory — not persisted to PostgreSQL. On restart, all pairings are lost and agents must re-pair. This is intentional: hermes uses a 1hr TTL file with 0o600 perms; in-process Map with process-scoped lifetime is equivalent security for Phase 6. Persistent pairing (PostgreSQL-backed) is a future phase concern.
 
-SHA-256 verification: `createHash('sha256').update(code + salt).digest('hex')` must match stored hash. Never store the raw code.
+SHA-256 verification: use `crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(computed))` to compare hashes — prevents timing-based enumeration. Never store the raw code.
+
+**Phase 6 scope constraint:** The pairing `Map` is intentionally single-process. Multi-process deployments (multiple gateway instances, container replicas behind a load balancer) are explicitly out of scope for Phase 6 — pairing state will not be shared across instances. Upgrade path: PostgreSQL-backed `agent_pairing` table. Document this constraint in `.harness/implementation-notes.md`.
 
 ---
 
@@ -384,13 +393,7 @@ Parse YAML frontmatter from `SKILL.md` files using `js-yaml` (`load(frontmatterB
    # Verify bot replies with task_id
    ```
 
-6. TUI smoke-test:
-   ```
-   GRAPH_RUNTIME_URL=http://localhost:4000 node packages/tui/src/index.ts
-   # Navigate to Graph Events → verify table renders
-   # Navigate to Patterns & Skills → verify SKILL.md files listed
-   # Navigate to Agent Registry → verify registered agents shown
-   ```
+6. T6 superseded — no `packages/tui` created; graph visualization deferred to MemexShell Dashboard per ROADMAP.md 北极星. Verify `packages/tui` does not exist.
 
 7. Agent pairing smoke-test:
    ```
@@ -405,7 +408,7 @@ Parse YAML frontmatter from `SKILL.md` files using `js-yaml` (`load(frontmatterB
 
 ### Resume signal
 
-Reply `approved` when all 7 checks pass.
+Reply `approved` when all checks pass (steps 1–5 and 7; step 6 is superseded).
 
 ---
 
@@ -416,5 +419,5 @@ Reply `approved` when all 7 checks pass.
 - Telegram bot receives a message, spawns a task, replies with `task_id`
 - `UserProfileWorker` synthesizes a profile entity when ≥ 3 Crystals exist for a user
 - `/pair/generate` + `/pair` flow pairs an agent; unpaired agent gets 401 on MCP calls
-- `graph-tui` renders graph events, patterns, and agents without crashing
+- No `packages/tui` package created; TUI deferred to MemexShell Dashboard per ROADMAP.md 北极星
 - All TypeScript packages compile; all unit tests pass
