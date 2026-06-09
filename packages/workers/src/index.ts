@@ -33,6 +33,7 @@ import { SubScopeResultWorker, SUB_SCOPE_RESULT_TRIGGER_CONFIG } from './nested/
 import { CrystallizeWorker, CRYSTALLIZE_TRIGGER_CONFIG } from './memory/crystallize.worker.js';
 import { LessonSaveWorker, LESSON_SAVE_TRIGGER_CONFIG } from './memory/lesson-save.worker.js';
 import { McpClientWorker } from './integrations/mcp-client.worker.js';
+import { UserProfileWorker, USER_PROFILE_TRIGGER_CONFIG, USER_PROFILE_SCOPE_ID } from './memory/user-profile.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -84,6 +85,13 @@ void (async () => {
          ARRAY['memory-storage', 'lesson-dedup'], 'iii', NULL, '{}', 'active')
       ON CONFLICT (agent_id) DO NOTHING
     `);
+    // Pre-create the user-profile scope so occWrite can reference it as a valid foreign key (T4)
+    await pool.query(`
+      INSERT INTO execution_event_log (scope_id, entity_id, event_type, version_hash, status, payload)
+      VALUES ($1::uuid, gen_random_uuid(), 'scope_initialized',
+              encode(sha256('user-profile-scope'), 'hex'), 'completed', '{"scope":"user-profiles"}')
+      ON CONFLICT DO NOTHING
+    `, [USER_PROFILE_SCOPE_ID]);
   } catch {
     // Best-effort: agent_registry bootstrap failure must not crash the worker process (D-2)
   }
@@ -278,6 +286,21 @@ worker.registerFunction('graph::integration::mcp-client', async (_: unknown) => 
 });
 // Connect immediately at boot so tools are available without waiting for trigger
 void mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
+
+// graph::memory::user-profile — 3AM daily cron: synthesize cross-scope user profile from Crystals (T4)
+const userProfileWorker = new UserProfileWorker(pool, llmProvider);
+worker.registerFunction('graph::memory::user-profile', async (_payload: unknown) => {
+  const { rows: humanAgents } = await pool.query<{ agent_id: string }>(
+    `SELECT agent_id FROM agent_registry WHERE protocol = 'human'`,
+  );
+  let processed = 0;
+  for (const { agent_id } of humanAgents) {
+    const result = await userProfileWorker.synthesize(agent_id);
+    if (!('skipped' in result)) processed++;
+  }
+  return { processed };
+});
+worker.registerTrigger(USER_PROFILE_TRIGGER_CONFIG);
 
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();

@@ -1,0 +1,11 @@
+{
+  "name": "@graph/gateway-bot",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@graph/shared": "*",
+    "hono": "^4",
+    "pg": "8.21.0"
+  }
+}
