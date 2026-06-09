@@ -1,35 +1,33 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "planning",
-  "status": "in_progress",
-  "last_updated": "2026-06-09T16:30:00.000Z",
-  "current_state": "Phase 6 verified and pushed. Phase 7 not yet planned. ROADMAP.md §未来架构改进方向 lists 6 candidate items. Next step is /gsd-plan-phase 7 to scope and plan.",
+  "task": "gsd-phase-5-planning",
+  "status": "ready_to_plan",
+  "last_updated": "2026-06-09T18:00:00.000Z",
+  "current_state": "TrailReader refactor (Candidate B) complete and committed (d9e7e67). Phase 5 Architecture Hardening added to GSD .planning/ROADMAP.md with 6 success criteria (ARCH-01..ARCH-06). GSD phase directory .planning/phases/05-architecture-hardening/ created. Committed as 6cd35f9.",
   "completed_work": [
-    "Phase 6 verification sweep (harness-verify-before-move): all 10 steps passed",
-    "Doc sync committed (db8c2b3): implementation-notes Phase 5+6 decisions, 03-UAT.md complete, UI-SPEC.md stale phrase removed",
-    "Harness state updated (8879166): phase advanced to 07-architecture",
-    "Analysis docs committed (19e4355): 10 Hermes research + UAT artifacts tracked; search_*.json + dev-stack.log gitignored",
-    "GitHub: Issue #23 (Phase 3) closed with UAT evidence comment; Issue #10 (Pi Sandbox) relabeled status:on-hold",
-    "Pushed origin/master: a0e3959..19e4355 (11 commits)"
+    "TrailReader refactor committed d9e7e67: TrailReader interface, PoolTrailReader, StubTrailReader, GraphHandle/ReadOnlyGraphHandle extend TrailReader, 4 workers migrated, tests migrated. 215 pass, tsc clean.",
+    "Phase 5 Architecture Hardening added to .planning/ROADMAP.md with ARCH-01..ARCH-06 success criteria",
+    ".planning/phases/05-architecture-hardening/ directory created",
+    ".planning/STATE.md updated with Roadmap Evolution entry",
+    "Committed 6cd35f9: docs(planning): add Phase 5 Architecture Hardening to GSD roadmap"
   ],
   "remaining_work": [
-    "Run /gsd-plan-phase 7 to create 07-PLAN.md covering ROADMAP.md §未来架构改进方向 candidates",
-    "Phase 7 candidate items (from ROADMAP.md, not yet scoped):",
-    "  1. LLM Provider registry + FallbackProvider (ADR-22 extension)",
-    "  2. WebSocket/SSE real-time API (new ADR — Gateway WS handler, MemexTerminal stream)",
-    "  3. Centralized types package @graph/types (core / api / shell three-layer split)",
-    "  4. Global config.json (~/.memex/config.json — provider registry, channel tokens, gateway port)",
-    "  5. SKILL.md progressive loading + ClawHub format compat (Phase 5 T3 extension)",
-    "  6. CrystallizeWorker surgical distillation (nanobot Dream delta-not-overwrite principle)"
+    "ARCH-01: LLM Provider registry + FallbackProvider (circuit-breaker failover: timeout/rate_limit/overloaded → failover; auth/context_length/content_filter → direct error)",
+    "ARCH-02: WebSocket/SSE real-time event stream API — Gateway /v1/stream endpoint, MemexTerminal subscription",
+    "ARCH-03: @graph/types centralized package (core/api/shell three-layer split, Pi SDK alignment)",
+    "ARCH-04: ~/.memex/config.json global system config (Gateway port, channel tokens, provider registry with ${ENV_VAR} resolution)",
+    "ARCH-05: SKILL.md progressive loading — two-phase summary+full body strategy",
+    "ARCH-06: CrystallizeWorker surgical distillation — inject existing_lesson_content, output delta only"
   ],
   "decisions_made": [
-    "Phase 7 name: 07-architecture (not 07-shell — Shell is post-architecture; Core improvements come first)",
-    "Roam health score 5/100 dominated by load-bearing architectural bottlenecks (graph prop, buildApp, occWrite) — not actionable standalone refactors; improvement comes as natural side-effect of @graph/types and config layer work",
-    "T7 manual smoke tests (execute_bash, MCP client, Telegram, pairing) — deferred to Phase 7 or async; no live infra available in this session",
-    "Issue #15 (Graph-OS Console) stays open — Dashboard is MemexShell Phase 7+ work"
+    "Phase 7 harness items mapped to GSD Phase 5 (sequential numbering in GSD: 1-4 already existed, 5 is next)",
+    "GSD .planning/ROADMAP.md Phase 4 (External Integrations) left as-is — not backfilling completed harness phases 5/6 into GSD",
+    "ARCH-01 FallbackProvider error classification: timeout/rate_limit/overloaded → failover; auth/context_length/content_filter → direct throw (no failover)",
+    "TrailReader.pool is protected (not private) to enable GraphHandleImpl/ReadOnlyGraphHandleImpl subclassing",
+    "subagent.ts getTailVersionHash drops conflict_detected filter from original query — accepted tradeoff"
   ],
   "blockers": [],
-  "context": "Code baseline: 215 unit tests pass / 36 skipped (DB-gated) / tsc clean / origin up to date. ROADMAP.md has 6 未来架构改进方向 items all documented with rationale. The plan phase should scope to 1-2 items per wave to keep each wave within 1 context window.",
-  "next_action": "Run /gsd-plan-phase 7 to scope and plan Phase 7 — start with the ROADMAP.md §未来架构改进方向 list and pick the highest-leverage items for Phase 7 vs Phase 8+."
+  "context": "Two tracking systems coexist: harness (.harness/) tracks phases 04-07 with its own numbering; GSD (.planning/) tracks phases 1-4 plus newly added phase 5. They are independent — do not try to reconcile numbering. GSD Phase 5 = harness Phase 07-architecture remaining work.",
+  "next_action": "Run /gsd-plan-phase 5 to research and plan ARCH-01..ARCH-06 using the full GSD research→plan→checker pipeline."
 }
