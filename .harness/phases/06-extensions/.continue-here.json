@@ -4,16 +4,17 @@
   "task": "plan-review-and-fix",
   "status": "in_progress",
   "last_updated": "2026-06-09T15:10:00.000Z",
-  "current_state": "Cross-AI review of 06-PLAN.md complete (Gemini + Codex). 3 HIGH concerns identified. Plan needs targeted fixes before implementation begins.",
+  "current_state": "06-PLAN.md patched (cd90ee4). All HIGH review concerns resolved. Plan approved for execution.",
   "completed_work": [
     "Integration test fix (7c4227a): all 17 integration tests pass, data isolation confirmed",
     "Cross-AI review of 06-PLAN.md written to .harness/phases/06-extensions/06-REVIEWS.md (a5bea5e)",
     "src/__tests__/ confirmed as pre-monorepo unit tests (not dead code) — 71 passing cases, no package duplicates"
   ],
   "remaining_work": [
-    "Discuss review findings and agree on plan fixes",
-    "Update 06-PLAN.md to address agreed fixes (run /gsd-plan-phase 6 --reviews OR edit directly)",
-    "Execute Phase 6 T1–T5 after plan is fixed"
+    "Execute Phase 6 Wave 1: T1 McpClientWorker + T2 execute_bash",
+    "Execute Phase 6 Wave 2: T3 gateway-bot + T4 UserProfileWorker",
+    "Execute Phase 6 Wave 3: T5 agent pairing",
+    "Execute Phase 6 Wave 4: T7 manual verification checkpoint"
   ],
   "decisions_made": [
     "T6 (TUI) already superseded in 06-PLAN.md — but T7 verification step 6 and success criteria still reference graph-tui; both reviewers flagged this as LOW concern requiring cleanup",
@@ -25,5 +26,5 @@
   ],
   "blockers": [],
   "context": "Review is at .harness/phases/06-extensions/06-REVIEWS.md. The 3 HIGH concerns from both reviewers: (1) execute_bash sandbox gap, (2) McpClientWorker OCC predecessor chain unspecified, (3) pairing route X-Agent-ID spoofing / no rate limit on /pair. Next session should read the full REVIEWS.md and decide which fixes to incorporate into the plan before implementation.",
-  "next_action": "Read 06-REVIEWS.md, discuss the 3 HIGH concerns with user, agree on fixes, then either run /gsd-plan-phase 6 --reviews to replan or patch 06-PLAN.md directly with agreed changes."
+  "next_action": "Execute Phase 6 Wave 1 — implement T1 McpClientWorker (packages/workers/src/integrations/mcp-client.worker.ts) and T2 execute_bash (packages/gateway/src/mcp/server.ts). Plan is approved."
 }

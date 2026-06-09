@@ -10,6 +10,6 @@
     "phase": "06-extensions",
     "active": "Review 06-PLAN.md with cross-AI feedback, fix plan before execution",
     "resume_file": ".harness/phases/06-extensions/.continue-here.json",
-    "stopped_at": "Cross-AI review complete (a5bea5e): Gemini + Codex flagged 3 HIGH concerns in 06-PLAN.md — execute_bash sandbox, McpClientWorker predecessor chain, messaging idempotency. Plan needs fixes before implementation."
+    "stopped_at": "06-PLAN.md patched (cd90ee4): all 3 HIGH review concerns addressed — calling scope for T1, sandbox+audit for T2, idempotency+sig for T3. Ready to execute Phase 6 T1–T5."
   }
 }
