@@ -26,6 +26,7 @@ import { buildMemoryRoute } from './routes/memory.js';
 import { buildMcpRoute } from './routes/mcp.js';
 import { buildAgentsRoute } from './routes/agents.js';
 import { buildStreamRoute } from './routes/stream.js';
+import { buildSkillsRoute } from './routes/skills.js';
 import { OpenAICompatibleProvider } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
@@ -58,6 +59,7 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildTopologyRoute(pool));
   app.route('/v1', buildMemoryRoute(pool, gatewayLlmProvider));
   app.route('/v1', buildStreamRoute(pool));
+  app.route('/v1', buildSkillsRoute());
   app.route('/', buildMcpRoute(pool));
   app.route('/', buildAgentsRoute(pool));
 
