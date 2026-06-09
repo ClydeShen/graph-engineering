@@ -9,7 +9,7 @@ vi.mock('@graph/shared', () => ({
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-const mockPool = { query: vi.fn().mockResolvedValue({ rows: [] }) } as never;
+const mockPool = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as { query: ReturnType<typeof vi.fn> } & import('pg').Pool;
 
 function makeSdk() {
   return { trigger: vi.fn().mockResolvedValue(undefined) };
