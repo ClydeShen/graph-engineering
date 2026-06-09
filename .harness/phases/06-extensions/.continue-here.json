@@ -1,30 +1,31 @@
 {
   "version": "1.0",
   "phase": "06-extensions",
-  "task": "plan-review-and-fix",
+  "task": "t7-verification-checkpoint",
   "status": "in_progress",
-  "last_updated": "2026-06-09T15:10:00.000Z",
-  "current_state": "06-PLAN.md patched (cd90ee4). All HIGH review concerns resolved. Plan approved for execution.",
+  "last_updated": "2026-06-09T15:46:30.000Z",
+  "current_state": "All implementation waves committed. T7 automated checks pass. Awaiting human approval for manual smoke tests (steps 3-5, 7).",
   "completed_work": [
-    "Integration test fix (7c4227a): all 17 integration tests pass, data isolation confirmed",
-    "Cross-AI review of 06-PLAN.md written to .harness/phases/06-extensions/06-REVIEWS.md (a5bea5e)",
-    "src/__tests__/ confirmed as pre-monorepo unit tests (not dead code) — 71 passing cases, no package duplicates"
+    "Wave 1 (5aa50e5): T1 McpClientWorker + T2 execute_bash — 6 tests",
+    "Wave 2 (22739c8): T3 gateway-bot (Telegram/Discord Ed25519) + T4 UserProfileWorker — 10 tests",
+    "Wave 3 (aec9da8): T5 cryptographic agent pairing (sha256+salt, timingSafeEqual, Map) — 7 tests",
+    "TS fix (589d3ef): gateway-bot Pool name conflict resolved",
+    "T7 step 1 (tsc): all packages compile clean (EXIT:0)",
+    "T7 step 2 (vitest): 215 tests pass, 36 skipped DB-gated",
+    "T7 step 6 (superseded): confirmed packages/tui does not exist"
   ],
   "remaining_work": [
-    "Execute Phase 6 Wave 1: T1 McpClientWorker + T2 execute_bash",
-    "Execute Phase 6 Wave 2: T3 gateway-bot + T4 UserProfileWorker",
-    "Execute Phase 6 Wave 3: T5 agent pairing",
-    "Execute Phase 6 Wave 4: T7 manual verification checkpoint"
+    "T7 step 3: manual CommandGate + execute_bash smoke test (requires running gateway)",
+    "T7 step 4: manual MCP client tool discovery smoke test (requires running gateway + MCP server)",
+    "T7 step 5: Telegram smoke test (requires TELEGRAM_BOT_TOKEN + running bot)",
+    "T7 step 7: agent pairing smoke test (requires running gateway with REQUIRE_AGENT_PAIRING=true)"
   ],
   "decisions_made": [
-    "T6 (TUI) already superseded in 06-PLAN.md — but T7 verification step 6 and success criteria still reference graph-tui; both reviewers flagged this as LOW concern requiring cleanup",
-    "execute_bash (T2): Gemini recommends chroot/nsenter; Codex recommends execFile + env scrub + fixed cwd + blocked-attempt audit events. Both agree Docker can be deferred. This is HIGH severity.",
-    "McpClientWorker (T1): integration scope vs calling scope is an open question. Gemini says tool results should go to the calling scope (agent visibility). Codex says per-server/per-tool chain within integration scope. Key question: is integration scope visible in calling context assembly?",
-    "Messaging idempotency (T3): Telegram update_id + Discord interaction_id must be in task_spawned payload. Discord signature verification must be acceptance criterion, not just impl note.",
-    "Pairing (T5): Codex rates in-memory Map as HIGH risk for multi-user; Gemini rates LOW. Depends on whether single-process gateway is the stated constraint for Phase 6.",
-    "src/__tests__/ is NOT dead code — 71 passing tests, pre-monorepo style, covering modules with no package-level tests (watchdog, tool-boundary, context-assembly, worker-lifecycle, etc.)"
+    "T3 Discord: implemented Ed25519 (plan text says HMAC-SHA256, that is a misnomer — actual Discord headers are X-Signature-Ed25519)",
+    "T3 dispatchMessage: new UUID scope per message (production limitation noted in router.ts comment — production should use nestScope)",
+    "T5 pairing: pairingGuard is per-request env check (not construction-time) to allow runtime toggle"
   ],
   "blockers": [],
-  "context": "Review is at .harness/phases/06-extensions/06-REVIEWS.md. The 3 HIGH concerns from both reviewers: (1) execute_bash sandbox gap, (2) McpClientWorker OCC predecessor chain unspecified, (3) pairing route X-Agent-ID spoofing / no rate limit on /pair. Next session should read the full REVIEWS.md and decide which fixes to incorporate into the plan before implementation.",
-  "next_action": "Execute Phase 6 Wave 1 — implement T1 McpClientWorker (packages/workers/src/integrations/mcp-client.worker.ts) and T2 execute_bash (packages/gateway/src/mcp/server.ts). Plan is approved."
+  "context": "Manual verification steps (3-5, 7) require a running DATABASE_URL and external tokens. Reply 'approved' when all T7 checks pass per 06-PLAN.md §Task 7.",
+  "next_action": "User runs T7 manual smoke tests (steps 3-5, 7) and replies 'approved' to complete Phase 6."
 }
