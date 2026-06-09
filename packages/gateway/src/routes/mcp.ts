@@ -29,9 +29,26 @@ import { Hono, type Handler } from 'hono';
 import type { Pool } from 'pg';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { buildMcpServer } from '../mcp/server.js';
+import { isPaired } from '../auth/pairing.js';
 
 export function buildMcpRoute(pool: Pool): Hono {
   const app = new Hono();
+
+  // ── REQUIRE_AGENT_PAIRING middleware (Phase 6 T5) ──────────────────────
+  // When REQUIRE_AGENT_PAIRING=true, every MCP request must present X-Agent-ID
+  // from a paired agent. Pairing is established via POST /pair. Single-process
+  // only — see pairing.ts implementation notes.
+  const pairingGuard: Handler = async (c, next) => {
+    if (process.env['REQUIRE_AGENT_PAIRING'] !== 'true') return next();
+    const agentId = c.req.header('X-Agent-ID');
+    if (!agentId || !isPaired(agentId)) {
+      return c.json({ error: 'Agent not paired. POST /pair with your pairing code.' }, 401);
+    }
+    return next();
+  };
+  app.use('/mcp/sse', pairingGuard);
+  app.use('/mcp', pairingGuard);
+  app.use('/mcp/messages', pairingGuard);
 
   // ── GET /mcp/sse — SSE push stream ─────────────────────────────────────
   // D-4: SSE carries no task content, only availability signals.

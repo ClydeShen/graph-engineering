@@ -28,6 +28,7 @@ import { buildAgentsRoute } from './routes/agents.js';
 import { OpenAICompatibleProvider } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
+import { generatePairingCode, verifyPairingCode, markPaired, TTL_SECONDS } from './auth/pairing.js';
 
 const DEFAULT_W_MAX = 4096;
 
@@ -57,6 +58,29 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildMemoryRoute(pool, gatewayLlmProvider));
   app.route('/', buildMcpRoute(pool));
   app.route('/', buildAgentsRoute(pool));
+
+  // POST /pair/generate — admin-only; gated by GRAPH_RUNTIME_SECRET Bearer token
+  app.post('/pair/generate', async (c) => {
+    const secret = process.env['GRAPH_RUNTIME_SECRET'];
+    if (secret) {
+      const auth = c.req.header('Authorization');
+      if (auth !== `Bearer ${secret}`) return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const { agent_id } = (await c.req.json()) as { agent_id: string };
+    const { code } = generatePairingCode(agent_id);
+    return c.json({ code, expires_in_s: TTL_SECONDS });
+  });
+
+  // POST /pair — verify pairing code and mark agent as paired
+  app.post('/pair', async (c) => {
+    const { agent_id, code } = (await c.req.json()) as { agent_id: string; code: string };
+    const result = verifyPairingCode(agent_id, code);
+    if (result.ok) {
+      markPaired(agent_id);
+      return c.json({ paired: true });
+    }
+    return c.json({ error: result.reason }, 401);
+  });
 
   return app;
 }
