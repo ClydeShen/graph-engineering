@@ -10,7 +10,9 @@ import { CrystallizeWorker } from './crystallize.worker.js';
 
 function makePool(rows: { content: string }[]) {
   return {
-    query: vi.fn().mockResolvedValue({ rows, rowCount: rows.length }),
+    query: vi.fn()
+      .mockResolvedValueOnce({ rows, rowCount: rows.length })
+      .mockResolvedValue({ rows: [], rowCount: 0 }),
   };
 }
 
@@ -60,5 +62,38 @@ describe('CrystallizeWorker', () => {
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 
     expect(vi.mocked(writeGuard)).toHaveBeenCalledWith('trace X');
+  });
+
+  it('passes existing lesson content to LLM when lesson exists', async () => {
+    const pool = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ content: 'trace A' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [{ content: 'prior lesson text' }], rowCount: 1 }),
+    };
+    const sdk = makeSdk();
+    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, sdk);
+
+    await worker.onScopeClosed('scope-3', 'entity-3', 'HASH');
+
+    expect(mockChat).toHaveBeenCalledOnce();
+    const [messages] = mockChat.mock.calls[0] as [Array<{ role: string; content: string }>];
+    expect(messages[0].content).toContain('ONLY the delta');
+    expect(messages[1].content).toContain('EXISTING LESSON:');
+  });
+
+  it('uses full prompt when no existing lesson found', async () => {
+    const pool = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ content: 'trace B' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }),
+    };
+    const sdk = makeSdk();
+    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, sdk);
+
+    await worker.onScopeClosed('scope-4', 'entity-4', 'HASH');
+
+    expect(mockChat).toHaveBeenCalledOnce();
+    const [messages] = mockChat.mock.calls[0] as [Array<{ role: string; content: string }>];
+    expect(messages[0].content).toBe('Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.');
   });
 });
