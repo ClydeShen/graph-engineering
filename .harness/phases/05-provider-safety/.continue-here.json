@@ -1,39 +1,30 @@
 {
   "version": "1.0",
   "phase": "05-provider-safety",
-  "task": null,
-  "status": "ready",
-  "last_updated": "2026-06-09T14:30:00.000Z",
-  "current_state": "04-plugs complete (e0cad38). SOLID factory in place, LLMProviderConfig established. Phase 5 T1 factory stub ready to fill.",
+  "task": "T5-verify",
+  "status": "in_progress",
+  "last_updated": "2026-06-09T15:00:00.000Z",
+  "current_state": "T1-T4 committed (5cec330). tsc 0 errors, vitest 188 pass. T5 manual checkpoint pending.",
   "completed_work": [
-    "Hermes-agent deep research report: .harness/analysis/hermes-agent-deep-research-report.md (all 9 questions, file:line citations, cross-validated)",
-    "Hermes citation verification: 19/19 citations confirmed; DANGEROUS_PATTERNS comment says 47 but actual list has 54 (stale comment in source)",
-    "Hermes vs graph-runtime gap analysis: .harness/analysis/hermes-graph-comparison.md",
-    "Phase 5 plan written: .harness/phases/05-provider-safety/05-PLAN.md (T1–T5, 4 implementation tasks + checkpoint)",
-    "Phase 6 plan written: .harness/phases/06-extensions/06-PLAN.md (T1–T7, 6 implementation tasks + checkpoint)",
-    "ROADMAP.md updated with phases 04 (complete), 05, 06",
-    "Phase 4 implementation + UAT + plan committed (2959381, 51307de)",
-    "04-plugs refactor: SOLID factory, LLMProviderConfig, env var swap, pi-extension shim DRY, LLMProviderConfig extends PiProviderConfig — committed 504f824, e0cad38"
+    "T1: packages/shared/src/llm/anthropic.provider.ts (AnthropicProvider, raw fetch, /v1/messages, anthropic-version header). factory.ts stub filled. llm/index.ts updated. 4 tests pass.",
+    "T2: packages/shared/src/command-gate.ts (12 HARDLINE + 54 DANGEROUS patterns, checkCommand()). Exported from @graph/shared. Hook comment above buildMcpServer(). 18 tests pass.",
+    "T3: LessonSaveWorker: skillsDir arg, exportSkill(), SKILL_EXPORT_THRESHOLD, SKILLS_DIR. Writes skills/<fingerprint_id>/SKILL.md with agentskills.io frontmatter (requires.bins/env, always: false). Threshold crossing via TypeScript Ebbinghaus computation.",
+    "T4: packages/shared/src/notify.ts (NotifyPayload, notify()). Wired into CrystallizeWorker.onScopeClosed (after occWrite) and LessonSaveWorker.exportSkill. 3 tests pass. crystallize.worker.test.ts mock updated with notify: vi.fn().",
+    "All committed in 5cec330. tsc --noEmit: 0. vitest: 188 passed, 0 failed."
   ],
   "remaining_work": [
-    "T1: packages/shared/src/llm/anthropic.provider.ts (AnthropicProvider implementing LLMProvider) + fill factory.ts stub + add to llm/index.ts. Use raw fetch() — no @anthropic-ai/sdk dep. Ref: nanobot anthropic_provider.py for message format conversion.",
-    "T2: packages/shared/src/command-gate.ts (12 HARDLINE + 54 DANGEROUS patterns) + tests (all 54 patterns from 05-PLAN.md Appendix A, /is flag) + hook comment in mcp/server.ts",
-    "T3: LessonSaveWorker skill export to skills/<fingerprint_id>/SKILL.md on confidence >= SKILL_EXPORT_THRESHOLD (0.7). Frontmatter: requires.bins/env + always fields. TypeScript computation: prevConf + 0.1*(1-prevConf) >= threshold.",
-    "T4: packages/shared/src/notify.ts + webhook POST in CrystallizeWorker + LessonSaveWorker",
-    "T5: manual verification checkpoint (8 checks listed in 05-PLAN.md)"
+    "T5: Manual verification checkpoint — 8 checks listed in 05-PLAN.md. Key automated ones: tsc (done), vitest (done). Manual: smoke-test AnthropicProvider with real API key, smoke-test CommandGate node -e, smoke-test skill export with SKILLS_DIR=/tmp, smoke-test webhook with webhook.site.",
+    "lesson-save.worker.test.ts: T3 test cases NOT yet added (4 cases: confidence ≥0.7 export, <0.7 no export, threshold crossing, stay below). Add these before T5 sign-off.",
+    "After T5: begin Phase 6 (06-PLAN.md T1-T5 + T7)."
   ],
   "decisions_made": [
-    "Phase 5 = P0+P1 from gap analysis: AnthropicProvider, CommandGate, agentskills.io export, webhook notify",
-    "Phase 6 = P2-P4: MCP client inbound, execute_bash (gated by EXECUTE_BASH_ENABLED=false default), Telegram+Discord gateway, UserProfileWorker (internal, no Honcho dep), cryptographic pairing, read-only TUI",
-    "AnthropicProvider uses raw fetch() matching openai-compatible.provider.ts pattern — no @anthropic-ai/sdk dep",
-    "CommandGate ports 54 DANGEROUS patterns (overrides stale '47' comment in hermes source); hermes-specific patterns adapted to graph-runtime context",
-    "SKILL_EXPORT_THRESHOLD default 0.7; one-time export on confidence-crossing, not every reinforcement",
-    "UserProfileWorker uses stable scope UUID '00000000-0000-4000-8000-000000000001' dedicated to user profiles",
-    "execute_bash tool registered only when EXECUTE_BASH_ENABLED=true (default false) to prevent unintended RCE",
-    "Agent pairing is in-process Map (not PostgreSQL-persisted); loses on restart by design (hermes analogy)",
-    "Pi SDK type alignment done in 04-plugs: LLMProviderConfig extends Pick<PiProviderConfig,'baseUrl'|'apiKey'>; ExtensionAPI stays local in shim (TypeBox dep not resolvable)"
+    "AnthropicProvider: raw fetch(), no @anthropic-ai/sdk dep, baseUrl defaults to https://api.anthropic.com",
+    "CommandGate: 54 DANGEROUS use /is flag (dotall), 12 HARDLINE use /i flag; checkCommand normalizes via toLowerCase().trim().replace(/\\s+/g,' ')",
+    "LessonSaveWorker.exportSkill: name derived from first line (strip #, lowercase, hyphenate, strip non-[a-z0-9-]); description from second non-empty line; mkdir recursive (idempotent)",
+    "notify() swallows all errors via console.warn; never throws to caller",
+    "crystallize.worker.test.ts: added notify: vi.fn().mockResolvedValue(undefined) to @graph/shared mock"
   ],
   "blockers": [],
-  "context": "The LLMProvider interface and OpenAICompatibleProvider already exist in packages/shared/src/llm/. Factory stub in factory.ts returns throw for 'anthropic-messages'. Phase 5 T1 is additive: new file + fill the stub. All 7 MCP tools in gateway/src/mcp/server.ts are graph-write tools (no bash execution) — CommandGate (T2) is pre-wired infrastructure for execute_bash added in Phase 6 T2.",
-  "next_action": "Start Phase 5 T1: read 05-PLAN.md T1 AC, read packages/shared/src/llm/factory.ts + openai-compatible.provider.ts, then create anthropic.provider.ts implementing LLMProvider using raw fetch() to api.anthropic.com/v1/messages. Fill the factory.ts stub. Add to llm/index.ts. Run tsc+vitest."
+  "context": "All Phase 5 implementation code is committed. One test gap: lesson-save.worker.test.ts needs 4 new cases for T3 (fs mocked via vi.mock('node:fs/promises')). This should be done before T5 sign-off.",
+  "next_action": "Add 4 test cases to packages/workers/src/memory/lesson-save.worker.test.ts for T3 (mock node:fs/promises, test exportSkill threshold crossing). Then run T5 manual verification steps 1-4 (automated) and record results. Begin Phase 6 after T5 approved."
 }
