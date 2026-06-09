@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { writeGuard, occWrite } from '@graph/shared';
+import { writeGuard, occWrite, notify } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 
 export const CRYSTALLIZE_TRIGGER_CONFIG = {
@@ -40,6 +40,8 @@ export class CrystallizeWorker {
       payload: { crystal: llmOutput, source: 'crystallize', scope_id: scopeId },
       eventType: 'memory_updated',
     });
+
+    await notify({ type: 'crystal', scope_id: scopeId, summary: llmOutput.slice(0, 200) });
 
     await this.sdk.trigger({
       function_id: 'graph::memory::lesson-save',

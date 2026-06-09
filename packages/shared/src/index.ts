@@ -13,3 +13,5 @@ export * from './tokenizer.js';
 export * from './logger.js';
 export * from './llm/index.js';
 export * from './write-guard.js';
+export * from './command-gate.js';
+export * from './notify.js';

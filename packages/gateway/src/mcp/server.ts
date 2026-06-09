@@ -82,6 +82,9 @@ const UPSERT_AGENT_SQL = `
   RETURNING agent_id
 `;
 
+// COMMAND GATE: any tool that executes user-supplied shell commands MUST call
+// checkCommand() before execution. See packages/shared/src/command-gate.ts.
+
 /**
  * Build a McpServer with all 7 tools registered.
  * The server instance is created once and reused across requests (Pitfall 2).

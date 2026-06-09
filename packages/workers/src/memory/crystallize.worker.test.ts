@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
   occWrite: vi.fn().mockResolvedValue({ version_hash: 'v-hash', occ_result: 'won', event_type: 'memory_updated' }),
+  notify: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { CrystallizeWorker } from './crystallize.worker.js';
