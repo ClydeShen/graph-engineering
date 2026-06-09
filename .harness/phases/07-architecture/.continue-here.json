@@ -2,32 +2,28 @@
   "version": "1.0",
   "phase": "07-architecture",
   "task": "pre-phase-6-architecture-refactors",
-  "status": "ready_to_execute",
-  "last_updated": "2026-06-10T00:15:00.000Z",
-  "current_state": "Phase 5 Architecture Hardening complete (UAT 9/9 passed, committed 27c11043). Architecture review run via /improve-codebase-architecture — 5 candidates identified. User confirmed: 'yes, explore and fix'. Ready to implement all candidates before Phase 6.",
+  "status": "complete",
+  "last_updated": "2026-06-10T09:08:00.000Z",
+  "current_state": "All 4 architecture candidates implemented and committed. 255 tests pass, tsc clean. Candidate 5 (Speculative) intentionally skipped — route tests not actively painful.",
   "completed_work": [
-    "Phase 5 UAT: 9/9 tests passed (classifyProviderError, FallbackProvider, SSE stream, @graph/types, config loader, skills route, crystallize delta)",
-    "ROADMAP.md + STATE.md updated (Phase 5 marked complete 6/6 plans)",
-    "/improve-codebase-architecture ran — HTML report at C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610.html",
-    "Architecture review: roam health 5/100, 5 candidates identified and ranked"
+    "Phase 5 UAT: 9/9 passed — all ARCH plans verified",
+    "Architecture review: roam health 5/100, 5 candidates identified",
+    "Candidate 1 (MemoryRepository seam): packages/workers/src/base/memory-repository.ts created; 6 Workers refactored; index.ts updated; 6 unit tests + gate3 integration test updated; commit e13bee8a",
+    "Candidate 2 (Lifecycle state machine): runLifecycle loadAttempt internalized; LifecycleResult type exported; tests rewritten to assert on typed result; commit fab4123d",
+    "Candidate 3 (Graph prop consolidation): ReadOnlyGraphHandle + SecurityException + PoolReadOnlyGraphHandle merged into graph-handle.ts; StubGraphHandle added; read-only-handle.ts deleted; commit 79c5d035",
+    "Candidate 4 (Type-safe registration): FUNCTION_ID added to ConflictResolverWorker; LESSON_SAVE_TRIGGER_CONFIG used in crystallize.worker.ts; all 14 string literals in index.ts replaced with typed TRIGGER_CONFIG.function_id refs; commit 073c586e"
   ],
   "remaining_work": [
-    "Implement Candidate 1 (Strong): MemoryRepository seam — 9 Workers → pool.query() replaced with typed interface; StubMemoryRepository for tests; PoolMemoryRepository adapter holds all SQL",
-    "Implement Candidate 2 (Strong): Lifecycle state machine deepening — remove loadAttempt from runLifecycle interface; internalize re-queue loop and MAX_LOAD_REQUEUE; export 3-value result enum (done | suspended | exhausted)",
-    "Implement Candidate 3 (Worth exploring): Consolidate graph prop — merge ReadOnlyGraphHandle interface into graph-handle.ts; co-locate PoolGraphHandle + StubGraphHandle in one file",
-    "Implement Candidate 4 (Worth exploring): Type-safe Worker registration — each Worker exports FUNCTION_ID const; index.ts uses typed imports instead of string literals",
-    "Implement Candidate 5 (Speculative): Route builder hidden deps — RouteContext struct + makeKnapsackGraph factory; only if route tests are painful"
+    "Candidate 5 (Speculative): Route builder hidden deps — RouteContext struct + makeKnapsackGraph factory; skip unless route tests are actively painful"
   ],
   "decisions_made": [
-    "Architecture review identified 5 candidates ranked: MemoryRepository (Strong) > Lifecycle (Strong) > graph-prop consolidation (Worth exploring) > type-safe registration (Worth exploring) > route builder deps (Speculative)",
-    "Top recommendation: Candidates 1+2 together in one pre-Phase-6 cleanup pass (in-process, no cross-package coordination)",
-    "HTML report written to C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610.html",
-    "Pool coupling: 9 Workers average 8 pool.query() calls each — no MemoryRepository or DataAccessLayer exists today",
-    "runLifecycle leaks loadAttempt param + error.escalated check to callers — ADR 27 violation (lifecycle state machine not encapsulated)",
-    "graph prop requires 3-file lookup: tool.interface.ts → read-only-handle.ts → graph-handle.ts",
-    "Worker function_id strings: 14 registrations, no compile-time safety on string literals"
+    "Candidate 5 skipped: route tests not actively painful; speculative scope not justified",
+    "LifecycleResult includes 'suspended' as forward-declared reserved value (not yet returned by any code path)",
+    "GraphHandleImpl renamed to PoolGraphHandle for naming consistency with PoolMemoryRepository/PoolTrailReader",
+    "read-only-handle.ts deleted outright (no re-export barrel) per CLAUDE.md anti-backward-compat rule",
+    "CrystallizeWorker imports LESSON_SAVE_TRIGGER_CONFIG from lesson-save.worker.ts — no circular dependency since lesson-save does not import crystallize"
   ],
   "blockers": [],
-  "context": "Two tracking systems: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Phase 5 is fully complete. Next harness phase would be 08 (if created). These architecture refactors are pre-Phase-6 cleanup — not a new GSD phase. The architecture report HTML is only in the temp dir and will not survive a reboot.",
-  "next_action": "Start a new session with /session-start, then implement Candidates 1 and 2 together: MemoryRepository seam + Lifecycle state machine deepening — both are in-process changes in packages/workers, no cross-package coordination needed."
+  "context": "Two tracking systems: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Phase 5 is complete. These architecture refactors were pre-Phase-6 cleanup. Phase 6 (Extensions) is next.",
+  "next_action": "Run /harness-verify-before-move to perform phase exit sweep, then advance to Phase 6 (Extensions) per .harness/ROADMAP.md."
 }
