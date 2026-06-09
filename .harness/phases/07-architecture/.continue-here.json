@@ -1,41 +1,32 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "gsd-phase-5-execution",
-  "status": "ready_to_execute",
-  "last_updated": "2026-06-09T23:55:00.000Z",
-  "current_state": "GSD Phase 5 planning COMPLETE (commit ad72735). 6 ARCH plans written, checker-verified, and committed. Research based on nanobot + hermes-agent specimen analysis (DRY patterns). Ready to execute.",
+  "task": "gsd-phase-5-verification",
+  "status": "ready_to_verify",
+  "last_updated": "2026-06-09T23:50:00.000Z",
+  "current_state": "GSD Phase 5 execution COMPLETE. All 6 ARCH plans executed, merged, tsc clean, 254 tests passing (up from 215). Two merge conflicts manually resolved (see decisions_made). Ready for verification.",
   "completed_work": [
-    "TrailReader refactor committed d9e7e67: TrailReader interface, PoolTrailReader, StubTrailReader. 215 tests pass, tsc clean.",
-    "Phase 5 Architecture Hardening added to .planning/ROADMAP.md with ARCH-01..ARCH-06 success criteria (commit 6cd35f9)",
-    "pg_notify wiring: id added to OCC SQL RETURNING, fire-and-forget pg_notify in occ-write.ts",
-    "ctrl boot crash fix and EpisodicMemoryWorker trigger added to pulse-fetch.ts (commits 4f1a4d2, 9af8dd4)",
-    "E2E verified: episodic_memory count increases after task_spawned event with correct predecessor_hash",
-    "/gsd-cleanup: archived phases 01-03 to .planning/milestones/v1.0-phases/ (commit 306ce36)",
-    "/gsd-docs-update: 14 doc files generated (commit 87baeaa)",
-    "GSD Phase 5 planning: RESEARCH.md + PATTERNS.md + 6 ARCH PLAN.md files committed (ad72735)"
+    "05-01: classifyProviderError() + FallbackProvider — 15 tests, hermes-agent FailoverReason pattern ported",
+    "05-02: SSE GET /v1/stream route — pg_notify 'graph_event_ready' bridge, try/finally client.release(), 3 tests",
+    "05-03: @graph/types leaf package — core/api/shell sub-paths, zero @graph/* deps, re-export shim in shared/src/types.ts",
+    "05-04: loadMemexConfig() — null-safe, Zod-validated, ${ENV_VAR} interpolation, 7 tests",
+    "05-05: GET /v1/skills + GET /v1/skills/:id — two-phase frontmatter loading, mtime cache (>), path traversal guard, 12 tests",
+    "05-06: CrystallizeWorker delta injection — fingerprintId SHA-256, procedural_memory lookup, conditional LLM prompt, 5 tests",
+    "Post-merge: tsc --noEmit clean, vitest 254 passed (42 files), all conflicts manually resolved"
   ],
   "remaining_work": [
-    "ARCH-01: classifyProviderError + FallbackProvider (packages/shared/src/llm/)",
-    "ARCH-02: SSE /v1/stream route (packages/gateway/src/routes/stream.ts)",
-    "ARCH-03: @graph/types leaf package (packages/types/)",
-    "ARCH-04: ~/.memex/config.json loader (packages/shared/src/config/loader.ts)",
-    "ARCH-05: SKILL.md two-phase loading — GET /v1/skills + GET /v1/skills/:id (wave 2, after ARCH-02)",
-    "ARCH-06: CrystallizeWorker delta injection — existing_lesson_content injected before LLM call (wave 2)"
+    "Run /gsd-verify-phase 5 — verifier checks ARCH-01..06 success criteria against actual codebase",
+    "Update .harness/phases/07-architecture/.continue-here.json to 'complete' after verification passes",
+    "Commit VERIFICATION.md"
   ],
   "decisions_made": [
-    "Phase 7 harness items mapped to GSD Phase 5 (sequential numbering in GSD: 1-4 already existed, 5 is next)",
-    "GSD .planning/ROADMAP.md Phase 4 (External Integrations) left as-is — not backfilling completed harness phases 5/6 into GSD",
-    "ARCH-01 FallbackProvider error classification: timeout/rate_limit/overloaded → failover; auth/context_length/content_filter → direct throw (no failover)",
-    "DRY: FailoverReason enum + classifyProviderError() ported from hermes-agent error_classifier.py",
-    "DRY: delta injection pattern from hermes-agent curator.py for ARCH-06",
-    "DRY: two-phase skill loading from hermes-agent skill_bundles.py for ARCH-05",
-    "@graph/types is a leaf package — zero @graph/* deps to prevent circular imports",
-    "CanonicalEventType in @graph/types/api is an intentional controlled duplicate (documented in implementation-notes)",
-    "node:crypto for lesson fingerprints is NOT a pgcrypto violation — pgcrypto constraint applies to OCC version_hash chain only",
-    "05-05 is Wave 2 (depends on 05-02) — both modify packages/gateway/src/index.ts"
+    "05-06 merge conflict: worktree based on pre-TrailReader commit (53b79081); delta injection applied onto master's TrailReader version (reader.getEpisodicRecords kept, fingerprintId + procedural_memory SELECT + conditional prompt added on top)",
+    "05-05 merge conflict: gateway/src/index.ts needed both buildStreamRoute (05-02) and buildSkillsRoute (05-05) — both imports and mounts added; tsconfig.json kept root-relative @graph/types paths (master) over worktree's ../../../ paths",
+    "mockPool type fix: `as never` in crystallize.worker.test.ts removed vi.fn() access from new delta tests; changed to `as unknown as { query: ReturnType<typeof vi.fn> } & Pool`",
+    "CanonicalEventType in @graph/types/api is intentional controlled duplicate (no @graph/shared import to avoid circular dep)",
+    "node:crypto for lesson fingerprints is established precedent (not a pgcrypto violation — pgcrypto applies to OCC version_hash chain only)"
   ],
   "blockers": [],
-  "context": "Two tracking systems coexist: harness (.harness/) tracks phases 04-07 with its own numbering; GSD (.planning/) tracks phases 1-5. They are independent — do not try to reconcile numbering. GSD Phase 5 = harness Phase 07-architecture remaining work. Running services use C:\\Temp\\start-workers.cmd and C:\\Temp\\start-ctrl.cmd batch scripts (Windows env inheritance workaround).",
-  "next_action": "Run /gsd-execute-phase 5 to implement ARCH-01..ARCH-06. Wave 1 (01+02+03+04 parallel), then Wave 2 (05+06 after Wave 1 complete)."
+  "context": "Two tracking systems coexist: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Independent. GSD Phase 5 = harness Phase 07-architecture. Wave 2 agents were spawned AFTER Wave 1 agents but BEFORE Wave 1 merges completed — their worktrees branched from pre-merge HEAD, causing the gateway index and tsconfig conflicts.",
+  "next_action": "Run /gsd-verify-phase 5 to spawn gsd-verifier and produce VERIFICATION.md checking ARCH-01..06 success criteria."
 }
