@@ -1,31 +1,36 @@
 {
   "version": "1.0",
   "phase": "06-extensions",
-  "task": "t7-verification-checkpoint",
+  "task": "post-phase6-snapshot-and-structure",
   "status": "in_progress",
-  "last_updated": "2026-06-09T15:46:30.000Z",
-  "current_state": "All implementation waves committed. T7 automated checks pass. Awaiting human approval for manual smoke tests (steps 3-5, 7).",
+  "last_updated": "2026-06-09T15:50:00.000Z",
+  "current_state": "Phase 6 T1-T5 implementation complete. All 215 unit tests pass, tsc clean. T7 manual smoke tests (steps 3-5,7) await human approval. User has requested a project snapshot and codebase structure improvement for the next session.",
   "completed_work": [
-    "Wave 1 (5aa50e5): T1 McpClientWorker + T2 execute_bash — 6 tests",
-    "Wave 2 (22739c8): T3 gateway-bot (Telegram/Discord Ed25519) + T4 UserProfileWorker — 10 tests",
-    "Wave 3 (aec9da8): T5 cryptographic agent pairing (sha256+salt, timingSafeEqual, Map) — 7 tests",
-    "TS fix (589d3ef): gateway-bot Pool name conflict resolved",
-    "T7 step 1 (tsc): all packages compile clean (EXIT:0)",
-    "T7 step 2 (vitest): 215 tests pass, 36 skipped DB-gated",
-    "T7 step 6 (superseded): confirmed packages/tui does not exist"
+    "Wave 1 (5aa50e5): T1 McpClientWorker (packages/workers/src/integrations/mcp-client.worker.ts) + T2 execute_bash (packages/gateway/src/mcp/server.ts) — 6 tests",
+    "Wave 2 (22739c8): T3 packages/gateway-bot/ (Telegram long-poll, Discord Ed25519 sig check, dispatchMessage+source_message_id) + T4 UserProfileWorker (packages/workers/src/memory/user-profile.worker.ts, 3AM cron, USER_PROFILE_SCOPE_ID) — 10 tests",
+    "Wave 3 (aec9da8): T5 packages/gateway/src/auth/pairing.ts (generatePairingCode/verifyPairingCode/isPaired/markPaired, sha256+salt, timingSafeEqual, TTL=3600, MAX_FAILED=5) + middleware in mcp.ts + /pair /pair/generate routes in index.ts — 7 tests",
+    "TS fix (589d3ef): gateway-bot Pool import conflict resolved",
+    "Checkpoint (fabc9a6): harness state updated",
+    "T7 automated checks: tsc EXIT:0, vitest 215 pass/36 skip, packages/tui absent confirmed"
   ],
   "remaining_work": [
-    "T7 step 3: manual CommandGate + execute_bash smoke test (requires running gateway)",
-    "T7 step 4: manual MCP client tool discovery smoke test (requires running gateway + MCP server)",
-    "T7 step 5: Telegram smoke test (requires TELEGRAM_BOT_TOKEN + running bot)",
-    "T7 step 7: agent pairing smoke test (requires running gateway with REQUIRE_AGENT_PAIRING=true)"
+    "T7 step 3: manual execute_bash smoke test (requires running gateway + EXECUTE_BASH_ENABLED=true)",
+    "T7 step 4: manual MCP client tool discovery (requires running gateway + external MCP server at MCP_SERVER_URLS)",
+    "T7 step 5: Telegram smoke test (requires TELEGRAM_BOT_TOKEN + running gateway-bot)",
+    "T7 step 7: agent pairing smoke test (requires REQUIRE_AGENT_PAIRING=true + GRAPH_RUNTIME_SECRET)",
+    "Project snapshot: run roam health + roam hotspots to get current codebase state post Phase 6",
+    "Codebase structure improvement: address structural issues identified in snapshot (user confirmed interest in this sprint)"
   ],
   "decisions_made": [
-    "T3 Discord: implemented Ed25519 (plan text says HMAC-SHA256, that is a misnomer — actual Discord headers are X-Signature-Ed25519)",
-    "T3 dispatchMessage: new UUID scope per message (production limitation noted in router.ts comment — production should use nestScope)",
-    "T5 pairing: pairingGuard is per-request env check (not construction-time) to allow runtime toggle"
+    "T1 McpClientWorker: writes to calling scope (Option A) — integration scope invisible to assembleContext",
+    "T2 execute_bash: promisify(exec) inside handler for test isolation; EXECUTE_BASH_ENABLED guard; scrubEnv strips 6 keys",
+    "T3 Discord: Ed25519 (plan text says HMAC-SHA256, that is a misnomer — real Discord uses Ed25519 with X-Signature-Ed25519 header)",
+    "T3 dispatchMessage: randomUUID() scope per message — production limitation; nestScope should be used per session in prod",
+    "T5 pairing: per-request env check (not construction-time) so REQUIRE_AGENT_PAIRING can be toggled without restart",
+    "T6 TUI: confirmed superseded; packages/tui was not created",
+    "Code structure sprint: user previously declined (said 'forget it, proceed as is') before Phase 6; now re-requested post-completion"
   ],
   "blockers": [],
-  "context": "Manual verification steps (3-5, 7) require a running DATABASE_URL and external tokens. Reply 'approved' when all T7 checks pass per 06-PLAN.md §Task 7.",
-  "next_action": "User runs T7 manual smoke tests (steps 3-5, 7) and replies 'approved' to complete Phase 6."
+  "context": "Roam health was 5/100 before Phase 6 (dominated by structural hub bottlenecks, not coupling rot). All 9 CRITICAL bottlenecks were deemed architecture-necessary. New session should re-run roam health to see if Phase 6 additions changed the picture, then propose targeted structural improvements.",
+  "next_action": "Run /session-start, then roam_health to get current snapshot, then propose a targeted codebase structure improvement plan based on findings."
 }
