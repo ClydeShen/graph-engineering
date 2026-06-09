@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StubTrailReader } from '../base/trail-reader.js';
+import { StubMemoryRepository } from '../base/memory-repository.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
@@ -9,7 +10,7 @@ vi.mock('@graph/shared', () => ({
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-const mockPool = { query: vi.fn().mockResolvedValue({ rows: [] }) } as unknown as { query: ReturnType<typeof vi.fn> } & import('pg').Pool;
+const mockPool = { query: vi.fn() } as unknown as import('pg').Pool;
 
 function makeSdk() {
   return { trigger: vi.fn().mockResolvedValue(undefined) };
@@ -24,8 +25,9 @@ describe('CrystallizeWorker', () => {
   });
 
   it('returns { skipped: true } when no episodic records', async () => {
-    const reader = new StubTrailReader(); // returns [] by default
-    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+    const reader = new StubTrailReader();
+    const memory = new StubMemoryRepository();
+    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'ZERO');
 
     expect(result).toEqual({ skipped: true });
@@ -35,8 +37,9 @@ describe('CrystallizeWorker', () => {
   it('fires sdk.trigger with confidence: 0.6 when episodic records exist', async () => {
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B']);
+    const memory = new StubMemoryRepository();
     const sdk = makeSdk();
-    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, sdk);
+    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, sdk);
 
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'PRED_HASH');
 
@@ -54,19 +57,20 @@ describe('CrystallizeWorker', () => {
     const { writeGuard } = await import('@graph/shared');
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace X']);
-    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+    const memory = new StubMemoryRepository();
+    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 
     expect(vi.mocked(writeGuard)).toHaveBeenCalledWith('trace X');
   });
 
-  it('uses delta prompt when existing lesson found in procedural_memory', async () => {
+  it('uses delta prompt when existing lesson found via memory.lookupLesson', async () => {
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['new trail event']);
-    mockPool.query
-      .mockResolvedValueOnce({ rows: [{ content: 'prior lesson text' }] });
-    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+    const memory = new StubMemoryRepository();
+    memory.setLookupLesson({ fingerprintId: 'fp', confidence: 0.5, content: 'prior lesson text' });
+    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-3', 'entity-3', 'HASH');
 
@@ -75,11 +79,11 @@ describe('CrystallizeWorker', () => {
     expect(messages[1].content).toContain('EXISTING LESSON:');
   });
 
-  it('uses full distillation prompt when no existing lesson in procedural_memory', async () => {
+  it('uses full distillation prompt when no existing lesson in memory', async () => {
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['fresh trace']);
-    // mockPool.query already defaults to { rows: [] }
-    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+    const memory = new StubMemoryRepository(); // lookupLesson returns null by default
+    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-4', 'entity-4', 'HASH');
 

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { writeGuard, occWrite, notify } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const CRYSTALLIZE_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -13,6 +14,7 @@ export const CRYSTALLIZE_TRIGGER_CONFIG = {
 export class CrystallizeWorker {
   constructor(
     private readonly reader: TrailReader,
+    private readonly memory: MemoryRepository,
     private readonly pool: Pool,
     private readonly llm: LLMProvider,
     private readonly sdk: { trigger(opts: { function_id: string; payload: unknown; action?: unknown }): Promise<unknown> },
@@ -29,11 +31,8 @@ export class CrystallizeWorker {
     const combined = records.join('\n');
     const fingerprintId = createHash('sha256').update(combined).digest('hex');
 
-    const { rows: existingRows } = await this.pool.query<{ content: string }>(
-      'SELECT content FROM procedural_memory WHERE fingerprint_id = $1 LIMIT 1',
-      [fingerprintId],
-    );
-    const existing = existingRows[0]?.content ?? null;
+    const existingLesson = await this.memory.lookupLesson(fingerprintId);
+    const existing = existingLesson?.content ?? null;
 
     // LLM CALL — ADR 22 (delta crystallization; injects existing lesson to avoid full rewrite)
     const llmOutput = await this.llm.chat([

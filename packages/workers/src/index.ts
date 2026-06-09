@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
 import { PoolTrailReader } from './base/trail-reader.js';
+import { PoolMemoryRepository } from './base/memory-repository.js';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ConflictResolverWorker } from './concrete/conflict-resolver.worker.js';
@@ -45,6 +46,7 @@ const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/g
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 const trailReader = new PoolTrailReader(pool);
+const memory = new PoolMemoryRepository(pool);
 
 // ---------------------------------------------------------------------------
 // D-2 AgentCard universalization — boot-time idempotent INSERT for all
@@ -142,7 +144,7 @@ worker.registerTrigger(FRONTIER_TRIGGER_CONFIG);
 // graph::memory::episodic — durable:subscriber on graph::memory::episodic::ingest
 // Writes to episodic_memory on task_spawned/memory_updated events.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const episodicWorker = new EpisodicMemoryWorker(pool);
+const episodicWorker = new EpisodicMemoryWorker(memory, pool);
 worker.registerFunction('graph::memory::episodic', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -158,7 +160,7 @@ worker.registerTrigger(EPISODIC_TRIGGER_CONFIG);
 // graph::memory::semantic — durable:subscriber on graph::scope::closed
 // Distils episodic records into semantic_memory via LLM on scope close.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const semanticWorker = new SemanticMemoryWorker(trailReader, pool, llmProvider);
+const semanticWorker = new SemanticMemoryWorker(trailReader, memory, pool, llmProvider);
 worker.registerFunction('graph::memory::semantic', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -172,7 +174,7 @@ worker.registerTrigger(SEMANTIC_TRIGGER_CONFIG);
 
 // graph::memory::synthesizer — cron 2AM, batch distillation episodic→procedural
 // Queries distinct scope_ids with recent episodic records; synthesizes each independently.
-const synthesizerWorker = new MemorySynthesizerWorker(trailReader, pool, llmProvider);
+const synthesizerWorker = new MemorySynthesizerWorker(trailReader, memory, llmProvider);
 worker.registerFunction('graph::memory::synthesizer', async (_payload: unknown) => {
   const { rows: scopeRows } = await pool.query<{ scope_id: string }>(
     `SELECT DISTINCT scope_id FROM episodic_memory
@@ -222,7 +224,7 @@ worker.registerTrigger(TTL_CRON_TRIGGER);
 // graph::memory::procedural — durable:subscriber on graph::memory::synthesizer::output
 // Stores WL-embedded workflow templates into procedural_memory.
 // Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const proceduralWorker = new ProceduralMemoryWorker(pool, embeddingProvider);
+const proceduralWorker = new ProceduralMemoryWorker(memory, pool, embeddingProvider);
 worker.registerFunction('graph::memory::procedural', async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -264,7 +266,7 @@ worker.registerTrigger(SUB_SCOPE_RESULT_TRIGGER_CONFIG);
 
 // graph::memory::crystallize — durable:subscriber on graph::scope::closed
 // Real-time LLM digest: episodic records → Crystal entity → triggers lesson-save (Phase 4 T4)
-const crystallizeWorker = new CrystallizeWorker(trailReader, pool, llmProvider, worker);
+const crystallizeWorker = new CrystallizeWorker(trailReader, memory, pool, llmProvider, worker);
 worker.registerFunction('graph::memory::crystallize', async (payload: unknown) => {
   const p = payload as { scope_id: string; entity_id: string; predecessor_hash: string };
   return crystallizeWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);
@@ -273,7 +275,7 @@ worker.registerTrigger(CRYSTALLIZE_TRIGGER_CONFIG);
 
 // graph::memory::lesson-save — durable:subscriber triggered by CrystallizeWorker
 // Content-addressed dedup + Ebbinghaus confidence reinforcement (Phase 4 T4)
-const lessonSaveWorker = new LessonSaveWorker(pool);
+const lessonSaveWorker = new LessonSaveWorker(memory);
 worker.registerFunction('graph::memory::lesson-save', async (payload: unknown) => {
   const p = payload as { content: string; confidence?: number };
   return lessonSaveWorker.onLessonSave(p);

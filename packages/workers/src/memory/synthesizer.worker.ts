@@ -1,7 +1,7 @@
-import type { Pool } from 'pg';
 import { writeGuard } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const SYNTHESIZER_CRON_TRIGGER = {
   type: 'cron' as const,
@@ -34,15 +34,12 @@ type SynthesisResult =
 
 export class MemorySynthesizerWorker {
   readonly base_priority = 1;
-  private readonly reader: TrailReader;
-  private readonly pool: Pool;
-  private readonly llm: LLMProvider;
 
-  constructor(reader: TrailReader, pool: Pool, llm: LLMProvider) {
-    this.reader = reader;
-    this.pool = pool;
-    this.llm = llm;
-  }
+  constructor(
+    private readonly reader: TrailReader,
+    private readonly memory: MemoryRepository,
+    private readonly llm: LLMProvider,
+  ) {}
 
   async runSynthesis(scopeId: string): Promise<SynthesisResult> {
     const records = await this.reader.getEpisodicRecords(scopeId, { sinceHours: 25, limit: 100 });
@@ -84,19 +81,11 @@ export class MemorySynthesizerWorker {
 
   async runDecay(): Promise<void> {
     // Ebbinghaus decay — pure SQL, NO LLM call (ADR 20 Task 3)
-    await this.pool.query(`
-      UPDATE procedural_memory
-      SET superseded_by = id
-      WHERE reinforcement_count = 0
-        AND last_used_at < NOW() - INTERVAL '90 days'
-        AND superseded_by IS NULL
-    `);
+    await this.memory.markSupersededByEbbinghaus();
   }
 
   async runTtlPurge(): Promise<void> {
     // working_memory 24h TTL — pure SQL, NO LLM call
-    await this.pool.query(
-      `DELETE FROM working_memory WHERE created_at < NOW() - INTERVAL '24 hours'`,
-    );
+    await this.memory.purgeTTLWorkingMemory();
   }
 }
