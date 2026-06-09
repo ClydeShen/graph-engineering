@@ -8,8 +8,8 @@
   },
   "position": {
     "phase": "06-extensions",
-    "active": "Fix 4 pre-existing integration test failures (test isolation bug in OCC/hash-chain/idempotency suites)",
+    "active": "Begin Phase 6 implementation (06-PLAN.md)",
     "resume_file": ".harness/phases/06-extensions/.continue-here.json",
-    "stopped_at": "Diagnosed 4 integration test failures: root cause is TEST_SCOPE_ID shared across it() blocks, all using ZERO_HASH predecessor, causing slot contention. Fix: chain version_hashes across it() blocks."
+    "stopped_at": "Fixed 4 integration test failures (7c4227a). All 17 integration tests pass. Data isolation confirmed — unique scope UUID + partition DROP in afterAll."
   }
 }
