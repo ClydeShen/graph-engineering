@@ -20,8 +20,24 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { occWrite } from '@graph/shared';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { tmpdir } from 'os';
+import { occWrite, checkCommand } from '@graph/shared';
 import { ZERO_HASH, AGENT_HEARTBEAT_TTL_S } from '@graph/shared';
+
+const SCRUB_KEYS = new Set([
+  'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
+  'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY',
+]);
+
+function scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (!SCRUB_KEYS.has(k)) out[k] = v;
+  }
+  return out;
+}
 
 // ── Zod primitives ──────────────────────────────────────────────────────────
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -445,6 +461,100 @@ export function buildMcpServer(pool: Pool): McpServer {
       };
     },
   );
+
+  // ── Tool 8: execute_bash (conditional on EXECUTE_BASH_ENABLED) ──────────────
+  if (process.env['EXECUTE_BASH_ENABLED'] === 'true') {
+    const EXECUTE_BASH_CWD = process.env['EXECUTE_BASH_CWD'] ?? tmpdir();
+
+    server.registerTool(
+      'execute_bash',
+      {
+        description:
+          'Execute a bash command on the host. Gated by CommandGate — hardline and dangerous ' +
+          'commands are blocked. Requires EXECUTE_BASH_ENABLED=true.',
+        inputSchema: z.object({
+          command: z.string().min(1).max(4096),
+          scope_id: z.string().regex(UUID_V4, 'scope_id must be UUID v4'),
+          predecessor_hash: z.string().regex(HASH_HEX64, 'predecessor_hash must be 64-char hex'),
+        }),
+      },
+      async ({ command, scope_id, predecessor_hash }) => {
+        const verdict = checkCommand(command);
+        const entityId = randomUUID();
+
+        if (!verdict.allowed) {
+          // Write blocked-attempt audit event — failures are first-class graph events
+          try {
+            await occWrite(pool, {
+              scopeId: scope_id,
+              entityId,
+              predecessorHash: predecessor_hash,
+              eventType: 'memory_updated',
+              payload: { command, status: 'blocked', tier: verdict.tier, reason: verdict.reason },
+            });
+          } catch {
+            // best-effort; must not suppress the block response
+          }
+          const msg =
+            verdict.tier === 'hardline'
+              ? `BLOCKED (hardline): ${verdict.reason}. Cannot execute.`
+              : `BLOCKED (requires approval): ${verdict.reason}. Use the graph runtime console to approve.`;
+          return { isError: true, content: [{ type: 'text' as const, text: msg }] };
+        }
+
+        try {
+          const execAsync = promisify(exec);
+          const { stdout, stderr } = await execAsync(command, {
+            timeout: 30000,
+            maxBuffer: 512 * 1024,
+            cwd: EXECUTE_BASH_CWD,
+            env: scrubEnv(process.env),
+          });
+          await occWrite(pool, {
+            scopeId: scope_id,
+            entityId,
+            predecessorHash: predecessor_hash,
+            eventType: 'memory_updated',
+            payload: { command, stdout, stderr, exit_code: 0 },
+          });
+          return {
+            content: [
+              { type: 'text' as const, text: JSON.stringify({ stdout, stderr, exit_code: 0 }) },
+            ],
+          };
+        } catch (err) {
+          const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };
+          if (typeof e.code === 'number') {
+            // Non-zero exit — record result, not an error
+            try {
+              await occWrite(pool, {
+                scopeId: scope_id,
+                entityId,
+                predecessorHash: predecessor_hash,
+                eventType: 'memory_updated',
+                payload: { command, stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code },
+              });
+            } catch {
+              // best-effort
+            }
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: JSON.stringify({ stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code }),
+                },
+              ],
+            };
+          }
+          // Timeout or maxBuffer exceeded
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: e.message ?? String(err) }) }],
+          };
+        }
+      },
+    );
+  }
 
   return server;
 }

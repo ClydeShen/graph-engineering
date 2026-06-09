@@ -32,6 +32,7 @@ import { ProceduralMemoryWorker, PROCEDURAL_TRIGGER_CONFIG } from './memory/proc
 import { SubScopeResultWorker, SUB_SCOPE_RESULT_TRIGGER_CONFIG } from './nested/sub-scope-result.worker.js';
 import { CrystallizeWorker, CRYSTALLIZE_TRIGGER_CONFIG } from './memory/crystallize.worker.js';
 import { LessonSaveWorker, LESSON_SAVE_TRIGGER_CONFIG } from './memory/lesson-save.worker.js';
+import { McpClientWorker } from './integrations/mcp-client.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -268,6 +269,15 @@ worker.registerFunction('graph::memory::lesson-save', async (payload: unknown) =
   return lessonSaveWorker.onLessonSave(p);
 });
 worker.registerTrigger(LESSON_SAVE_TRIGGER_CONFIG);
+
+// graph::integration::mcp-client — startup: connect to external MCP servers, register per-tool iii functions
+const mcpClientWorker = new McpClientWorker(pool);
+worker.registerFunction('graph::integration::mcp-client', async (_: unknown) => {
+  await mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
+  return { connected: true };
+});
+// Connect immediately at boot so tools are available without waiting for trigger
+void mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
 
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();

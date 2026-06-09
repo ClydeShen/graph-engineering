@@ -14,7 +14,7 @@
  *   wait_all_tasks, register_agent, query_context
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 const skip = !DATABASE_URL;
@@ -195,4 +195,102 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
       expect(eventTypes).toContain('memory_updated');
     },
   );
+});
+
+// ── execute_bash unit tests (no DB required) ────────────────────────────────
+
+const mockExec = vi.fn();
+vi.mock('child_process', () => ({ exec: mockExec }));
+
+function makeMockPool(): import('pg').Pool {
+  return {
+    query: vi.fn().mockResolvedValue({
+      rows: [{ event_type: 'memory_updated', version_hash: '0'.repeat(64), occ_result: 'won' }],
+    }),
+  } as unknown as import('pg').Pool;
+}
+
+async function callExecuteBash(
+  pool: import('pg').Pool,
+  args: { command: string; scope_id: string; predecessor_hash: string },
+): Promise<{ status: number; body: unknown }> {
+  const { buildMcpRoute } = await import('../routes/mcp.js');
+  const app = buildMcpRoute(pool);
+  const res = await app.fetch(
+    new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'execute_bash', arguments: args },
+      }),
+    }),
+  );
+  return { status: res.status, body: await res.json() };
+}
+
+const SCOPE_ID = '33333333-3333-4333-8333-333333333333';
+const PRED_HASH = '0'.repeat(64);
+
+describe('execute_bash MCP tool', () => {
+  beforeEach(() => {
+    process.env['EXECUTE_BASH_ENABLED'] = 'true';
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env['EXECUTE_BASH_ENABLED'];
+  });
+
+  it('returns isError for hardline-blocked command (rm -rf /)', async () => {
+    const pool = makeMockPool();
+    const { status, body } = await callExecuteBash(pool, {
+      command: 'rm -rf /',
+      scope_id: SCOPE_ID,
+      predecessor_hash: PRED_HASH,
+    });
+    expect(status).toBe(200);
+    const b = body as { result?: { isError?: boolean; content?: Array<{ text: string }> } };
+    expect(b.result?.isError).toBe(true);
+    expect(b.result?.content?.[0]?.text).toMatch(/BLOCKED \(hardline\)/);
+  });
+
+  it('returns isError for dangerous-blocked command (rm -rf ~/)', async () => {
+    const pool = makeMockPool();
+    const { status, body } = await callExecuteBash(pool, {
+      command: 'rm -rf ~/',
+      scope_id: SCOPE_ID,
+      predecessor_hash: PRED_HASH,
+    });
+    expect(status).toBe(200);
+    const b = body as { result?: { isError?: boolean; content?: Array<{ text: string }> } };
+    expect(b.result?.isError).toBe(true);
+    expect(b.result?.content?.[0]?.text).toMatch(/BLOCKED/);
+  });
+
+  it('executes safe command and returns stdout', async () => {
+    // promisify(exec) uses util.promisify.custom = Symbol.for('nodejs.util.promisify.custom')
+    // to resolve { stdout, stderr } rather than a plain string. Set it on the mock so the
+    // handler receives the correct shape.
+    const customSymbol = Symbol.for('nodejs.util.promisify.custom');
+    (mockExec as unknown as Record<symbol, unknown>)[customSymbol] = () =>
+      Promise.resolve({ stdout: 'hello\n', stderr: '' });
+    const pool = makeMockPool();
+    const { status, body } = await callExecuteBash(pool, {
+      command: 'echo hello',
+      scope_id: SCOPE_ID,
+      predecessor_hash: PRED_HASH,
+    });
+    expect(status).toBe(200);
+    const b = body as { result?: { content?: Array<{ text: string }> } };
+    const result = JSON.parse(b.result?.content?.[0]?.text ?? '{}') as {
+      stdout: string;
+      exit_code: number;
+    };
+    expect(result.stdout).toBe('hello\n');
+    expect(result.exit_code).toBe(0);
+  });
 });
