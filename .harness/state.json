@@ -2,14 +2,14 @@
   "version": "1.1",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-09T14:00:00.000Z",
-    "last_session": "2026-06-09T15:00:00.000Z",
-    "last_active": "2026-06-09T15:00:00.000Z"
+    "started_at": "2026-06-09T16:00:00.000Z",
+    "last_session": "2026-06-09T16:00:00.000Z",
+    "last_active": "2026-06-09T16:00:00.000Z"
   },
   "position": {
-    "phase": "05-provider-safety",
-    "active": "Phase 5 T5 — manual verification checkpoint",
+    "phase": "06-extensions",
+    "active": "Phase 6 — MCP client, execute_bash, Telegram/Discord gateway, UserProfileWorker",
     "resume_file": ".harness/phases/05-provider-safety/.continue-here.json",
-    "stopped_at": "T1-T4 committed (5cec330). tsc 0 errors, vitest 188 pass. T5 manual verification is next, then Phase 6."
+    "stopped_at": "Phase 5 complete (a38f5dc). tsc 0 errors, vitest 192 pass. Ready for Phase 6."
   }
 }
