@@ -7,7 +7,7 @@
 ## 原则
 
 1. **后端优先**：dashboard 的所有技术决策为后端架构让步。后端暴露什么 API，dashboard 就消费什么。dashboard 不驱动后端协议选型。
-2. **只读**：MVP Console 无写入操作。特权注入、SOP 锁定等写操作推迟到 Phase 4+。
+2. **只读**：MVP Console 无写入操作。SOP 锁定等写操作推迟到 Phase 4+。
 3. **框架轻量**：图渲染引擎独占 canvas，React 只管外围 UI 壳。
 
 ---
@@ -16,7 +16,7 @@
 
 | 层 | 选型 | 版本约束 | 职责 |
 |---|---|---|---|
-| 脚手架 | **Vite** | latest | `<100ms` 启动，原生 Worker 支持 |
+| 脚手架 | **Next.js**（Turbopack） | 15+ | `<100ms` 启动（Turbopack 原生支持，与 Vite 持平），原生 Worker 支持，满足 AI Elements 的 Next.js 前置要求 |
 | UI 壳 | **React + TypeScript** | React 19 | 外围按钮 / Slider / 告警列表，不管 canvas |
 | 图渲染 | **@antv/g6** | **v5（锁死）** | 独占 canvas，力导向布局，节点生长动画 |
 | 多线程 | **Web Worker（Vite 原生）** | 浏览器原生 | force layout 计算，不阻塞主线程 |
@@ -24,16 +24,16 @@
 | 样式 | **Tailwind CSS** | v3 | 工业冷色调，无组件库 |
 | 数据获取 | **HTTP polling（原生 fetch）** | — | 后端现有 REST 端点；升级协议由后端决定 |
 
-### Web Worker 正确语法（Vite）
+### Web Worker 正确语法（Next.js / Turbopack）
 
 ```typescript
-// ✅ Vite 打包可识别
+// ✅ Turbopack 打包可识别（与 Vite 语法完全一致，零迁移成本）
 const worker = new Worker(
   new URL('./workers/graph-layout.worker.ts', import.meta.url),
   { type: 'module' }
 );
 
-// ❌ Vite 打包时找不到
+// ❌ Turbopack 打包时找不到
 const worker = new Worker('graph-worker.js');
 ```
 
@@ -298,7 +298,21 @@ packages/console/
 ## 暂不实现（Phase 4+）
 
 - 时间旅行轨迹条（Replay Timeline）
-- 特权注入面板（需 D-11 + POST 写操作）
 - 涌现工作流画布（需 D-10 OLAP，Phase 3+）
 - 3D 全局拓扑视图
 - SOP 模板锁定
+- LLM Provider / Model 设置（可写——与"只读"原则冲突，故不在 MVP 范围内；设计已收敛，基线见下文，Phase 4+ 可直接落地）
+
+---
+
+## Phase 4+ 设计基线：LLM Provider / Model 设置（可写）
+
+> 这是 MVP「只读」原则（见上）唯一已知的例外。MVP 不实现，但设计讨论已收敛至结构核心，记录于此供 Phase 4+ 直接落地，避免重新调研。
+
+| 维度 | 决定 | 依据 |
+|---|---|---|
+| 读写 | **可写** | `OpenAICompatibleProvider.chat()/embed()` 每次调用都现读 `this.config`（非构造时固化的 SDK client）；去掉 `readonly` + 加一个 setter 即可让单进程内的实例热更新，成本接近零 |
+| 持久化 | **独立 JSON/YAML 配置文件**，不进 `.env`、不进 graph、不进 `iii-config.yaml` | `.env` 无法持久化用户在 UI 中的输入；写入 graph 会让 API key 进入不可变执行轨迹（审计/快照面的安全顾虑）；`iii-config.yaml` 实际并不携带任何 LLM 字段（其 docstring 声称的 "env 插值注入" 与代码读取 `process.env` 的实际路径不符） |
+| 架构形状 | **单槽位 + 独立 embedding 轴**：`{ chat: {...}, embedding: {...} }`，不引入 hermes 式 primary/secondary 多档位 | Memex 是异步图执行运行时（Worker 从队列取任务），不具备 hermes（实时语音助手）那种由交互延迟驱动的"快/慢模型分层"需求；chat 与 embedding 是两种不同能力（ADR 22 中已是两个独立接口 `LLMProvider`/`EmbeddingProvider`），分开配置同时修正了现有代码里"同一个 `model` 字段同时服务 chat 与 embedding 两个不同模型命名空间"的潜在缺陷 |
+| 跨进程一致性 | **gateway 进程内即时生效**（直接 mutate 自身的 `gatewayLlmProvider` 实例）；**workers 进程下次自然重启后生效** | gateway 与 workers 是两个独立进程，各自持有独立的 provider 实例（`gateway/src/index.ts:34` vs `workers/src/index.ts:91`）；"重启后生效"并非妥协，而是顺着系统已写明的不可变性保证（"凭证只在构造时读取一次，进程生命周期内不变"）自然延伸，不需要新建任何热重载基础设施 |
+| 软重启 | **明确不做，作为独立问题留存** | 会重新打开 `iii-config.yaml:37-48` 中已被判定"设计不完整"而禁用的 `iii-exec` 块（详见 `.harness/analysis/uat-journey-2026-06-07.md`），且需要把范围从"代码变更触发重启"扩大到"配置变更触发优雅重载"——这是一个量级远超本设置页面、且项目已有前车之鉴的独立基础设施项目 |

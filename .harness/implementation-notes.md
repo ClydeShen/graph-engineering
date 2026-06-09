@@ -151,3 +151,70 @@ does not exist in SDK v1.29.0. The correct path is:
 We use `webStandardStreamableHttp.js` directly (Web Standards API, compatible with Hono/Bun).
 `enableJsonResponse: true` is set so POST /mcp/messages returns JSON (not SSE stream), which makes
 GATE4-4 tests simpler to assert against.
+
+---
+
+## Phase 5 — Provider Safety (2026-06-09)
+
+### AnthropicProvider uses native Messages API, not OpenAI-compat shim
+
+`AnthropicProvider` calls `https://api.anthropic.com/v1/messages` directly (not the OpenAI-compatible
+endpoint). This is intentional — Anthropic's native API is more capable (streaming, vision) and avoids
+the base-URL workaround needed for the compat shim. Workers use `createLLMProvider()` which routes to
+`AnthropicProvider` when `LLM_API=anthropic-messages`.
+
+### CommandGate hardline vs dangerous distinction
+
+`CommandGate.checkCommand()` returns `{ action: 'allow' | 'dangerous' | 'hardline-block' }`.
+Phase 6 T2 rejects both `dangerous` and `hardline-block` (no LLM smart approval in Phase 6).
+Smart approval (LLM-evaluated) is deferred to a future phase. This is documented in the T2 AC.
+
+### LessonSaveWorker: confidence floor + SHA-256 dedup
+
+`fingerprint_id = SHA256(lesson_text)` prevents re-inserting semantically identical lessons after
+scope re-runs. Ebbinghaus formula: `confidence += 0.1 * (1 - confidence)`. Export threshold defaults
+to `EXPORT_THRESHOLD = 0.8` env-configurable. The 4 threshold edge-case tests (T3 in Phase 5) cover
+below/at/above threshold and exact-boundary behavior.
+
+---
+
+## Phase 6 — Extensions (2026-06-09)
+
+### Discord uses Ed25519, not HMAC-SHA256 (plan text misnomer)
+
+The 06-PLAN.md text says "HMAC-SHA256" signature verification for Discord. This is incorrect — Discord
+uses Ed25519. The plan's own AC references `X-Signature-Ed25519` header, which confirms Ed25519.
+Implementation uses Node.js `crypto.verify(null, msg, pubKey, sig)` with the raw 32-byte key wrapped
+in DER SPKI format (`302a300506032b6570032100` prefix). The test generates a real Ed25519 keypair.
+
+### dispatchMessage generates fresh scope per message (production limitation)
+
+`dispatchMessage(sessionKey, text, pool, sourceMessageId)` generates `randomUUID()` for `scopeId`
+per call. In production, a persistent session should use a stable scope UUID per `sessionKey`
+(e.g., via `nestScope()`). The current fresh-UUID approach means each message is an independent scope
+— acceptable for MVP but means session context doesn't accumulate in the graph. Documented in router.ts.
+
+### pairingGuard checks `REQUIRE_AGENT_PAIRING` per-request, not at construction time
+
+The MCP route middleware reads `process.env['REQUIRE_AGENT_PAIRING']` on every request (not once at
+`buildMcpRoute()` construction). This ensures existing tests (which don't set this env var) remain
+unaffected, and the env var can be toggled without a process restart in production.
+
+### Pairing store is single-process only (no cross-replica sync)
+
+`packages/gateway/src/auth/pairing.ts` uses an in-memory `Map`. If the gateway is deployed with
+multiple replicas, pairing codes and paired-state are not shared across replicas. This is documented
+in the pairing.ts header. Distributed pairing (Redis, DB) is a future phase item.
+
+### T6 (graph inspection TUI) superseded by architecture decision
+
+T6 was originally "graph inspection TUI." Superseded: graph visualization belongs in MemexShell
+Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
+a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
+
+### TS2440 Pool name conflict in gateway-bot entrypoint
+
+`packages/gateway-bot/src/index.ts` uses `import type { Pool } from 'pg'` (type import) for the
+class field type annotation, but the entrypoint also does `await import('pg')` (dynamic ESM import).
+TypeScript raised TS2440 (duplicate identifier) when destructuring `const { Pool }`. Fixed by renaming
+the dynamic import binding: `const { Pool: PgPool } = await import('pg')`. Commit 589d3ef.

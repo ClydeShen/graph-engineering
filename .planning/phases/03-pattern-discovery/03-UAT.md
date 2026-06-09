@@ -1,5 +1,5 @@
 ---
-status: partial
+status: complete
 phase: 03-pattern-discovery
 source:
   - .planning/phases/03-pattern-discovery/03-01-SUMMARY.md
@@ -10,7 +10,7 @@ source:
   - .planning/phases/03-pattern-discovery/03-06-SUMMARY.md
   - .planning/phases/03-pattern-discovery/03-07-SUMMARY.md
 started: 2026-06-05T18:00:00.000Z
-updated: 2026-06-05T19:32:00.000Z
+updated: 2026-06-05T22:40:00.000Z
 ---
 
 ## Current Test
@@ -55,9 +55,11 @@ expected: |
   With DATABASE_URL set and migrations 001–007 applied, run:
   `npx vitest run packages/workers/src/patterns/gate4.integration.test.ts --reporter=verbose`
   The GATE4-3 test creates a parent scope, spawns a child, calls resolveSubScope, routes the payload to SubScopeResultWorker, and asserts a `memory_updated` event appears in the parent partition with `result_summary = 'test summary from GATE4-3'`.
-result: blocked
-blocked_by: server
-reason: "DATABASE_URL not set — all 4 tests skipped (npx vitest run gate4.integration.test.ts → 4 skipped)"
+result: pass
+evidence: |
+  Fix: sub-scope-result.worker.ts — SubScopeResultWorker now reads parent scope's CURRENT TAIL as
+  predecessor for memory_updated, avoiding the OCC predecessor conflict with sub_scope_resolved.
+  Commit: 289c4ba. 183 tests pass with DATABASE_URL set.
 
 ### 7. GATE4-4 — MCP round trip: tools/list, spawn→claim→complete, D-1 guard (DB-gated)
 expected: |
@@ -67,9 +69,14 @@ expected: |
   - spawn_subtask → claim_next_task → complete_task round trip succeeds
   - D-1 guard: spawn_subtask with assigned_agent_id in payload returns an isError response
   - No event type outside the 5 canonical types appears in the ledger
-result: blocked
-blocked_by: server
-reason: "DATABASE_URL not set — 2 tests skipped (confirmed in npm test output)"
+result: pass
+evidence: |
+  Two fixes in commit 289c4ba:
+  1. mcp.ts — fresh WebStandardStreamableHTTPServerTransport + McpServer per request (SDK stateless mode
+     forbids reuse; shared instance caused all tools/call to return undefined result).
+  2. gate4-mcp.integration.test.ts — added text/event-stream to Accept headers; used plan_created
+     version_hash as spawn_subtask predecessor (ZERO_HASH was already owned by plan_created, causing
+     OCC conflict that demoted task_spawned to conflict_detected).
 
 ### 8. GATE4-5 — Skill-match dispatch: matched task dispatches, unmatched stays pending (DB-gated)
 expected: |
@@ -78,18 +85,20 @@ expected: |
   - Seeds two frontier tasks: one requiring 'typescript', one requiring 'nonexistent-skill'
   - After FrontierSchedulerWorker.onFrontierChanged, the typescript task is 'pending_dispatch'
   - The nonexistent-skill task remains 'pending_scheduling'
-result: blocked
-blocked_by: server
-reason: "DATABASE_URL not set — included in the 4 skipped tests in gate4.integration.test.ts"
+result: pass
+evidence: |
+  Passes with DATABASE_URL set. Part of the 183-test green suite (commit 289c4ba).
+  FrontierSchedulerWorker skill-match logic was already correct from Phase 3 execution;
+  no code change required for this test specifically.
 
 ## Summary
 
 total: 8
-passed: 5
+passed: 8
 issues: 0
 pending: 0
 skipped: 0
-blocked: 3
+blocked: 0
 
 ## Gaps
 
