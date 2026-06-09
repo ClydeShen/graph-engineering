@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-09T16:00:00.000Z",
-    "last_session": "2026-06-09T16:00:00.000Z",
-    "last_active": "2026-06-09T16:00:00.000Z"
+    "last_session": "2026-06-09T17:30:00.000Z",
+    "last_active": "2026-06-09T17:30:00.000Z"
   },
   "position": {
     "phase": "06-extensions",
-    "active": "Phase 6 — MCP client, execute_bash, Telegram/Discord gateway, UserProfileWorker",
-    "resume_file": ".harness/phases/05-provider-safety/.continue-here.json",
-    "stopped_at": "Phase 5 complete (a38f5dc). tsc 0 errors, vitest 192 pass. Ready for Phase 6."
+    "active": "Fix 4 pre-existing integration test failures (test isolation bug in OCC/hash-chain/idempotency suites)",
+    "resume_file": ".harness/phases/06-extensions/.continue-here.json",
+    "stopped_at": "Diagnosed 4 integration test failures: root cause is TEST_SCOPE_ID shared across it() blocks, all using ZERO_HASH predecessor, causing slot contention. Fix: chain version_hashes across it() blocks."
   }
 }

@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "phase": "06-extensions",
+  "task": "integration-test-fix",
+  "status": "in_progress",
+  "last_updated": "2026-06-09T17:30:00.000Z",
+  "current_state": "Phase 5 complete. Docker DB is up and migrated. 4 integration test failures diagnosed — pre-existing, not introduced by Phase 5. Next: fix the tests, then begin Phase 6.",
+  "completed_work": [
+    "Phase 5 T1-T4 committed (5cec330): AnthropicProvider, CommandGate, skill export, webhook notify",
+    "Phase 5 T3 test cases committed (a38f5dc): 4 fs-mocked threshold tests",
+    "Phase 5 T5 verification PASS: gateway boots, CommandGate all tiers correct, notify no-op+swallow, exportSkill writes real SKILL.md to OS temp dir",
+    "Integration test failures diagnosed: root cause identified as test isolation bug"
+  ],
+  "remaining_work": [
+    "Fix 4 integration test failures in tests/integration/: hash-chain.test.ts, occ.test.ts (2 failures), idempotency.test.ts (2 failures)",
+    "Begin Phase 6 after test fix (06-PLAN.md: MCP client inbound, execute_bash gated, Telegram/Discord gateway, UserProfileWorker, cryptographic pairing, TUI)"
+  ],
+  "decisions_made": [
+    "Root cause of all 4 failures: TEST_SCOPE_ID shared across it() blocks; all use ZERO_HASH as predecessorHash; OCC UNIQUE(predecessor_hash, scope_id) allows only one winner per slot per scope; first it() wins, subsequent its() get demoted",
+    "Fix strategy: chain version_hashes across it() blocks — store winner version_hash in describe-scoped let variable; each subsequent it() uses previous it()'s version_hash as predecessorHash instead of ZERO_HASH",
+    "occWriteIdempotent ON CONFLICT clause is NOT a production bug — re-delivery of identical payload works (confirmed in diagnostic); the failure is purely test isolation",
+    "Do NOT change production OCC SQL — only fix the test files"
+  ],
+  "blockers": [],
+  "context": "All 4 failures are in tests/integration/. The failing tests are: (1) hash-chain.test.ts 'TS canonicalJson vs pgcrypto' — it() 2 demoted because it() 1 took ZERO_HASH slot; (2) idempotency.test.ts 'total row count stays 1' — throws uk_occ_id_... constraint because ZERO_HASH slot taken by prior it(); (3) idempotency.test.ts 'DO NOTHING path' — occWrite gets 'demoted' because ZERO_HASH slot taken; (4) occ.test.ts 'demoted predecessor_hash equals winner version_hash' — both concurrent writes demoted (slot taken by it() 1), demoted_fallback only SELECTs, row not in DB. Fix: chain predecessor_hashes. Docker DB is currently up (postgres://postgres:password@localhost:5432/graph_test). DATABASE_URL must be set to run integration tests.",
+  "next_action": "Fix the 4 integration test files: in each describe block, declare a let prevHash = ZERO_HASH variable; each it() that needs to write uses prevHash as predecessorHash and updates prevHash with the returned version_hash so subsequent its() chain forward."
+}
