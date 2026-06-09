@@ -1,0 +1,15 @@
+{
+  "name": "@graph/types",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts",
+    "./api": "./src/api.ts",
+    "./shell": "./src/shell.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
