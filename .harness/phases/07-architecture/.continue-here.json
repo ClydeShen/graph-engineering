@@ -2,7 +2,7 @@
   "version": "1.0",
   "phase": "07-architecture",
   "task": "gsd-phase-5-verification",
-  "status": "ready_to_verify",
+  "status": "complete",
   "last_updated": "2026-06-09T23:50:00.000Z",
   "current_state": "GSD Phase 5 execution COMPLETE. All 6 ARCH plans executed, merged, tsc clean, 254 tests passing (up from 215). Two merge conflicts manually resolved (see decisions_made). Ready for verification.",
   "completed_work": [
@@ -14,11 +14,7 @@
     "05-06: CrystallizeWorker delta injection — fingerprintId SHA-256, procedural_memory lookup, conditional LLM prompt, 5 tests",
     "Post-merge: tsc --noEmit clean, vitest 254 passed (42 files), all conflicts manually resolved"
   ],
-  "remaining_work": [
-    "Run /gsd-verify-phase 5 — verifier checks ARCH-01..06 success criteria against actual codebase",
-    "Update .harness/phases/07-architecture/.continue-here.json to 'complete' after verification passes",
-    "Commit VERIFICATION.md"
-  ],
+  "remaining_work": [],
   "decisions_made": [
     "05-06 merge conflict: worktree based on pre-TrailReader commit (53b79081); delta injection applied onto master's TrailReader version (reader.getEpisodicRecords kept, fingerprintId + procedural_memory SELECT + conditional prompt added on top)",
     "05-05 merge conflict: gateway/src/index.ts needed both buildStreamRoute (05-02) and buildSkillsRoute (05-05) — both imports and mounts added; tsconfig.json kept root-relative @graph/types paths (master) over worktree's ../../../ paths",

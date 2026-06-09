@@ -110,7 +110,8 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
 | 2. Memory & Retrieval | 8/8 | Complete | 2026-06-04 |
 | 3. Pattern Discovery + MCP Bridging | 7/7 | Complete | 2026-06-05 |
-| 4. External Integrations | 0/TBD | Not started | - |
+| 4. External Integrations | 3/3 | Complete | 2026-06-08 |
+| 5. Architecture Hardening | 6/6 | Complete | 2026-06-10 |
 
 ### Phase 5: Architecture Hardening
 
@@ -124,8 +125,13 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
   4. (ARCH-04) `~/.memex/config.json` is the single source for Gateway port, channel tokens, and provider registry; `iii-config.yaml` handles Worker-side only
   5. (ARCH-05) Dashboard/Terminal skill list loads name+description first, full body on demand; reduces context by ≥50% for 10+ skills
   6. (ARCH-06) CrystallizeWorker injects `existing_lesson_content` into LLM prompt; LLM outputs delta only; no full rewrites on reinforcement
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 5 to break down)
+- [x] 05-01-PLAN.md — classifyProviderError() + FallbackProvider (LLM provider failover)
+- [x] 05-02-PLAN.md — SSE stream route GET /v1/stream (pg_notify → text/event-stream bridge)
+- [x] 05-03-PLAN.md — @graph/types leaf package (core / api / shell sub-paths)
+- [x] 05-04-PLAN.md — loadMemexConfig() (~/.memex/config.json, Zod, ${ENV_VAR} interpolation)
+- [x] 05-05-PLAN.md — Skills route GET /v1/skills + GET /v1/skills/:id (two-phase loading)
+- [x] 05-06-PLAN.md — CrystallizeWorker delta injection (SHA-256 fingerprint + conditional LLM prompt)
