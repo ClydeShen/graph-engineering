@@ -1,28 +1,29 @@
 {
   "version": "1.0",
   "phase": "06-extensions",
-  "task": "integration-test-fix",
-  "status": "complete",
-  "last_updated": "2026-06-09T14:35:00.000Z",
-  "current_state": "Integration test fix complete. All 17 integration tests pass. Ready to begin Phase 6 implementation.",
+  "task": "plan-review-and-fix",
+  "status": "in_progress",
+  "last_updated": "2026-06-09T15:10:00.000Z",
+  "current_state": "Cross-AI review of 06-PLAN.md complete (Gemini + Codex). 3 HIGH concerns identified. Plan needs targeted fixes before implementation begins.",
   "completed_work": [
-    "Phase 5 T1-T4 committed (5cec330): AnthropicProvider, CommandGate, skill export, webhook notify",
-    "Phase 5 T3 test cases committed (a38f5dc): 4 fs-mocked threshold tests",
-    "Phase 5 T5 verification PASS",
-    "Integration test failures diagnosed and fixed (7c4227a): 4 OCC slot contention failures — chained predecessor hashes across it() blocks"
+    "Integration test fix (7c4227a): all 17 integration tests pass, data isolation confirmed",
+    "Cross-AI review of 06-PLAN.md written to .harness/phases/06-extensions/06-REVIEWS.md (a5bea5e)",
+    "src/__tests__/ confirmed as pre-monorepo unit tests (not dead code) — 71 passing cases, no package duplicates"
   ],
   "remaining_work": [
-    "Begin Phase 6 (06-PLAN.md: MCP client inbound, execute_bash gated, Telegram/Discord gateway, UserProfileWorker, cryptographic pairing, TUI)"
+    "Discuss review findings and agree on plan fixes",
+    "Update 06-PLAN.md to address agreed fixes (run /gsd-plan-phase 6 --reviews OR edit directly)",
+    "Execute Phase 6 T1–T5 after plan is fixed"
   ],
   "decisions_made": [
-    "Root cause of all 4 failures: TEST_SCOPE_ID shared across it() blocks; all use ZERO_HASH as predecessorHash; OCC UNIQUE(predecessor_hash, scope_id) allows only one winner per slot",
-    "Fix: let prevHash = ZERO_HASH at describe scope; each it() uses and advances prevHash",
-    "idempotency re-delivery: second call uses same predecessor as first (not first!.version_hash) — re-delivery requires identical (entity, predecessor, payload)",
-    "occ it() 1: prevHash = demotedResults[0].version_hash (conflict_detected leaf) — winner's hash is immediately consumed by conflict_detected row's predecessor",
-    "occ it() 2: changed from concurrent to sequential writes — avoids demoted_fallback timing race where winner may not be visible to loser's winner CTE; semantics unchanged",
-    "Data isolation: randomUUID() scope + partition DROP in afterAll — no cross-file or cross-run contamination; each test file is a clean partition"
+    "T6 (TUI) already superseded in 06-PLAN.md — but T7 verification step 6 and success criteria still reference graph-tui; both reviewers flagged this as LOW concern requiring cleanup",
+    "execute_bash (T2): Gemini recommends chroot/nsenter; Codex recommends execFile + env scrub + fixed cwd + blocked-attempt audit events. Both agree Docker can be deferred. This is HIGH severity.",
+    "McpClientWorker (T1): integration scope vs calling scope is an open question. Gemini says tool results should go to the calling scope (agent visibility). Codex says per-server/per-tool chain within integration scope. Key question: is integration scope visible in calling context assembly?",
+    "Messaging idempotency (T3): Telegram update_id + Discord interaction_id must be in task_spawned payload. Discord signature verification must be acceptance criterion, not just impl note.",
+    "Pairing (T5): Codex rates in-memory Map as HIGH risk for multi-user; Gemini rates LOW. Depends on whether single-process gateway is the stated constraint for Phase 6.",
+    "src/__tests__/ is NOT dead code — 71 passing tests, pre-monorepo style, covering modules with no package-level tests (watchdog, tool-boundary, context-assembly, worker-lifecycle, etc.)"
   ],
   "blockers": [],
-  "context": "All 17 integration tests pass (7c4227a). Production OCC SQL unchanged — no production bugs. Test isolation is robust: unique scope UUID per file, partition dropped after each describe. Docker must be running for integration tests: DATABASE_URL=postgres://postgres:password@localhost:5432/graph_test npm run test:integration",
-  "next_action": "Read 06-PLAN.md and begin Phase 6 T1 (MCP client inbound / execute_bash with CommandGate integration)."
+  "context": "Review is at .harness/phases/06-extensions/06-REVIEWS.md. The 3 HIGH concerns from both reviewers: (1) execute_bash sandbox gap, (2) McpClientWorker OCC predecessor chain unspecified, (3) pairing route X-Agent-ID spoofing / no rate limit on /pair. Next session should read the full REVIEWS.md and decide which fixes to incorporate into the plan before implementation.",
+  "next_action": "Read 06-REVIEWS.md, discuss the 3 HIGH concerns with user, agree on fixes, then either run /gsd-plan-phase 6 --reviews to replan or patch 06-PLAN.md directly with agreed changes."
 }
