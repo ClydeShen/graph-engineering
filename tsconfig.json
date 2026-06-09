@@ -16,6 +16,10 @@
     "paths": {
       "@shared/*": ["packages/shared/src/*"],
       "@graph/shared/*": ["packages/shared/src/*"],
+      "@graph/types": ["../../../packages/types/src/index.ts"],
+      "@graph/types/core": ["../../../packages/types/src/core.ts"],
+      "@graph/types/api": ["../../../packages/types/src/api.ts"],
+      "@graph/types/shell": ["../../../packages/types/src/shell.ts"],
       "@graph/workers/*": ["packages/workers/src/*"],
       "@graph/control-plane/*": ["packages/control-plane/src/*"],
       "@graph/gateway/*": ["packages/gateway/src/*"]
