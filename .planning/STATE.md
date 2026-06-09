@@ -24,6 +24,10 @@ progress:
 - Stopped At: Completed 03-07-PLAN.md
 - Resume File: None
 
+## Roadmap Evolution
+
+- Phase 5 added: Architecture Hardening — LLM Provider registry+FallbackProvider, WebSocket/SSE stream API, @graph/types package, global config.json, SKILL.md progressive loading, CrystallizeWorker surgical distillation
+
 ## Decisions
 
 - GATE4-1 tests same-label isomorphic graphs (not different-label) because WL kernel hashes event_type labels; different labels produce cosine < 0.90 for small 3-node graphs; same labels yield cosine = 1.0
