@@ -9,7 +9,7 @@ vi.mock('@graph/shared', () => ({
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-const mockPool = { query: vi.fn() } as never;
+const mockPool = { query: vi.fn().mockResolvedValue({ rows: [] }) } as never;
 
 function makeSdk() {
   return { trigger: vi.fn().mockResolvedValue(undefined) };
@@ -59,5 +59,31 @@ describe('CrystallizeWorker', () => {
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 
     expect(vi.mocked(writeGuard)).toHaveBeenCalledWith('trace X');
+  });
+
+  it('uses delta prompt when existing lesson found in procedural_memory', async () => {
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['new trail event']);
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ content: 'prior lesson text' }] });
+    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+
+    await worker.onScopeClosed('scope-3', 'entity-3', 'HASH');
+
+    const [messages] = mockChat.mock.calls[0];
+    expect(messages[0].content).toContain('ONLY the delta');
+    expect(messages[1].content).toContain('EXISTING LESSON:');
+  });
+
+  it('uses full distillation prompt when no existing lesson in procedural_memory', async () => {
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['fresh trace']);
+    // mockPool.query already defaults to { rows: [] }
+    const worker = new CrystallizeWorker(reader, mockPool, { chat: mockChat }, makeSdk());
+
+    await worker.onScopeClosed('scope-4', 'entity-4', 'HASH');
+
+    const [messages] = mockChat.mock.calls[0];
+    expect(messages[0].content).toBe('Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.');
   });
 });

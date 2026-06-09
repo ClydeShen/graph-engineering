@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { writeGuard, occWrite, notify } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
@@ -26,10 +27,28 @@ export class CrystallizeWorker {
     if (records.length === 0) return { skipped: true };
 
     const combined = records.join('\n');
-    // LLM CALL — ADR 22 (real-time crystallization per scope close; parallel to 2AM synthesizer)
+    const fingerprintId = createHash('sha256').update(combined).digest('hex');
+
+    const { rows: existingRows } = await this.pool.query<{ content: string }>(
+      'SELECT content FROM procedural_memory WHERE fingerprint_id = $1 LIMIT 1',
+      [fingerprintId],
+    );
+    const existing = existingRows[0]?.content ?? null;
+
+    // LLM CALL — ADR 22 (delta crystallization; injects existing lesson to avoid full rewrite)
     const llmOutput = await this.llm.chat([
-      { role: 'system', content: 'Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.' },
-      { role: 'user', content: writeGuard(combined) },
+      {
+        role: 'system',
+        content: existing
+          ? 'You are refining an existing lesson. Output ONLY the delta — what changed or was added. Do not repeat unchanged content.'
+          : 'Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.',
+      },
+      {
+        role: 'user',
+        content: existing
+          ? writeGuard(`EXISTING LESSON:\n${existing}\n\nNEW TRAIL EVENTS:\n${combined}`)
+          : writeGuard(combined),
+      },
     ]);
 
     await occWrite(this.pool, {
