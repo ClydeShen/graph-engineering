@@ -1,7 +1,6 @@
-import type { Pool } from 'pg';
 import { createHash } from 'crypto';
-import { writeGuard, occWrite } from '@graph/shared';
-import type { EmbeddingProvider } from '@graph/shared';
+import { writeGuard } from '@graph/shared';
+import type { EventWriter, EmbeddingProvider } from '@graph/shared';
 import { computeWLEmbedding } from './wl-embedding.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
 
@@ -14,7 +13,7 @@ export const PROCEDURAL_TRIGGER_CONFIG = {
 export class ProceduralMemoryWorker {
   constructor(
     private readonly memory: MemoryRepository,
-    private readonly pool: Pool,
+    private readonly writes: EventWriter,
     private readonly llm: EmbeddingProvider,
   ) {}
 
@@ -32,10 +31,6 @@ export class ProceduralMemoryWorker {
     const embeddingLiteral = `[${Array.from(embedding).join(',')}]`;
 
     // LLM CALL — ADR 22 (embedding calls excluded from Worker token budget)
-    // intent_embedding is the semantic embedding of the intent_description (1536-dim).
-    // Distinct from topology_embedding (WL kernel output, 128-dim) — used by
-    // CrossScopePatternDiscoveryWorker as the cross-domain guard (ADR 25).
-    // Falls back to NULL on provider failure; topology_embedding write is unaffected.
     let intentEmbeddingLiteral: string | null = null;
     try {
       const result = await this.llm.embed(intentDescription);
@@ -57,7 +52,7 @@ export class ProceduralMemoryWorker {
 
     const contentHash = createHash('sha256').update(intentDescription).digest('hex');
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,

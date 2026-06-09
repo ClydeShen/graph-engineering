@@ -1,7 +1,6 @@
-import type { Pool } from 'pg';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { occWrite } from '@graph/shared';
+import type { EventWriter } from '@graph/shared';
 
 export const MCP_CLIENT_TRIGGER_CONFIG = {
   type: 'scheduled' as const,
@@ -12,7 +11,7 @@ export const MCP_CLIENT_TRIGGER_CONFIG = {
 type RegisterFn = (name: string, handler: (payload: unknown) => Promise<unknown>) => void;
 
 export class McpClientWorker {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly writes: EventWriter) {}
 
   async connect(register: RegisterFn): Promise<void> {
     const raw = process.env['MCP_SERVER_URLS'];
@@ -61,7 +60,7 @@ export class McpClientWorker {
             arguments: p.args,
           });
 
-          const writeResult = await occWrite(this.pool, {
+          const writeResult = await this.writes.write({
             scopeId: p.scope_id,
             entityId: p.entity_id,
             predecessorHash: p.predecessor_hash,

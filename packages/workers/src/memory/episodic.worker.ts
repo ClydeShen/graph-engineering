@@ -1,6 +1,6 @@
-import type { Pool } from 'pg';
 import { createHash } from 'crypto';
-import { writeGuard, occWrite } from '@graph/shared';
+import { writeGuard } from '@graph/shared';
+import type { EventWriter } from '@graph/shared';
 import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const EPISODIC_TRIGGER_CONFIG = {
@@ -12,7 +12,7 @@ export const EPISODIC_TRIGGER_CONFIG = {
 export class EpisodicMemoryWorker {
   constructor(
     private readonly memory: MemoryRepository,
-    private readonly pool: Pool,
+    private readonly writes: EventWriter,
   ) {}
 
   async onEvent(
@@ -25,7 +25,7 @@ export class EpisodicMemoryWorker {
 
     const contentHash = createHash('sha256').update(content).digest('hex');
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,

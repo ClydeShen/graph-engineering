@@ -55,7 +55,7 @@ export interface TrailReader {
  * Stateless: one instance serves all scopes; scopeId is passed per call.
  */
 export class PoolTrailReader implements TrailReader {
-  constructor(protected readonly pool: Pool) {}
+  constructor(private readonly pool: Pool) {}
 
   async getVersionByHash(scopeId: string, versionHash: string): Promise<EventLogNode | null> {
     const { rows } = await this.pool.query<EventLogNode>(

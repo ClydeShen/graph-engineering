@@ -19,6 +19,18 @@ export class UserProfileWorker {
     private readonly llm: LLMProvider,
   ) {}
 
+  async scanAllUsers(): Promise<{ processed: number }> {
+    const { rows: humanAgents } = await this.pool.query<{ agent_id: string }>(
+      `SELECT agent_id FROM agent_registry WHERE protocol = 'human'`,
+    );
+    let processed = 0;
+    for (const { agent_id } of humanAgents) {
+      const result = await this.synthesize(agent_id);
+      if (!('skipped' in result)) processed++;
+    }
+    return { processed };
+  }
+
   async synthesize(userId: string): Promise<{ skipped: true } | { written: true }> {
     const { rows } = await this.pool.query<{ payload: string }>(
       `SELECT payload FROM execution_event_log

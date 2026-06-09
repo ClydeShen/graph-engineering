@@ -16,13 +16,14 @@
 import { randomUUID } from 'crypto';
 import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
+import { OccEventWriter, createLLMProvider, OpenAICompatibleProvider, type LLMApi } from '@graph/shared';
 import { PoolTrailReader } from './base/trail-reader.js';
 import { PoolMemoryRepository } from './base/memory-repository.js';
+import { bootstrapAgentRegistry } from './boot/bootstrap.js';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ConflictResolverWorker, FUNCTION_ID as CONFLICT_RESOLVER_FUNCTION_ID } from './concrete/conflict-resolver.worker.js';
 import { EpisodicMemoryWorker, EPISODIC_TRIGGER_CONFIG } from './memory/episodic.worker.js';
-import { createLLMProvider, OpenAICompatibleProvider, type LLMApi } from '@graph/shared';
 import { SemanticMemoryWorker, SEMANTIC_TRIGGER_CONFIG } from './memory/semantic.worker.js';
 import {
   MemorySynthesizerWorker,
@@ -35,7 +36,7 @@ import { SubScopeResultWorker, SUB_SCOPE_RESULT_TRIGGER_CONFIG } from './nested/
 import { CrystallizeWorker, CRYSTALLIZE_TRIGGER_CONFIG } from './memory/crystallize.worker.js';
 import { LessonSaveWorker, LESSON_SAVE_TRIGGER_CONFIG } from './memory/lesson-save.worker.js';
 import { McpClientWorker, MCP_CLIENT_TRIGGER_CONFIG } from './integrations/mcp-client.worker.js';
-import { UserProfileWorker, USER_PROFILE_TRIGGER_CONFIG, USER_PROFILE_SCOPE_ID } from './memory/user-profile.worker.js';
+import { UserProfileWorker, USER_PROFILE_TRIGGER_CONFIG } from './memory/user-profile.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -47,59 +48,12 @@ const DATABASE_URL = process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/g
 const pool = new Pool({ connectionString: DATABASE_URL });
 const trailReader = new PoolTrailReader(pool);
 const memory = new PoolMemoryRepository(pool);
+const eventWriter = new OccEventWriter(pool);
 
-// ---------------------------------------------------------------------------
-// D-2 AgentCard universalization — boot-time idempotent INSERT for all
-// internal Workers. ON CONFLICT (agent_id) DO NOTHING: re-boots are safe.
-// Stable UUIDs are fixed strings per Worker — never generated at runtime.
-// Skills vocabulary (coarse, consistent): see .harness/implementation-notes.md
-// ---------------------------------------------------------------------------
-void (async () => {
-  try {
-    await pool.query(`
-      INSERT INTO agent_registry
-        (agent_id, name, description, skills, protocol, endpoint, agent_card_json, status)
-      VALUES
-        ('a1000000-0000-4000-8000-000000000001', 'FrontierSchedulerWorker',
-         'Token-bucket task dispatch with skill-based SKIP LOCKED routing (ADR 31)',
-         ARRAY['task-routing', 'task-dispatch'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000002', 'EpisodicMemoryWorker',
-         'Appends execution trace events to episodic_memory (Phase 1 C1)',
-         ARRAY['memory-storage', 'episodic-recall'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000003', 'SemanticMemoryWorker',
-         'Distils episodic records into semantic_memory via LLM on scope close (ADR 22)',
-         ARRAY['memory-storage', 'semantic-retrieval'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000004', 'ProceduralMemoryWorker',
-         'Stores WL-embedded workflow templates into procedural_memory (ADR 25)',
-         ARRAY['memory-storage', 'template-learning'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000005', 'ConflictResolverWorker',
-         'LLM-assisted semantic merge of conflicting OCC writes (ADR 22)',
-         ARRAY['conflict-resolution'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000006', 'SubScopeResultWorker',
-         'Synthesizes child scope results via LLM and writes memory_updated to parent (ADR 23)',
-         ARRAY['scope-resolution', 'result-synthesis'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000007', 'PatternDiscoveryWorker',
-         'WL graph kernel cross-domain pattern clustering (ADR 25, ADR 37)',
-         ARRAY['pattern-discovery', 'cross-domain-clustering'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000008', 'CrystallizeWorker',
-         'Real-time LLM digest on scope close: episodic traces → Crystal entity (Phase 4)',
-         ARRAY['memory-storage', 'crystallization'], 'iii', NULL, '{}', 'active'),
-        ('a1000000-0000-4000-8000-000000000009', 'LessonSaveWorker',
-         'Content-addressed lesson dedup with Ebbinghaus confidence reinforcement (Phase 4)',
-         ARRAY['memory-storage', 'lesson-dedup'], 'iii', NULL, '{}', 'active')
-      ON CONFLICT (agent_id) DO NOTHING
-    `);
-    // Pre-create the user-profile scope so occWrite can reference it as a valid foreign key (T4)
-    await pool.query(`
-      INSERT INTO execution_event_log (scope_id, entity_id, event_type, version_hash, status, payload)
-      VALUES ($1::uuid, gen_random_uuid(), 'scope_initialized',
-              encode(sha256('user-profile-scope'), 'hex'), 'completed', '{"scope":"user-profiles"}')
-      ON CONFLICT DO NOTHING
-    `, [USER_PROFILE_SCOPE_ID]);
-  } catch {
-    // Best-effort: agent_registry bootstrap failure must not crash the worker process (D-2)
-  }
-})();
+// D-2 AgentCard universalization — boot-time idempotent INSERT for all internal Workers.
+void bootstrapAgentRegistry(pool).catch(() => {
+  // Best-effort: agent_registry bootstrap failure must not crash the worker process (D-2)
+});
 
 const llmProvider = createLLMProvider({
   api: (process.env['LLM_API'] ?? 'openai-completions') as LLMApi,
@@ -142,9 +96,7 @@ worker.registerFunction(FRONTIER_TRIGGER_CONFIG.function_id, async (payload: unk
 worker.registerTrigger(FRONTIER_TRIGGER_CONFIG);
 
 // graph::memory::episodic — durable:subscriber on graph::memory::episodic::ingest
-// Writes to episodic_memory on task_spawned/memory_updated events.
-// Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const episodicWorker = new EpisodicMemoryWorker(memory, pool);
+const episodicWorker = new EpisodicMemoryWorker(memory, eventWriter);
 worker.registerFunction(EPISODIC_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -158,9 +110,7 @@ worker.registerFunction(EPISODIC_TRIGGER_CONFIG.function_id, async (payload: unk
 worker.registerTrigger(EPISODIC_TRIGGER_CONFIG);
 
 // graph::memory::semantic — durable:subscriber on graph::scope::closed
-// Distils episodic records into semantic_memory via LLM on scope close.
-// Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const semanticWorker = new SemanticMemoryWorker(trailReader, memory, pool, llmProvider);
+const semanticWorker = new SemanticMemoryWorker(trailReader, memory, eventWriter, llmProvider);
 worker.registerFunction(SEMANTIC_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -173,7 +123,6 @@ worker.registerFunction(SEMANTIC_TRIGGER_CONFIG.function_id, async (payload: unk
 worker.registerTrigger(SEMANTIC_TRIGGER_CONFIG);
 
 // graph::memory::synthesizer — cron 2AM, batch distillation episodic→procedural
-// Queries distinct scope_ids with recent episodic records; synthesizes each independently.
 const synthesizerWorker = new MemorySynthesizerWorker(trailReader, memory, llmProvider);
 worker.registerFunction(SYNTHESIZER_CRON_TRIGGER.function_id, async (_payload: unknown) => {
   const { rows: scopeRows } = await pool.query<{ scope_id: string }>(
@@ -185,8 +134,6 @@ worker.registerFunction(SYNTHESIZER_CRON_TRIGGER.function_id, async (_payload: u
   for (const { scope_id } of scopeRows) {
     const result = await synthesizerWorker.runSynthesis(scope_id);
     if (!result.skipped) {
-      // Trigger ProceduralMemoryWorker — synthesizer→procedural publish link.
-      // TriggerAction.Void() = fire-and-forget; no need to await the procedural write.
       await worker.trigger({
         function_id: PROCEDURAL_TRIGGER_CONFIG.function_id,
         payload: {
@@ -222,9 +169,7 @@ worker.registerFunction(TTL_CRON_TRIGGER.function_id, async (_payload: unknown) 
 worker.registerTrigger(TTL_CRON_TRIGGER);
 
 // graph::memory::procedural — durable:subscriber on graph::memory::synthesizer::output
-// Stores WL-embedded workflow templates into procedural_memory.
-// Phase 1 constraint C1: also fires memory_updated event to execution_event_log.
-const proceduralWorker = new ProceduralMemoryWorker(memory, pool, embeddingProvider);
+const proceduralWorker = new ProceduralMemoryWorker(memory, eventWriter, embeddingProvider);
 worker.registerFunction(PROCEDURAL_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as {
     scope_id: string;
@@ -249,9 +194,7 @@ worker.registerFunction(PROCEDURAL_TRIGGER_CONFIG.function_id, async (payload: u
 worker.registerTrigger(PROCEDURAL_TRIGGER_CONFIG);
 
 // graph::scope::sub-scope-result — durable:subscriber on graph::scope::sub_scope_resolved
-// Reads child final node, calls LLM to synthesize result_summary, writes memory_updated
-// to the parent scope so the spawning task advances to completed (ADR 23 step 3).
-const subScopeResultWorker = new SubScopeResultWorker(trailReader, pool, llmProvider);
+const subScopeResultWorker = new SubScopeResultWorker(trailReader, eventWriter, llmProvider);
 worker.registerFunction(SUB_SCOPE_RESULT_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as {
     child_scope_id: string;
@@ -265,8 +208,7 @@ worker.registerFunction(SUB_SCOPE_RESULT_TRIGGER_CONFIG.function_id, async (payl
 worker.registerTrigger(SUB_SCOPE_RESULT_TRIGGER_CONFIG);
 
 // graph::memory::crystallize — durable:subscriber on graph::scope::closed
-// Real-time LLM digest: episodic records → Crystal entity → triggers lesson-save (Phase 4 T4)
-const crystallizeWorker = new CrystallizeWorker(trailReader, memory, pool, llmProvider, worker);
+const crystallizeWorker = new CrystallizeWorker(trailReader, memory, eventWriter, llmProvider, worker);
 worker.registerFunction(CRYSTALLIZE_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as { scope_id: string; entity_id: string; predecessor_hash: string };
   return crystallizeWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);
@@ -274,7 +216,6 @@ worker.registerFunction(CRYSTALLIZE_TRIGGER_CONFIG.function_id, async (payload: 
 worker.registerTrigger(CRYSTALLIZE_TRIGGER_CONFIG);
 
 // graph::memory::lesson-save — durable:subscriber triggered by CrystallizeWorker
-// Content-addressed dedup + Ebbinghaus confidence reinforcement (Phase 4 T4)
 const lessonSaveWorker = new LessonSaveWorker(memory);
 worker.registerFunction(LESSON_SAVE_TRIGGER_CONFIG.function_id, async (payload: unknown) => {
   const p = payload as { content: string; confidence?: number };
@@ -282,27 +223,18 @@ worker.registerFunction(LESSON_SAVE_TRIGGER_CONFIG.function_id, async (payload: 
 });
 worker.registerTrigger(LESSON_SAVE_TRIGGER_CONFIG);
 
-// graph::integration::mcp-client — startup: connect to external MCP servers, register per-tool iii functions
-const mcpClientWorker = new McpClientWorker(pool);
+// graph::integration::mcp-client — startup: connect to external MCP servers
+const mcpClientWorker = new McpClientWorker(eventWriter);
 worker.registerFunction(MCP_CLIENT_TRIGGER_CONFIG.function_id, async (_: unknown) => {
   await mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
   return { connected: true };
 });
-// Connect immediately at boot so tools are available without waiting for trigger
 void mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
 
 // graph::memory::user-profile — 3AM daily cron: synthesize cross-scope user profile from Crystals (T4)
 const userProfileWorker = new UserProfileWorker(pool, llmProvider);
 worker.registerFunction(USER_PROFILE_TRIGGER_CONFIG.function_id, async (_payload: unknown) => {
-  const { rows: humanAgents } = await pool.query<{ agent_id: string }>(
-    `SELECT agent_id FROM agent_registry WHERE protocol = 'human'`,
-  );
-  let processed = 0;
-  for (const { agent_id } of humanAgents) {
-    const result = await userProfileWorker.synthesize(agent_id);
-    if (!('skipped' in result)) processed++;
-  }
-  return { processed };
+  return userProfileWorker.scanAllUsers();
 });
 worker.registerTrigger(USER_PROFILE_TRIGGER_CONFIG);
 

@@ -1,7 +1,6 @@
-import type { Pool } from 'pg';
 import { createHash } from 'crypto';
-import { writeGuard, occWrite } from '@graph/shared';
-import type { LLMProvider } from '@graph/shared';
+import { writeGuard } from '@graph/shared';
+import type { EventWriter, LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
 
@@ -15,7 +14,7 @@ export class SemanticMemoryWorker {
   constructor(
     private readonly reader: TrailReader,
     private readonly memory: MemoryRepository,
-    private readonly pool: Pool,
+    private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
   ) {}
 
@@ -34,7 +33,7 @@ export class SemanticMemoryWorker {
 
     const contentHash = createHash('sha256').update(fact).digest('hex');
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,

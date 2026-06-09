@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
-import { writeGuard, occWrite, notify } from '@graph/shared';
-import type { LLMProvider } from '@graph/shared';
+import { writeGuard, notify } from '@graph/shared';
+import type { EventWriter, LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
 import { LESSON_SAVE_TRIGGER_CONFIG } from './lesson-save.worker.js';
@@ -16,7 +15,7 @@ export class CrystallizeWorker {
   constructor(
     private readonly reader: TrailReader,
     private readonly memory: MemoryRepository,
-    private readonly pool: Pool,
+    private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
     private readonly sdk: { trigger(opts: { function_id: string; payload: unknown; action?: unknown }): Promise<unknown> },
   ) {}
@@ -51,7 +50,7 @@ export class CrystallizeWorker {
       },
     ]);
 
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,

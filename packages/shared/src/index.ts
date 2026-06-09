@@ -16,3 +16,4 @@ export * from './write-guard.js';
 export * from './command-gate.js';
 export * from './notify.js';
 export * from './config/loader.js';
+export * from './event-writer.js';

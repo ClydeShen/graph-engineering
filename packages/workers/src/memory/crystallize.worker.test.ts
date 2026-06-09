@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { EventWriter } from '@graph/shared';
 import { StubTrailReader } from '../base/trail-reader.js';
 import { StubMemoryRepository } from '../base/memory-repository.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
-  occWrite: vi.fn().mockResolvedValue({ version_hash: 'v-hash', occ_result: 'won', event_type: 'memory_updated' }),
   notify: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-const mockPool = { query: vi.fn() } as unknown as import('pg').Pool;
+function makeWriter(): EventWriter & { write: ReturnType<typeof vi.fn> } {
+  return {
+    write: vi.fn().mockResolvedValue({ version_hash: 'v-hash', occ_result: 'won', event_type: 'memory_updated' }),
+  };
+}
 
 function makeSdk() {
   return { trigger: vi.fn().mockResolvedValue(undefined) };
@@ -27,7 +31,8 @@ describe('CrystallizeWorker', () => {
   it('returns { skipped: true } when no episodic records', async () => {
     const reader = new StubTrailReader();
     const memory = new StubMemoryRepository();
-    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'ZERO');
 
     expect(result).toEqual({ skipped: true });
@@ -39,7 +44,8 @@ describe('CrystallizeWorker', () => {
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B']);
     const memory = new StubMemoryRepository();
     const sdk = makeSdk();
-    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, sdk);
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, sdk);
 
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'PRED_HASH');
 
@@ -58,7 +64,8 @@ describe('CrystallizeWorker', () => {
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace X']);
     const memory = new StubMemoryRepository();
-    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 
@@ -70,7 +77,8 @@ describe('CrystallizeWorker', () => {
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['new trail event']);
     const memory = new StubMemoryRepository();
     memory.setLookupLesson({ fingerprintId: 'fp', confidence: 0.5, content: 'prior lesson text' });
-    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-3', 'entity-3', 'HASH');
 
@@ -82,8 +90,9 @@ describe('CrystallizeWorker', () => {
   it('uses full distillation prompt when no existing lesson in memory', async () => {
     const reader = new StubTrailReader();
     vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['fresh trace']);
-    const memory = new StubMemoryRepository(); // lookupLesson returns null by default
-    const worker = new CrystallizeWorker(reader, memory, mockPool, { chat: mockChat }, makeSdk());
+    const memory = new StubMemoryRepository();
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-4', 'entity-4', 'HASH');
 

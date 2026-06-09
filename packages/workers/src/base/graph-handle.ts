@@ -45,15 +45,17 @@ export interface GraphHandle extends TrailReader {
  */
 export class PoolGraphHandle extends PoolTrailReader implements GraphHandle {
   readonly scopeId: string;
+  private readonly _pool: Pool;
 
   constructor(scopeId: string, pool: Pool) {
     super(pool);
     this.scopeId = scopeId;
+    this._pool = pool;
   }
 
   async write(event: GraphWriteEvent): Promise<WriteResult> {
     const { scope_id, entity_id, event_type, predecessor_hash, canonical_json_text } = event;
-    const result = await this.pool.query(
+    const result = await this._pool.query(
       OCC_WRITE_SQL(partitionTable(scope_id)),
       [scope_id, entity_id, predecessor_hash, canonical_json_text, event_type],
     );
