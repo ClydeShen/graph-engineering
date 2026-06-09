@@ -32,5 +32,5 @@
   ],
   "blockers": [],
   "context": "Roam health was 5/100 before Phase 6 (dominated by structural hub bottlenecks, not coupling rot). All 9 CRITICAL bottlenecks were deemed architecture-necessary. New session should re-run roam health to see if Phase 6 additions changed the picture, then propose targeted structural improvements.",
-  "next_action": "Run /session-start, then roam_health to get current snapshot, then propose a targeted codebase structure improvement plan based on findings."
+  "next_action": "Run /gsd-plan-phase 7 to create a Phase 7 plan targeting: (a) centralized types package (@graph/types), (b) WebSocket/SSE real-time API, (c) global config.json (~/.memex/config.json), as listed in ROADMAP.md §未来架构改进方向. The codebase structure improvement (roam health score 5/100 dominated by necessary architectural bottlenecks) was reviewed — bottlenecks are load-bearing; structural changes should be part of Phase 7 feature work, not standalone refactors."
 }
