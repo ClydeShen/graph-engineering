@@ -2,14 +2,14 @@
   "version": "1.1",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-09T23:00:00.000Z",
-    "last_session": "2026-06-09T23:50:00.000Z",
-    "last_active": "2026-06-09T23:50:00.000Z"
+    "started_at": "2026-06-10T00:00:00.000Z",
+    "last_session": "2026-06-10T00:15:00.000Z",
+    "last_active": "2026-06-10T00:15:00.000Z"
   },
   "position": {
     "phase": "07-architecture",
-    "active": "Phase 5 Architecture Hardening — complete (UAT 9/9 passed)",
+    "active": "Pre-Phase-6 architecture refactors — MemoryRepository seam + Lifecycle deepening + graph prop consolidation + type-safe Worker registration",
     "resume_file": ".harness/phases/07-architecture/.continue-here.json",
-    "stopped_at": "Committed 4c0d3a97 — Phase 5 UAT complete, 9/9 passed, ROADMAP + STATE updated. Phase 5 fully closed. Ready for Phase 6 planning."
+    "stopped_at": "Architecture review complete (5 candidates, roam health 5/100). User confirmed 'yes, explore and fix'. Ready to implement Candidates 1+2 (MemoryRepository + Lifecycle) in next session."
   }
 }

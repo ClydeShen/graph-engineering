@@ -1,28 +1,33 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "gsd-phase-5-verification",
-  "status": "complete",
-  "last_updated": "2026-06-09T23:50:00.000Z",
-  "current_state": "GSD Phase 5 execution COMPLETE. All 6 ARCH plans executed, merged, tsc clean, 254 tests passing (up from 215). Two merge conflicts manually resolved (see decisions_made). Ready for verification.",
+  "task": "pre-phase-6-architecture-refactors",
+  "status": "ready_to_execute",
+  "last_updated": "2026-06-10T00:15:00.000Z",
+  "current_state": "Phase 5 Architecture Hardening complete (UAT 9/9 passed, committed 27c11043). Architecture review run via /improve-codebase-architecture — 5 candidates identified. User confirmed: 'yes, explore and fix'. Ready to implement all candidates before Phase 6.",
   "completed_work": [
-    "05-01: classifyProviderError() + FallbackProvider — 15 tests, hermes-agent FailoverReason pattern ported",
-    "05-02: SSE GET /v1/stream route — pg_notify 'graph_event_ready' bridge, try/finally client.release(), 3 tests",
-    "05-03: @graph/types leaf package — core/api/shell sub-paths, zero @graph/* deps, re-export shim in shared/src/types.ts",
-    "05-04: loadMemexConfig() — null-safe, Zod-validated, ${ENV_VAR} interpolation, 7 tests",
-    "05-05: GET /v1/skills + GET /v1/skills/:id — two-phase frontmatter loading, mtime cache (>), path traversal guard, 12 tests",
-    "05-06: CrystallizeWorker delta injection — fingerprintId SHA-256, procedural_memory lookup, conditional LLM prompt, 5 tests",
-    "Post-merge: tsc --noEmit clean, vitest 254 passed (42 files), all conflicts manually resolved"
+    "Phase 5 UAT: 9/9 tests passed (classifyProviderError, FallbackProvider, SSE stream, @graph/types, config loader, skills route, crystallize delta)",
+    "ROADMAP.md + STATE.md updated (Phase 5 marked complete 6/6 plans)",
+    "/improve-codebase-architecture ran — HTML report at C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610.html",
+    "Architecture review: roam health 5/100, 5 candidates identified and ranked"
   ],
-  "remaining_work": [],
+  "remaining_work": [
+    "Implement Candidate 1 (Strong): MemoryRepository seam — 9 Workers → pool.query() replaced with typed interface; StubMemoryRepository for tests; PoolMemoryRepository adapter holds all SQL",
+    "Implement Candidate 2 (Strong): Lifecycle state machine deepening — remove loadAttempt from runLifecycle interface; internalize re-queue loop and MAX_LOAD_REQUEUE; export 3-value result enum (done | suspended | exhausted)",
+    "Implement Candidate 3 (Worth exploring): Consolidate graph prop — merge ReadOnlyGraphHandle interface into graph-handle.ts; co-locate PoolGraphHandle + StubGraphHandle in one file",
+    "Implement Candidate 4 (Worth exploring): Type-safe Worker registration — each Worker exports FUNCTION_ID const; index.ts uses typed imports instead of string literals",
+    "Implement Candidate 5 (Speculative): Route builder hidden deps — RouteContext struct + makeKnapsackGraph factory; only if route tests are painful"
+  ],
   "decisions_made": [
-    "05-06 merge conflict: worktree based on pre-TrailReader commit (53b79081); delta injection applied onto master's TrailReader version (reader.getEpisodicRecords kept, fingerprintId + procedural_memory SELECT + conditional prompt added on top)",
-    "05-05 merge conflict: gateway/src/index.ts needed both buildStreamRoute (05-02) and buildSkillsRoute (05-05) — both imports and mounts added; tsconfig.json kept root-relative @graph/types paths (master) over worktree's ../../../ paths",
-    "mockPool type fix: `as never` in crystallize.worker.test.ts removed vi.fn() access from new delta tests; changed to `as unknown as { query: ReturnType<typeof vi.fn> } & Pool`",
-    "CanonicalEventType in @graph/types/api is intentional controlled duplicate (no @graph/shared import to avoid circular dep)",
-    "node:crypto for lesson fingerprints is established precedent (not a pgcrypto violation — pgcrypto applies to OCC version_hash chain only)"
+    "Architecture review identified 5 candidates ranked: MemoryRepository (Strong) > Lifecycle (Strong) > graph-prop consolidation (Worth exploring) > type-safe registration (Worth exploring) > route builder deps (Speculative)",
+    "Top recommendation: Candidates 1+2 together in one pre-Phase-6 cleanup pass (in-process, no cross-package coordination)",
+    "HTML report written to C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610.html",
+    "Pool coupling: 9 Workers average 8 pool.query() calls each — no MemoryRepository or DataAccessLayer exists today",
+    "runLifecycle leaks loadAttempt param + error.escalated check to callers — ADR 27 violation (lifecycle state machine not encapsulated)",
+    "graph prop requires 3-file lookup: tool.interface.ts → read-only-handle.ts → graph-handle.ts",
+    "Worker function_id strings: 14 registrations, no compile-time safety on string literals"
   ],
   "blockers": [],
-  "context": "Two tracking systems coexist: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Independent. GSD Phase 5 = harness Phase 07-architecture. Wave 2 agents were spawned AFTER Wave 1 agents but BEFORE Wave 1 merges completed — their worktrees branched from pre-merge HEAD, causing the gateway index and tsconfig conflicts.",
-  "next_action": "Run /gsd-verify-phase 5 to spawn gsd-verifier and produce VERIFICATION.md checking ARCH-01..06 success criteria."
+  "context": "Two tracking systems: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Phase 5 is fully complete. Next harness phase would be 08 (if created). These architecture refactors are pre-Phase-6 cleanup — not a new GSD phase. The architecture report HTML is only in the temp dir and will not survive a reboot.",
+  "next_action": "Start a new session with /session-start, then implement Candidates 1 and 2 together: MemoryRepository seam + Lifecycle state machine deepening — both are in-process changes in packages/workers, no cross-package coordination needed."
 }
