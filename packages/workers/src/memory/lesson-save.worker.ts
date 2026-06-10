@@ -1,7 +1,6 @@
-import { createHash } from 'crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { notify } from '@graph/shared';
+import { notify, contentFingerprint } from '@graph/shared';
 import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const LESSON_SAVE_TRIGGER_CONFIG = {
@@ -23,7 +22,7 @@ export class LessonSaveWorker {
   async onLessonSave(
     payload: { content: string; confidence?: number },
   ): Promise<{ fingerprint_id: string; action: 'reinforced' | 'created' }> {
-    const fingerprintId = createHash('sha256').update(payload.content).digest('hex');
+    const fingerprintId = contentFingerprint(payload.content);
     const threshold = parseFloat(process.env['SKILL_EXPORT_THRESHOLD'] ?? '0.7');
 
     const existing = await this.memory.lookupLesson(fingerprintId);

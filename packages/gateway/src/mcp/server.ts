@@ -25,6 +25,7 @@ import { promisify } from 'util';
 import { tmpdir } from 'os';
 import { occWrite, checkCommand } from '@graph/shared';
 import { ZERO_HASH, AGENT_HEARTBEAT_TTL_S } from '@graph/shared';
+import { AgentCardSchema, registerAgent } from '../agent-registry.js';
 
 const SCRUB_KEYS = new Set([
   'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
@@ -68,35 +69,6 @@ const CLAIM_SQL = `
     candidate.version_hash
 `;
 
-// ── MinAgentCard Zod schema (D-2) ─────────────────────────────────────────
-const AgentCardSchema = z.object({
-  agent_id: z.string().uuid().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  skills: z.array(z.string()).min(1),
-  protocol: z.enum(['mcp', 'a2a', 'iii']),
-  endpoint: z.string().optional(),
-  version: z.string().optional(),
-});
-
-// ── REGISTER_AGENT SQL ──────────────────────────────────────────────────────
-const UPSERT_AGENT_SQL = `
-  INSERT INTO agent_registry
-    (agent_id, name, description, skills, protocol, endpoint, agent_card_json, last_heartbeat, status)
-  VALUES
-    (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4::text[], $5, $6, $7::jsonb, NOW(), 'active')
-  ON CONFLICT (agent_id)
-  DO UPDATE SET
-    name           = EXCLUDED.name,
-    description    = EXCLUDED.description,
-    skills         = EXCLUDED.skills,
-    protocol       = EXCLUDED.protocol,
-    endpoint       = EXCLUDED.endpoint,
-    agent_card_json = EXCLUDED.agent_card_json,
-    last_heartbeat = NOW(),
-    status         = 'active'
-  RETURNING agent_id
-`;
 
 // COMMAND GATE: any tool that executes user-supplied shell commands MUST call
 // checkCommand() before execution. See packages/shared/src/command-gate.ts.
@@ -391,19 +363,9 @@ export function buildMcpServer(pool: Pool): McpServer {
     },
     async ({ agent_card }) => {
       try {
-        const result = await pool.query<{ agent_id: string }>(UPSERT_AGENT_SQL, [
-          agent_card.agent_id ?? null,
-          agent_card.name,
-          agent_card.description ?? null,
-          agent_card.skills,
-          agent_card.protocol,
-          agent_card.endpoint ?? null,
-          JSON.stringify(agent_card),
-        ]);
-
-        const agentId = result.rows[0]?.agent_id ?? agent_card.agent_id ?? 'unknown';
+        const { agent_id } = await registerAgent(pool, agent_card);
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ registered: agentId }) }],
+          content: [{ type: 'text' as const, text: JSON.stringify({ registered: agent_id }) }],
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

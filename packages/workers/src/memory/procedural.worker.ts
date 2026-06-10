@@ -1,5 +1,4 @@
-import { createHash } from 'crypto';
-import { writeGuard } from '@graph/shared';
+import { writeGuard, contentFingerprint } from '@graph/shared';
 import type { EventWriter, EmbeddingProvider } from '@graph/shared';
 import { computeWLEmbedding } from './wl-embedding.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
@@ -50,7 +49,7 @@ export class ProceduralMemoryWorker {
       intentEmbeddingLiteral,
     });
 
-    const contentHash = createHash('sha256').update(intentDescription).digest('hex');
+    const contentHash = contentFingerprint(intentDescription);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
     await this.writes.write({
       scopeId,

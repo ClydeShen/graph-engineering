@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { InMemoryShadowAdapter } from './write-guard.js';
+import { InMemoryShadowAdapter } from './shadow-adapter.js';
 
 const OCC_SQL = `WITH new_version AS (
   INSERT INTO execution_event_log_202506

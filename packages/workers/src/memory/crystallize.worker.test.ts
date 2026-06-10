@@ -6,6 +6,7 @@ import { StubMemoryRepository } from '../base/memory-repository.js';
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
   notify: vi.fn().mockResolvedValue(undefined),
+  contentFingerprint: vi.fn((s: string) => `fp:${s}`),
 }));
 
 import { CrystallizeWorker } from './crystallize.worker.js';

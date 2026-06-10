@@ -4,6 +4,7 @@ import { StubMemoryRepository } from '../base/memory-repository.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => `[guarded]:${s}`),
+  contentFingerprint: vi.fn((s: string) => `fp:${s}`),
 }));
 
 import {

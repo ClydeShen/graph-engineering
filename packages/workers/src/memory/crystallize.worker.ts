@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { writeGuard, notify } from '@graph/shared';
+import { writeGuard, notify, contentFingerprint } from '@graph/shared';
 import type { EventWriter, LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
@@ -29,7 +28,7 @@ export class CrystallizeWorker {
     if (records.length === 0) return { skipped: true };
 
     const combined = records.join('\n');
-    const fingerprintId = createHash('sha256').update(combined).digest('hex');
+    const fingerprintId = contentFingerprint(combined);
 
     const existingLesson = await this.memory.lookupLesson(fingerprintId);
     const existing = existingLesson?.content ?? null;
