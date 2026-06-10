@@ -25,10 +25,13 @@ export interface KnapsackSliceResult {
 /**
  * Algorithm configuration for knapsackSlice.
  * Extensible: add new strategy values without changing call sites.
- * Phase 08 will add 'smart-crusher' (headroom SmartCrusher pattern).
+ * Phase 08 added 'importance-stratified' (D-01): tiers candidates by event_type
+ * before budget packing. Full SmartCrusher statistical change-point detection
+ * (headroom pattern) was evaluated and rejected (D-11) in favor of this
+ * event_type-based stratification.
  */
 export interface KnapsackConfig {
-  strategy?: 'newest-first';
+  strategy?: 'newest-first' | 'importance-stratified';
 }
 
 /**
@@ -54,7 +57,7 @@ export async function knapsackSlice(
   scopeId: string,
   rootHash: string,
   wMax: number,
-  _config?: KnapsackConfig
+  config?: KnapsackConfig
 ): Promise<KnapsackSliceResult> {
   // --- Vertical axis: walk predecessor_hash chain to N_root ---
   const causalChain: EventLogNode[] = [];
@@ -78,13 +81,17 @@ export async function knapsackSlice(
   // Merge: causal chain first (higher priority), then siblings
   const candidates = [...causalChain, ...siblings_sorted];
 
+  // --- Importance stratification (D-01): re-order candidates before budget packing ---
+  const packCandidates =
+    config?.strategy === 'importance-stratified' ? stratifyByImportance(candidates) : candidates;
+
   // --- Budget: greedy newest-first pack up to wMax ---
   const kept: EventLogNode[] = [];
   const dropped: EventLogNode[] = [];
   let budget = wMax;
   let budgetExhausted = false;
 
-  for (const event of candidates) {
+  for (const event of packCandidates) {
     if (budgetExhausted) {
       dropped.push(event);
       continue;
@@ -100,4 +107,51 @@ export async function knapsackSlice(
   }
 
   return { kept, dropped };
+}
+
+/**
+ * Importance stratification (D-01): re-orders candidates so higher-importance
+ * events are tried first by the greedy budget loop, and collapses repetitive
+ * memory_updated runs into a single representative entry.
+ *
+ * Tier 1 (highest, never dropped first): conflict_detected, scope_closed —
+ *   hoisted to the front, in original relative order.
+ * Tier 3 (aggregatable): consecutive memory_updated runs (length >= 2) in the
+ *   remaining candidates collapse to their first (most recent) entry.
+ * Tier 2: all other events, in original order, with collapsed Tier 3 entries
+ *   interleaved in their original relative positions.
+ *
+ * `candidates` is assumed newest-first (causal chain + sibling order).
+ */
+function stratifyByImportance(candidates: EventLogNode[]): EventLogNode[] {
+  const tier1: EventLogNode[] = [];
+  const rest: EventLogNode[] = [];
+
+  for (const event of candidates) {
+    if (event.event_type === 'conflict_detected' || event.event_type === 'scope_closed') {
+      tier1.push(event);
+    } else {
+      rest.push(event);
+    }
+  }
+
+  // Tier 3: collapse consecutive memory_updated runs (length >= 2) to their first entry.
+  const tier2WithTier3Collapsed: EventLogNode[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const event = rest[i]!;
+    if (event.event_type !== 'memory_updated') {
+      tier2WithTier3Collapsed.push(event);
+      continue;
+    }
+    // Start of a memory_updated run — find its extent.
+    let runEnd = i;
+    while (runEnd + 1 < rest.length && rest[runEnd + 1]!.event_type === 'memory_updated') {
+      runEnd++;
+    }
+    // Always keep the first (most recent) entry of the run, regardless of run length.
+    tier2WithTier3Collapsed.push(event);
+    i = runEnd;
+  }
+
+  return [...tier1, ...tier2WithTier3Collapsed];
 }
