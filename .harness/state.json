@@ -2,14 +2,14 @@
   "version": "1.1",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-10T09:20:00.000Z",
-    "last_session": "2026-06-10T16:00:00.000Z",
-    "last_active": "2026-06-10T16:00:00.000Z"
+    "started_at": "2026-06-11T00:00:00.000Z",
+    "last_session": "2026-06-10T23:05:00.000Z",
+    "last_active": "2026-06-11T00:00:00.000Z"
   },
   "position": {
-    "phase": "08-context-assembly",
-    "active": "Phase 8 planned: 3 plans (08-01 tokenizer+knapsack stratification, 08-02 pipeline hooks, 08-03 CCR module+wiring) in 2 waves. Plan-checker passed with 1 non-blocking warning (runContextAssemblyPipeline not wired into a real Worker yet). Ready to execute.",
-    "resume_file": ".planning/phases/08-context-assembly/08-01-PLAN.md",
-    "stopped_at": "Committed Phase 8 plans (1c9b6f87) and pattern map. Next: /gsd:execute-phase 8."
+    "phase": "09-memory-layers",
+    "active": "Phase 08 complete. Verification passed 15/15, code review 5/5 fixed (commits 74bc99ca..1f7fe26f). Phase 09 design notes exist at .planning/phases/09-memory-layers/09-DESIGN-NOTES.md. No PLAN.md yet.",
+    "resume_file": ".planning/phases/09-memory-layers/09-DESIGN-NOTES.md",
+    "stopped_at": "Phase 08 fully complete (execute + verify + review-fix). Next: /gsd:discuss-phase 9 or /gsd:plan-phase 9."
   }
 }
