@@ -183,6 +183,14 @@ export async function assembleContext(
   const volatileTokens = countTokens(volatile);
   const { forKnapsack: contextBudget } = computeContextBudgets({ wMax, stableTokens, volatileTokens });
 
+  if (stableTokens + volatileTokens > wMax) {
+    console.warn(
+      `[assembleContext] stable (${stableTokens}) + volatile (${volatileTokens}) = ` +
+        `${stableTokens + volatileTokens} exceeds wMax (${wMax}). ` +
+        `All context events will be dropped to CCR and the assembled prompt will exceed budget.`
+    );
+  }
+
   // Layer 2: Knapsack causal lineage projection
   // knapsackSlice enforces the budget greedily — sum(countTokens(kept)) ≤ contextBudget by invariant.
   const { kept, dropped } = await knapsackSlice(graph, scopeId, rootHash, contextBudget, knapsackConfig);
