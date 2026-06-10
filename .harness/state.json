@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-10T09:20:00.000Z",
-    "last_session": "2026-06-10T15:30:00.000Z",
-    "last_active": "2026-06-10T15:30:00.000Z"
+    "last_session": "2026-06-10T16:00:00.000Z",
+    "last_active": "2026-06-10T16:00:00.000Z"
   },
   "position": {
-    "phase": "07-architecture",
-    "active": "Candidates A+B+C implemented (commit 4e5cd9f9). 256 tests passing. Health score blocked at 3/100 — roam penalizes intentional hubs (buildApp, worker registration bootstrap). Reaching 50 requires ADR-level gateway/bootstrap redesign.",
-    "resume_file": ".harness/phases/07-architecture/.continue-here.json",
-    "stopped_at": "A+B+C committed. EventWriter seam in 6 workers, bootstrap extracted, pool private. Health 5→3/100 (worse due to new symbols adding betweenness paths). Score target 50 blocked."
+    "phase": "08-context-assembly",
+    "active": "Phase 8 planned: 3 plans (08-01 tokenizer+knapsack stratification, 08-02 pipeline hooks, 08-03 CCR module+wiring) in 2 waves. Plan-checker passed with 1 non-blocking warning (runContextAssemblyPipeline not wired into a real Worker yet). Ready to execute.",
+    "resume_file": ".planning/phases/08-context-assembly/08-01-PLAN.md",
+    "stopped_at": "Committed Phase 8 plans (1c9b6f87) and pattern map. Next: /gsd:execute-phase 8."
   }
 }
