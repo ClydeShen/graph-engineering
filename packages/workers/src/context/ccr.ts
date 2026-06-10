@@ -102,13 +102,14 @@ export function createMemexRetrieveTool(): AnthropicToolDefinition {
     description:
       'Retrieve original uncompressed content that was compressed to save tokens. ' +
       "Use this when you need more data than what's shown in the compressed context. " +
-      'The hash is provided in compression markers like [N items compressed... hash=HASH].',
+      'The hash is provided in compression markers like <<ccr:HASH N_dropped>> ' +
+      '(e.g. <<ccr:abc123... 3_dropped>> → pass hash="abc123...").',
     input_schema: {
       type: 'object',
       properties: {
         hash: {
           type: 'string',
-          description: "Hash key from the compression marker (e.g. 'HASH' from hash=HASH)",
+          description: "Hash key from the compression marker (e.g. 'abc123...' from <<ccr:abc123... 3_dropped>>)",
         },
         query: {
           type: 'string',
