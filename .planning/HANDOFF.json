@@ -1,30 +1,29 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-09T23:55:00.000Z",
-  "phase": "05",
-  "phase_name": "Architecture Hardening",
-  "phase_dir": ".planning/phases/05-architecture-hardening",
-  "plan": 0,
-  "task": 0,
-  "total_tasks": 6,
+  "timestamp": "2026-06-10T10:11:01.900Z",
+  "phase": "08",
+  "phase_name": "context-assembly",
+  "phase_dir": ".planning/phases/08-context-assembly",
+  "plan": 3,
+  "task": 1,
+  "total_tasks": 5,
   "status": "paused",
-  "completed_tasks": [],
+  "completed_tasks": [
+    {"id": 1, "name": "08-01: tokenizer TOKENIZER_MODE fallback", "status": "done", "commit": "0d07422e"},
+    {"id": 2, "name": "08-01: importance-stratified knapsack strategy", "status": "done", "commit": "135569f2"},
+    {"id": 3, "name": "08-02: PipelineContext + 4 no-op pipeline hooks on Worker", "status": "done", "commit": "2896d9ab"}
+  ],
   "remaining_tasks": [
-    {"id": 1, "name": "ARCH-01: classifyProviderError + FallbackProvider", "status": "not_started"},
-    {"id": 2, "name": "ARCH-02: SSE /v1/stream route", "status": "not_started"},
-    {"id": 3, "name": "ARCH-03: @graph/types leaf package", "status": "not_started"},
-    {"id": 4, "name": "ARCH-04: ~/.memex/config.json loader", "status": "not_started"},
-    {"id": 5, "name": "ARCH-05: SKILL.md two-phase loading (wave 2)", "status": "not_started"},
-    {"id": 6, "name": "ARCH-06: CrystallizeWorker delta injection (wave 2)", "status": "not_started"}
+    {"id": 4, "name": "08-03 task 1: create packages/workers/src/context/ccr.ts (CCR reversible compression) + wire sentinel injection / dropped-event store into assembleContext()", "status": "not_started"},
+    {"id": 5, "name": "08-03 task 2: add runContextAssemblyPipeline() orchestration helper calling Plan 02's PipelineContext hooks", "status": "not_started"}
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
-    {"decision": "CanonicalEventType in @graph/types/api is an intentional controlled duplicate", "rationale": "Cannot import from @graph/shared without circular dep; inline union is the only viable option for a leaf package", "phase": "05"},
-    {"decision": "node:crypto for lesson fingerprints is NOT a pgcrypto violation", "rationale": "pgcrypto constraint (ADR 02) applies to OCC version_hash chain only; lesson-save.worker.ts already uses node:crypto as established precedent", "phase": "05"},
-    {"decision": "05-05 is Wave 2 depending on 05-02", "rationale": "Both modify packages/gateway/src/index.ts; sequential dependency prevents merge conflict", "phase": "05"}
+    {"decision": "Committed packages/shared/src/knapsack.ts (was untracked since b6eacd8c) and added 'export { CANONICAL_EVENT_TYPES } from \"@graph/types/api\";' to packages/shared/src/types.ts", "rationale": "master HEAD was broken (tsc -b TS2724) before Phase 8 worktrees could even fork — packages/shared/src/index.ts re-exports ./knapsack.js which didn't exist in git, and constants.ts imported a value CANONICAL_EVENT_TYPES that types.ts only re-exported as a type", "phase": "08"},
+    {"decision": "Added @graph/types, @graph/types/core, @graph/types/api, @graph/types/shell aliases to vitest.config.ts resolve.alias", "rationale": "the CANONICAL_EVENT_TYPES fix turned types.ts into vitest.config.ts's first-ever runtime importer of @graph/types/api; vitest.config.ts's manual alias map (separate from the unused vite-tsconfig-paths-based vitest.config.mts) didn't cover @graph/types/*, breaking 21 test files at module-resolution time", "phase": "08"}
   ],
   "uncommitted_files": [],
-  "next_action": "Run /gsd-execute-phase 5. Wave 1 (01+02+03+04 parallel), then Wave 2 (05+06).",
-  "context_notes": "Planning session complete. Researched nanobot + hermes-agent specimens. All 6 ARCH plans written, checker-verified (5 blockers found and fixed), committed at ad72735."
+  "next_action": "Run /gsd:execute-phase 8 — Wave 2 (08-03, depends on 08-01+08-02 which are both merged to master) is the only incomplete plan. Worktree should fork from commit 23f581b4.",
+  "context_notes": "Wave 1 (08-01, 08-02) executed in parallel worktrees, merged cleanly, worktrees cleaned up (one needed a robocopy /MIR trick on Windows due to MAX_PATH from npm install in the worktree — git worktree remove --force alone failed with 'Filename too long'). Post-merge full vitest run: 165 passed / 3 failed (packages/gateway/src/routes/mcp.test.ts execute_bash tests) / 15 skipped, 29 of 32 test files passing (after the alias fix; was 21 failed files before it). The 3 mcp.test.ts execute_bash failures were observed AFTER merging Wave 1 but were NOT investigated — unknown if pre-existing on master before this session or introduced by something in this session. Flag as advisory, not blocking — but the 08-03 plan-checker / verifier should confirm these are unrelated to context-assembly before treating phase 8 as fully green."
 }
