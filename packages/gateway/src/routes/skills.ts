@@ -32,7 +32,7 @@ export interface SkillSummary {
 }
 
 /** Parse YAML frontmatter from a SKILL.md file (no external YAML dependency). */
-function parseFrontmatter(content: string): { name: string; description: string; fingerprintId: string } {
+export function parseFrontmatter(content: string): { name: string; description: string; fingerprintId: string } {
   const parts = content.split('---');
   // parts[0] is empty (before the first ---), parts[1] is the frontmatter block
   const block = parts[1] ?? '';
@@ -44,11 +44,6 @@ function parseFrontmatter(content: string): { name: string; description: string;
 
   return { name, description, fingerprintId };
 }
-
-// Module-level cache — persists across requests, reset when a new buildSkillsRoute is called.
-// Each call to buildSkillsRoute() returns an independent Hono instance with its own cache closure.
-let cachedList: SkillSummary[] | null = null;
-let cachedMtime = 0;
 
 /**
  * Build a Hono router for the skills endpoints.

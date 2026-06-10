@@ -3,6 +3,8 @@
  * All values are LOCKED per ADR references.
  */
 
+import { CANONICAL_EVENT_TYPES, type CanonicalEventType } from './types.js';
+
 /**
  * Sentinel predecessor_hash for the graph root (plan_created event).
  * 64 zeros — used as the first predecessor_hash in a new Scope chain.
@@ -12,15 +14,10 @@ export const ZERO_HASH = '0'.repeat(64) as string;
 
 /**
  * Five canonical event types. Any other type is rejected at bus level.
+ * Derived from CANONICAL_EVENT_TYPES in @graph/types — single source of truth.
  * @see ADR 12
  */
-export const EVENT_TYPES = [
-  'plan_created',
-  'task_spawned',
-  'memory_updated',
-  'conflict_detected',
-  'scope_closed',
-] as const;
+export const EVENT_TYPES = Object.values(CANONICAL_EVENT_TYPES) as CanonicalEventType[];
 
 /**
  * Maximum number of concurrent Worker slots in the iii execution pool.

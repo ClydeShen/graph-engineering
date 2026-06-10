@@ -12,18 +12,9 @@
 import type { EventLogNode } from '@shared/types';
 import { countTokens } from '@shared/tokenizer';
 import { ZERO_HASH } from '@shared/constants';
+import type { KnapsackGraph } from '@shared/knapsack';
 
-/**
- * Minimal read-only graph interface required by knapsackSlice.
- * Consumers pass their own graph handle or mock; this avoids importing the
- * full GraphHandle (which carries write permissions, ADR 35 D-8).
- */
-export interface KnapsackGraph {
-  /** Return the EventLogNode whose version_hash equals `hash`, or undefined. */
-  getEventByHash(hash: string): EventLogNode | undefined;
-  /** Return sibling events (pending / conflict_detected) in the same scope. */
-  getSiblings(scopeId: string, excludeHash: string): EventLogNode[];
-}
+export type { KnapsackGraph };
 
 /** Events kept within budget and events dropped beyond it. */
 export interface KnapsackSliceResult {

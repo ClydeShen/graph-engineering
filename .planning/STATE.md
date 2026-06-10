@@ -27,6 +27,7 @@ progress:
 ## Roadmap Evolution
 
 - Phase 5 added: Architecture Hardening — LLM Provider registry+FallbackProvider, WebSocket/SSE stream API, @graph/types package, global config.json, SKILL.md progressive loading, CrystallizeWorker surgical distillation
+- Phase 6 added: Gateway Seam Extraction — processAgentTurn, makeKnapsackGraph+makeKnapsackGraphFromView factories, knapsackSlice {kept,dropped}, KnapsackConfig
 
 ## Decisions
 

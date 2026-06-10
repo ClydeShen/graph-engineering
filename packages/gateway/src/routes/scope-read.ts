@@ -16,7 +16,7 @@ import { Hono } from 'hono';
 import type { Pool } from 'pg';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 import { assembleContext } from '@graph/workers/context/assemble';
-import { makeKnapsackGraphFromView } from '../knapsack-graph.js';
+import { makeKnapsackGraph } from '../knapsack-graph.js';
 
 /**
  * Build the scope-read route.
@@ -69,9 +69,8 @@ export function buildScopeReadRoute(pool: Pool, wMax: number): Hono {
 
     const rootHash = latestResult.rows[0]?.version_hash ?? '';
 
-    // makeKnapsackGraphFromView: O(1) via scope_lineage_view for large scopes,
-    // falls back to direct table scan (ADR 05 supplement / migration 009).
-    const graph = await makeKnapsackGraphFromView(pool, id);
+    // Read path: view-first with fallback (ADR 05 supplement / migration 009).
+    const graph = await makeKnapsackGraph(pool, id);
 
     const context = await assembleContext(
       graph,

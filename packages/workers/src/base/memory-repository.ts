@@ -17,18 +17,37 @@ export interface LessonRecord {
   content: string;
 }
 
-/** Typed data-access seam for all memory tables. Pool is an implementation detail, not an interface. */
-export interface MemoryRepository {
+/** Episodic memory tier — records what happened within a Scope. */
+export interface EpisodicRepository {
   appendEpisodicTrace(scopeId: string, entityId: string, content: string): Promise<void>;
+}
+
+/** Semantic memory tier — cross-Scope generalised facts. */
+export interface SemanticRepository {
   insertSemanticFact(scopeId: string, content: string): Promise<void>;
+}
+
+/** Procedural memory tier — positive/negative workflow templates and lessons. */
+export interface ProceduralRepository {
   insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void>;
   reinforceTemplate(templateId: string): Promise<void>;
   lookupLesson(fingerprintId: string): Promise<LessonRecord | null>;
   reinforceLessonConfidence(fingerprintId: string): Promise<void>;
   insertLesson(fingerprintId: string, content: string): Promise<void>;
   markSupersededByEbbinghaus(): Promise<void>;
+}
+
+/** Working memory tier — short-lived TTL entries. */
+export interface WorkingRepository {
   purgeTTLWorkingMemory(): Promise<void>;
 }
+
+/** Typed data-access seam for all memory tables. Pool is an implementation detail, not an interface. */
+export interface MemoryRepository
+  extends EpisodicRepository,
+    SemanticRepository,
+    ProceduralRepository,
+    WorkingRepository {}
 
 /** Production adapter — all memory-table SQL lives here. */
 export class PoolMemoryRepository implements MemoryRepository {

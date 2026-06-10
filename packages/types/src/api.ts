@@ -3,27 +3,29 @@
  *
  * This module is a leaf: it imports no @graph/* packages.
  *
- * NOTE: CanonicalEventType is intentionally inlined here (controlled duplicate).
- * It cannot import from @graph/shared without creating a circular dependency
- * (@graph/shared depends on @graph/types, so @graph/types must not depend on @graph/shared).
- * The inline union is identical to the EVENT_TYPES constant in packages/shared/src/constants.ts.
- * This is documented as known drift — tracked in .harness/implementation-notes.md.
+ * CANONICAL_EVENT_TYPES is defined here as a const object. @graph/shared derives
+ * its EVENT_TYPES array from it via Object.values(), eliminating the former
+ * controlled duplicate. This package remains a leaf — it imports no @graph/* packages.
  * @see ADR 12
  */
 
 /**
- * A canonical event type from the five locked event types.
- *
- * CONTROLLED DUPLICATE: This union matches EVENT_TYPES in packages/shared/src/constants.ts.
- * Do not import from @graph/shared — that would create a circular dependency.
+ * The five locked canonical event types as a const object.
+ * `CanonicalEventType` and `EVENT_TYPES` in @graph/shared are both derived from
+ * this object, eliminating the former manual synchronization requirement.
  * @see ADR 12
  */
+export const CANONICAL_EVENT_TYPES = {
+  plan_created:      'plan_created',
+  task_spawned:      'task_spawned',
+  memory_updated:    'memory_updated',
+  conflict_detected: 'conflict_detected',
+  scope_closed:      'scope_closed',
+} as const;
+
+/** A canonical event type. Any other type is rejected at bus level. */
 export type CanonicalEventType =
-  | 'task_spawned'
-  | 'memory_updated'
-  | 'plan_created'
-  | 'scope_closed'
-  | 'conflict_detected';
+  typeof CANONICAL_EVENT_TYPES[keyof typeof CANONICAL_EVENT_TYPES];
 
 /**
  * A single row from execution_event_log as returned by queries.

@@ -122,3 +122,107 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 **参考：** nanobot Dream 的设计哲学——不重写整个记忆文件，而是做"最小诚实变更"。
 
 **待应用：** 同一 `fingerprint_id` 的 Lesson 多次强化（Ebbinghaus reinforcement）时，CrystallizeWorker 的 LLM prompt 应识别已有 Lesson 内容，只追加新 insight，不重复已有要点。避免每次强化都覆盖全文。实现方式：prompt 中注入 `existing_lesson_content`，要求 LLM 输出 delta 而非全量重写。
+
+---
+
+## 08-context-assembly
+
+**目标：** 将 Knapsack Slicing（ADR-13）从规格落地为可运行代码，并补充 CCR 可逆压缩路径，替代 ADR-13 补充中 Level-3 的"熔断挂起"硬截断。
+
+**背景：** ADR-13 规定了 Knapsack Slicing 算法的规格（前驱哈希链 + token 预算裁剪），但目前系统没有任何实现——Worker 获取的 context 是未经裁剪的完整链路。随着 Scope 增长，这将成为 OOM 和 LLM 性能的主要瓶颈。
+
+### 核心交付物
+
+1. **Knapsack Slicing 算法实现**（`@graph/workers` 上下文组装层）
+   - 沿前驱哈希链逆向追溯，按 token 权重（recency × importance）装包
+   - 重要性分层：`conflict_detected` / `scope_closed` 节点权重最高；稳定的 `memory_updated` 序列可聚合
+   - 参考：headroom `SmartCrusher` 的变点检测（`change_points`）+ 常量提取策略（`headroom/transforms/smart_crusher.py`）
+
+2. **CCR 可逆压缩路径**（ADR-13 Level-3 的替代方案）
+   - 当前驱链超出 W_max 时，不直接熔断挂起，而是压缩低优先级节点并缓存原始内容
+   - Worker 的 system prompt 注入检索工具：`memex_retrieve(hash)` —— Worker 认为需要完整数据时主动调用
+   - CCR hash 作为 `_meta` 字段写入 context，不污染图账本
+   - 参考：headroom `ccr/tool_injection.py`、`ccr/response_handler.py`
+
+3. **Wasm Tokenizer 集成**（ADR-15）
+   - `@dqbd/tiktoken` 精确 token 计数用于 Knapsack 装包决策和 CCR 触发阈值
+   - 复用已有 tokenizer 基础设施，补充 `countTokens(node)` 工具函数
+
+4. **Pipeline lifecycle hooks**（Worker 扩展点）
+   - 参考 headroom `hooks.py` 的 `on_pipeline_event(stage, data)` 模式
+   - 定义 Worker 生命周期的可观测事件点：`context_assembled`、`context_compressed`、`llm_called`、`result_written`
+   - 为 Phase 09 的记忆注入（Reflection Track）预留插槽
+
+**与现有 ADR 的关系：** ADR-13 + ADR-13 补充（CCR 替代 Level-3）；ADR-15（Wasm Tokenizer）；ADR-22（LLM 调用接口）。
+
+**前置条件：** Phase 07-architecture 完成（MemoryRepository seam、graph-handle 整合已就位）。
+
+---
+
+## 09-memory-layers
+
+**目标：** 实现四层记忆中尚未落地的三层：Episodic、Semantic、Procedural。Working Memory（`execution_event_log`）已在 Phase 03 完成，本阶段补齐剩余三层及其检索路径。
+
+**背景：** RFC §8 定义了四层记忆的完整架构，但 Phase 03–07 仅实现了 Working Memory。CrystallizeWorker 和 LessonSaveWorker 已在 Phase 04 完成，但 Episodic / Semantic / Procedural 三张表尚未创建，Lesson 只写入了占位表。
+
+### 核心交付物
+
+1. **Episodic Memory 写入**（`scope_closed` 触发）
+   - `episodic_memory` 表：HNSW 向量索引 + 时序索引
+   - TemplateProposalWorker 雏形：读取 Scope 完整 DAG → 提取意图摘要 + 结果摘要 → 写入 episodic
+
+2. **Semantic Memory + supersession chains**
+   - `semantic_memory` 表：`superseded_by` 自引用外键 + 部分 HNSW 索引（`WHERE superseded_by IS NULL`）
+   - `supersede()` 操作：新版本写入时链接旧版本，旧版本从检索空间排除（不物理删除）
+   - LLM 触发合并 hint：相似度 > 0.89 时返回"建议合并"而非强制覆盖
+   - 参考：headroom `memory/` 的 supersession 实现细节（`valid_from` / `valid_until` 时间戳对）
+
+3. **Procedural Memory 基础**（`is_anti_pattern` 双 HNSW 分区）
+   - `procedural_memory` 表：正负样本双独立 HNSW 部分索引
+   - 基础写入路径：TemplateProposalWorker 提取骨架写正样本，orphan node 写负样本
+
+4. **BM25 + HNSW RRF 混合检索**（ADR-20 规格落地）
+   - `ts_doc` GIN 全文索引 + `pgvector` HNSW 余弦相似度
+   - Reciprocal Rank Fusion（RRF k=60）合并两路结果
+   - Reflection Track 触发接口（`mem::reflect`，ADR-21 规格）
+
+**与现有 ADR 的关系：** ADR-20（混合检索）；ADR-21（Reflection Track 触发规格）；ADR-22（Embedding Provider）。
+
+**前置条件：** Phase 08-context-assembly 完成（Pipeline lifecycle hooks 中 Reflection Track 插槽已预留）。
+
+---
+
+## 10-trail-discovery
+
+**目标：** 实现 Trail Discovery（工作流涌现）——从历史 Scope 中自动提取可复用的执行模式，写入 Procedural Memory，使系统"越用越聪明"。同时完成 Ebbinghaus reinforcement 闭环和 CrystallizeWorker 外科式蒸馏优化。
+
+**背景：** 这是 Memex 最核心的差异化能力。Phase 09 完成了 Procedural Memory 的基础写入，Phase 10 建立完整的涌现闭环：正负样本 → 骨架模板 → 冷启动注入 → 强化/衰减 → 蒸馏更新。
+
+### 核心交付物
+
+1. **TemplateProposalWorker（完整版）**
+   - 被 `scope_closed` 触发，启动独立 Context Window
+   - **正样本**：识别低冲突、短耗时收敛路径 → 提取抽象接口边骨架 → 写 `procedural_memory(is_anti_pattern=FALSE)`
+   - **负样本（success correlation）**：追溯 orphan node 之后的收敛路径 → "失败→修正"因果对打包 → 写 `is_anti_pattern=TRUE`
+   - 参考：headroom `cli/learn.py` 的 success correlation 逻辑（失败后做了什么修正才成功）
+
+2. **Skeleton Graph 冷启动注入**
+   - 新 Scope 冷启动时：嵌入向量 → Top-20 ANN → 三信号重排 → 拍入黄金骨架
+   - 反面程序记忆并行注入 System Prompt（"禁止重蹈的坑"）
+
+3. **PatternDiscoveryWorker**（ADR-25 跨域拓扑算法）
+   - 定期扫描 Trail Mesh，提取跨 Scope 的通用拓扑结构
+   - 更新 `semantic_memory` 跨域知识（如 "explore → hypothesize → validate → converge" 普适模式）
+
+4. **Ebbinghaus reinforcement 闭环**
+   - `success_count` / `reinforcement_count` 更新路径：Scope 再次命中某 Lesson → `+1` → 检索权重提升
+   - 30 天衰减周期：`last_used_at` 配合衰减扫描（`graph::memory::decay` 定时触发）
+   - **反馈驱动调参**：参考 headroom `compression_feedback.py` 的 `retrieval_rate → suggested_items` 模式，将 Lesson 的命中率映射到 Knapsack 中的 token 分配权重
+
+5. **CrystallizeWorker 外科式蒸馏**（ROADMAP Phase 7+ item #6 落地）
+   - 同一 `fingerprint_id` 多次强化时，prompt 注入 `existing_lesson_content`
+   - LLM 输出 delta 而非全量重写，避免每次强化覆盖已有要点
+
+**与现有 ADR 的关系：** ADR-25（跨域拓扑算法）；ADR-39（Pattern Discovery 调度）；ADR-36（Knowledge Entity 写时机）。
+
+**前置条件：** Phase 09-memory-layers 完成（Episodic + Procedural 表已就位，BM25+HNSW 检索可用）。

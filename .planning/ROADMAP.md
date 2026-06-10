@@ -135,3 +135,13 @@ Plans:
 - [x] 05-04-PLAN.md — loadMemexConfig() (~/.memex/config.json, Zod, ${ENV_VAR} interpolation)
 - [x] 05-05-PLAN.md — Skills route GET /v1/skills + GET /v1/skills/:id (two-phase loading)
 - [x] 05-06-PLAN.md — CrystallizeWorker delta injection (SHA-256 fingerprint + conditional LLM prompt)
+
+### Phase 6: Gateway Seam Extraction
+
+**Goal:** Extract domain logic from the HTTP layer into testable pure functions: `processAgentTurn` (domain function replacing inline Hono handler logic in events.ts), `makeKnapsackGraph` + `makeKnapsackGraphFromView` factories (consolidate duplicate KnapsackGraph construction from events.ts and scope-read.ts), and harden `knapsackSlice` with a `{ kept, dropped }` return type and `KnapsackConfig` extensibility interface (currently hardcoded `newest-first` strategy). events.ts shrinks from 163 → ~25 lines. The hottest write path becomes testable without Hono.
+**Depends on:** Phase 5
+**Requirements**: TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 6 to break down)

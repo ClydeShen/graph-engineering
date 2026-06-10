@@ -22,7 +22,7 @@ import { zValidator } from '@hono/zod-validator';
 import { CreateScopeSchema } from '@shared/schemas';
 import { nestScope } from '@graph/control-plane/nesting';
 import { assembleContext } from '@graph/workers/context/assemble';
-import type { KnapsackGraph } from '@graph/workers/context/knapsack';
+import type { KnapsackGraph } from '@shared/knapsack';
 import { logger, LOG_EVENTS } from '@shared/logger';
 
 const log = logger.child({ component: 'gateway', route: 'POST /v1/scopes' });

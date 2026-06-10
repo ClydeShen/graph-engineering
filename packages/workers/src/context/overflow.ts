@@ -12,18 +12,6 @@ import type { EventLogNode } from '@shared/types';
 import { countTokens } from '@shared/tokenizer';
 
 /**
- * IOverflowStrategy — Phase 2 extension point (pre-reserved, NOT activated in Phase 1).
- *
- * RESERVED — DO NOT implement or activate in Phase 1 (ADR 30).
- * Phase 2 may replace ReverseChronologicalDiscarder with ScoreGatedKnapsack
- * by swapping the strategy here.
- */
-export interface IOverflowStrategy {
-  /** Select a subset of candidate events that fits within budgetTokens. */
-  discard(candidates: EventLogNode[], wMax: number): EventLogNode[];
-}
-
-/**
  * Zero-LLM reverse-chronological greedy pack discarder.
  *
  * Algorithm (ADR 30 D-2):
@@ -37,7 +25,7 @@ export interface IOverflowStrategy {
  *   - Graph structure is NEVER mutated. context_compressed is NEVER written.
  *   - Most recent events are always retained first.
  */
-export class ReverseChronologicalDiscarder implements IOverflowStrategy {
+export class ReverseChronologicalDiscarder {
   discard(candidates: EventLogNode[], wMax: number): EventLogNode[] {
     // Sort newest-first
     const sorted = [...candidates].sort(

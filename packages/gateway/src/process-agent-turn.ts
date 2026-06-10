@@ -19,6 +19,7 @@ import { EventBodySchema } from '@shared/schemas';
 import { occWrite } from '@shared/occ-write';
 import { logger, LOG_EVENTS } from '@shared/logger';
 import {
+  checkSuspended,
   checkConvergence,
   writeScopeClosed,
   writeContextOomThrottled,
@@ -39,11 +40,7 @@ export async function processAgentTurn(
   wMax: number,
 ): Promise<AgentTurnOutcome> {
   // 1. Suspended lockout (ADR 39)
-  const scopeRow = await pool.query<{ status: string }>(
-    'SELECT status FROM scope_lineage WHERE scope_id = $1',
-    [scopeId],
-  );
-  if (scopeRow.rows[0]?.status === 'suspended') {
+  if (await checkSuspended(pool, scopeId)) {
     logger.child({ component: 'gateway', scope_id: scopeId }).warn(
       LOG_EVENTS.SCOPE_SUSPENDED_LOCKOUT,
     );
@@ -71,7 +68,7 @@ export async function processAgentTurn(
 
   // 5. Context assembly
   try {
-    const graph = await makeKnapsackGraph(pool, scopeId);
+    const graph = await makeKnapsackGraph(pool, scopeId, { bypassView: true });
     const context = await assembleContext(graph, scopeId, version_hash, event.payload, wMax, scopeClosed);
     return { suspended: false, version_hash, occ_result, context };
   } catch (oomErr) {

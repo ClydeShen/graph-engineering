@@ -1,29 +1,28 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "pre-phase-6-architecture-refactors",
-  "status": "complete",
-  "last_updated": "2026-06-10T09:08:00.000Z",
-  "current_state": "All 4 architecture candidates implemented and committed. 255 tests pass, tsc clean. Candidate 5 (Speculative) intentionally skipped — route tests not actively painful.",
+  "task": "candidates-abc-implementation",
+  "status": "in_progress",
+  "last_updated": "2026-06-10T14:30:00.000Z",
+  "current_state": "Architecture review run 2 complete. HTML report at C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610b.html. Three candidates identified, none yet implemented. User intent: fix all candidates before entering Phase 6 (gateway-seam-extraction).",
   "completed_work": [
-    "Phase 5 UAT: 9/9 passed — all ARCH plans verified",
-    "Architecture review: roam health 5/100, 5 candidates identified",
-    "Candidate 1 (MemoryRepository seam): packages/workers/src/base/memory-repository.ts created; 6 Workers refactored; index.ts updated; 6 unit tests + gate3 integration test updated; commit e13bee8a",
-    "Candidate 2 (Lifecycle state machine): runLifecycle loadAttempt internalized; LifecycleResult type exported; tests rewritten to assert on typed result; commit fab4123d",
-    "Candidate 3 (Graph prop consolidation): ReadOnlyGraphHandle + SecurityException + PoolReadOnlyGraphHandle merged into graph-handle.ts; StubGraphHandle added; read-only-handle.ts deleted; commit 79c5d035",
-    "Candidate 4 (Type-safe registration): FUNCTION_ID added to ConflictResolverWorker; LESSON_SAVE_TRIGGER_CONFIG used in crystallize.worker.ts; all 14 string literals in index.ts replaced with typed TRIGGER_CONFIG.function_id refs; commit 073c586e"
+    "Candidates 1+3 shipped in previous session (commit b6eacd8c): processAgentTurn, KnapsackGraph factories, knapsackSlice {kept,dropped}. 256 tests passing, tsc clean.",
+    "Architecture review run 2: roam health 5/100 diagnosed. 5 of 8 critical bottlenecks identified as intentional or already fixed.",
+    "HTML report written: architecture-review-20260610b.html. Three candidates surfaced."
   ],
   "remaining_work": [
-    "Candidate 5 (Speculative): Route builder hidden deps — RouteContext struct + makeKnapsackGraph factory; skip unless route tests are actively painful"
+    "Candidate A (Strong): EventWriter seam — define EventWriter interface in @graph/shared, OccEventWriter adapter, replace pool in 9 worker constructors (episodic, semantic, procedural, crystallize, user-profile, sub-scope-result, conflict-resolver, mcp-client, frontier-scheduler), update index.ts wiring",
+    "Candidate B (Worth exploring): Bootstrap SQL extraction — move synthesizer cron handler SQL, user-profile agent query, and agent_registry seed out of index.ts into worker modules or dedicated bootstrap module",
+    "Candidate C (Quick win): PoolTrailReader.pool visibility — change 'protected' to 'private' in packages/workers/src/base/trail-reader.ts"
   ],
   "decisions_made": [
-    "Candidate 5 skipped: route tests not actively painful; speculative scope not justified",
-    "LifecycleResult includes 'suspended' as forward-declared reserved value (not yet returned by any code path)",
-    "GraphHandleImpl renamed to PoolGraphHandle for naming consistency with PoolMemoryRepository/PoolTrailReader",
-    "read-only-handle.ts deleted outright (no re-export barrel) per CLAUDE.md anti-backward-compat rule",
-    "CrystallizeWorker imports LESSON_SAVE_TRIGGER_CONFIG from lesson-save.worker.ts — no circular dependency since lesson-save does not import crystallize"
+    "EventWriter interface: write(event: GraphWriteEvent): Promise<WriteResult> — wraps occWrite(pool, event); placed in @graph/shared",
+    "OccEventWriter adapter: thin wrapper, no behaviour change; created once in index.ts and injected",
+    "Candidate order: A first (highest leverage, removes pool from 9 constructors), C in same commit (one-liner), B after (readability, not blocking)",
+    "graph prop betweenness 414 is NOT friction — intentional permission seam (ADR 35); no action",
+    "Candidates 4+5 from arch sprint remain deferred (PhaseGuardedHandle hierarchy, workers/index.ts hub plugin pattern)"
   ],
   "blockers": [],
-  "context": "Two tracking systems: harness (.harness/) phases 04-07; GSD (.planning/) phases 1-5. Phase 5 is complete. These architecture refactors were pre-Phase-6 cleanup. Phase 6 (Extensions) is next.",
-  "next_action": "Run /harness-verify-before-move to perform phase exit sweep, then advance to Phase 6 (Extensions) per .harness/ROADMAP.md."
+  "context": "Two tracking systems: harness (.harness/) phase 07-architecture and GSD (.planning/) phase 6 (gateway-seam-extraction, added but not planned). Architecture review run 2 is the prerequisite gate before GSD Phase 6 execution begins.",
+  "next_action": "Implement Candidate A: define EventWriter interface in packages/shared/src/event-writer.ts, create OccEventWriter adapter, replace pool: Pool with writes: EventWriter in all 9 worker constructors, update index.ts, run tests."
 }

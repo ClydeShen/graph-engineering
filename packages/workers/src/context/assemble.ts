@@ -6,8 +6,8 @@
  *
  * Layer 1 (Stable):  System role string. Cache-eligible across Anthropic API calls.
  *                    Keep stable — do not vary per invocation (ADR 30 D-1).
- * Layer 2 (Context): Knapsack causal lineage projection. Overflow handled by
- *                    ReverseChronologicalDiscarder (Zero-LLM, ADR 30 D-2).
+ * Layer 2 (Context): Knapsack causal lineage projection. Budget enforced by the
+ *                    knapsack's own greedy loop (Zero-LLM, ADR 30 D-2).
  * Layer 3 (Volatile): Current input payload. Rebuilt every invocation.
  *
  * @see ADR 30 (Context Assembly Strategy)
@@ -17,9 +17,6 @@
 import type { EventLogNode } from '@shared/types';
 import { countTokens } from '@shared/tokenizer';
 import { knapsackSlice, type KnapsackGraph } from './knapsack.js';
-import { ReverseChronologicalDiscarder } from './overflow.js';
-
-const OVERFLOW_DISCARDER = new ReverseChronologicalDiscarder();
 
 /**
  * The 3-layer assembled context.
@@ -52,15 +49,34 @@ export const STABLE_SYSTEM_ROLE =
   'are dropped, not summarized. Retrieve older context via graph queries if needed.';
 
 /**
+ * Compute the token budgets for the three context layers.
+ *
+ * Pure function — no side effects. Exported for independent unit testing.
+ *
+ * @param wMax          Maximum token budget for the entire assembled prompt.
+ * @param stableTokens  Tokens consumed by the stable system role (Layer 1).
+ * @param volatileTokens Tokens consumed by the current input (Layer 3).
+ * @returns forKnapsack — remaining budget available for causal lineage (Layer 2).
+ */
+export function computeContextBudgets(params: {
+  wMax: number;
+  stableTokens: number;
+  volatileTokens: number;
+}): { forKnapsack: number } {
+  return {
+    forKnapsack: Math.max(0, params.wMax - params.stableTokens - params.volatileTokens),
+  };
+}
+
+/**
  * Assemble a 3-layer prompt within the W_max token budget.
  *
  * Budget allocation:
- *   stable_tokens  = countTokens(stable)
+ *   stable_tokens   = countTokens(stable)
  *   volatile_tokens = countTokens(volatile)
- *   context_budget  = wMax - stable_tokens - volatile_tokens
+ *   forKnapsack     = computeContextBudgets(wMax, stable_tokens, volatile_tokens).forKnapsack
  *
- * If the knapsack result exceeds context_budget, ReverseChronologicalDiscarder
- * trims it (newest events retained, oldest dropped — Zero-LLM).
+ * knapsackSlice enforces forKnapsack greedily — no secondary discard is needed.
  *
  * On scope_closed: returns context=null to signal Agent termination (ADR 24).
  *
@@ -90,20 +106,12 @@ export async function assembleContext(
 
   const stableTokens = countTokens(stable);
   const volatileTokens = countTokens(volatile);
-  const contextBudget = Math.max(0, wMax - stableTokens - volatileTokens);
+  const { forKnapsack: contextBudget } = computeContextBudgets({ wMax, stableTokens, volatileTokens });
 
   // Layer 2: Knapsack causal lineage projection
   // dropped is available for Phase 08 CCR marker injection; ignored here (ADR 13 supplement)
-  let contextEvents = (await knapsackSlice(graph, scopeId, rootHash, contextBudget)).kept;
-
-  // Apply overflow discarder if knapsack result exceeds remaining budget
-  const contextTokens = contextEvents.reduce(
-    (sum, e) => sum + countTokens(e.payload),
-    0
-  );
-  if (contextTokens > contextBudget) {
-    contextEvents = OVERFLOW_DISCARDER.discard(contextEvents, contextBudget);
-  }
+  // knapsackSlice enforces the budget greedily — sum(countTokens(kept)) ≤ contextBudget by invariant.
+  const contextEvents = (await knapsackSlice(graph, scopeId, rootHash, contextBudget)).kept;
 
   return { stable, context: contextEvents, volatile };
 }
