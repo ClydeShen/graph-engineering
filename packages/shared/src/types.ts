@@ -7,3 +7,4 @@
  * @see packages/types/src/api.ts
  */
 export type { CanonicalEventType, EventLogNode, GraphWriteEvent, WriteResult } from '@graph/types/api';
+export { CANONICAL_EVENT_TYPES } from '@graph/types/api';
