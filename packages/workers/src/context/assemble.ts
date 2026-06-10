@@ -96,8 +96,9 @@ export const STABLE_SYSTEM_ROLE =
   'You are a graph-native agent operating on an append-only Execution Graph. ' +
   'Your context window is a read-time projection of the graph state. ' +
   'All persistent writes occur through the GraphHandle write interface only. ' +
-  'Context overflow is handled by the sliding-window discarder — older events ' +
-  'are dropped, not summarized. Retrieve older context via graph queries if needed.';
+  'Context overflow is handled by a token-budget greedy slicer — older events ' +
+  'beyond the budget are excluded from this context slice. ' +
+  'Excluded events may be retrievable via the memex_retrieve tool when indicated.';
 
 /**
  * Compute the token budgets for the three context layers.
