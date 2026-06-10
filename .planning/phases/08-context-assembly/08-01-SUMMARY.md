@@ -107,3 +107,7 @@ None - no external service configuration required.
 ---
 *Phase: 08-context-assembly*
 *Completed: 2026-06-10*
+
+## Self-Check: PASSED
+
+All created/modified files exist on disk; all task and metadata commit hashes (0d07422e, 135569f2, 6ae21c9d) found in git log.
