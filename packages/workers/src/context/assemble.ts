@@ -121,6 +121,23 @@ export function computeContextBudgets(params: {
 }
 
 /**
+ * JSON-serialize a value, falling back to String() on circular-reference errors.
+ *
+ * `currentInput` is typed as `unknown` and may be any value a Worker subclass
+ * supplies. Circular structures (e.g. Node.js Error objects with `parent` back-
+ * pointers) cause `JSON.stringify` to throw — this helper absorbs that throw so
+ * the assembly pipeline never rejects for a serialization failure.
+ */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? 'null';
+  } catch {
+    // Fallback for circular references or non-serializable values.
+    return JSON.stringify(String(value));
+  }
+}
+
+/**
  * Assemble a 3-layer prompt within the W_max token budget.
  *
  * Budget allocation:
@@ -154,7 +171,7 @@ export async function assembleContext(
   ccrStore?: CcrStore
 ): Promise<AssembledContext> {
   const stable = STABLE_SYSTEM_ROLE;
-  const volatile = JSON.stringify(currentInput);
+  const volatile = safeStringify(currentInput);
 
   // scope_closed: signal Agent to terminate (ADR 24).
   // Gateway consumes context=null and closes the agent loop (Plan 07).
@@ -239,7 +256,7 @@ export async function runContextAssemblyPipeline(
   wMax: number,
   opts?: { scopeClosed?: boolean; knapsackConfig?: KnapsackConfig; ccrStore?: CcrStore }
 ): Promise<AssembledContext> {
-  const volatileTokens = countTokens(JSON.stringify(currentInput));
+  const volatileTokens = countTokens(safeStringify(currentInput));
 
   const result = await assembleContext(
     graph,
