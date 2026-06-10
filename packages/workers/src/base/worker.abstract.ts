@@ -38,8 +38,10 @@ export interface WorkerExecutionContext {
 export interface PipelineContext {
   scopeId: string;
   wMax: number;
-  tokensBefore: number;
-  tokensAfter: number;
+  /** Tokens in the current input payload (Layer 3 volatile only). */
+  volatileTokens: number;
+  /** Tokens in the assembled Layer 2 context array (events + optional sentinel). */
+  contextLayerTokens: number;
   ccrHashes: readonly string[];
   droppedCount: number;
 }

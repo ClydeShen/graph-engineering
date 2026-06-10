@@ -215,7 +215,7 @@ type HookCaller = {
 /**
  * Orchestration wrapper: assembleContext() + Worker pipeline hook calls (D-06/D-08).
  *
- * Computes tokensBefore/tokensAfter, populates PipelineContext, calls hooks:
+ * Computes volatileTokens/contextLayerTokens, populates PipelineContext, calls hooks:
  *   - onContextAssembled: always called.
  *   - onContextCompressed: called only when droppedCount > 0.
  *   - onLLMCalled / onResultWritten: NOT called here — those fire later in the Worker's
@@ -239,7 +239,7 @@ export async function runContextAssemblyPipeline(
   wMax: number,
   opts?: { scopeClosed?: boolean; knapsackConfig?: KnapsackConfig; ccrStore?: CcrStore }
 ): Promise<AssembledContext> {
-  const tokensBefore = countTokens(JSON.stringify(currentInput));
+  const volatileTokens = countTokens(JSON.stringify(currentInput));
 
   const result = await assembleContext(
     graph,
@@ -252,15 +252,15 @@ export async function runContextAssemblyPipeline(
     opts?.ccrStore
   );
 
-  const tokensAfter = result.context != null
+  const contextLayerTokens = result.context != null
     ? countTokens(JSON.stringify(result.context))
     : 0;
 
   const pipelineCtx: PipelineContext = {
     scopeId,
     wMax,
-    tokensBefore,
-    tokensAfter,
+    volatileTokens,
+    contextLayerTokens,
     ccrHashes: result.ccrHashes,
     droppedCount: result.droppedCount,
   };

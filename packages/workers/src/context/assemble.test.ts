@@ -208,11 +208,11 @@ describe('runContextAssemblyPipeline', () => {
     expect(assembledCtx.ccrHashes).toEqual(result.ccrHashes);
     expect(compressedCtx.ccrHashes).toEqual(result.ccrHashes);
 
-    // tokensBefore/tokensAfter reflect pre- and post-knapsack contexts
-    // (tokensBefore is the volatile input count; tokensAfter is the assembled context count)
-    expect(assembledCtx.tokensBefore).toBeGreaterThanOrEqual(0);
-    expect(assembledCtx.tokensAfter).toBeGreaterThanOrEqual(0);
-    // After dropping a large event, tokensAfter should be less than the total available budget
+    // volatileTokens = tokens in current input payload (Layer 3)
+    // contextLayerTokens = tokens in assembled Layer 2 (events + sentinel)
+    expect(assembledCtx.volatileTokens).toBeGreaterThanOrEqual(0);
+    expect(assembledCtx.contextLayerTokens).toBeGreaterThanOrEqual(0);
+    // After dropping a large event, contextLayerTokens should be less than the total available budget
     expect(assembledCtx.wMax).toBe(500);
   });
 });

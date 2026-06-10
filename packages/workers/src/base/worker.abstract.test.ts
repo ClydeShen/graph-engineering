@@ -66,8 +66,8 @@ class OverridingWorker extends Worker {
 const samplePipelineContext: PipelineContext = {
   scopeId: 'scope-1',
   wMax: 8000,
-  tokensBefore: 100,
-  tokensAfter: 80,
+  volatileTokens: 100,
+  contextLayerTokens: 80,
   ccrHashes: ['abc123'],
   droppedCount: 2,
 };
@@ -100,8 +100,8 @@ describe('Worker pipeline observability hooks (Phase 08)', () => {
     const ctx: PipelineContext = {
       scopeId: 'scope-1',
       wMax: 8000,
-      tokensBefore: 100,
-      tokensAfter: 80,
+      volatileTokens: 100,
+      contextLayerTokens: 80,
       ccrHashes: ['abc123'],
       droppedCount: 2,
     };
