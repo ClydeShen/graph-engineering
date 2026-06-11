@@ -1,0 +1,20 @@
+{
+  "taken_at": "2026-06-11T22:06:51.508Z",
+  "hit_rate": {
+    "injections": 0,
+    "successes": 0,
+    "hitRate": null
+  },
+  "retention": {
+    "totalLessons": 2,
+    "reinforcedLessons": 0,
+    "retentionRatio": 0.5,
+    "avgReinforcement": 0
+  },
+  "compression": {
+    "contextEvents": 0,
+    "droppedCount": 0,
+    "ccrCount": 0,
+    "keptRatio": null
+  }
+}
