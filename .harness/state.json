@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "idle",
-    "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-12T01:45:00.000Z",
-    "last_active": "2026-06-12T01:45:00.000Z"
+    "status": "active",
+    "started_at": "2026-06-12T02:00:00.000Z",
+    "last_session": "2026-06-12T02:50:00.000Z",
+    "last_active": "2026-06-12T02:50:00.000Z"
   },
   "position": {
-    "phase": "14-trust-isolation",
-    "active": "Phase 14 implementation complete. ADR-47 + migration 016; erase(scope) workflow with cascade; approval state machine (silence=deny) + tighten-only aux-LLM; env two-stage filter + write denylist; redactPii; trust->toolset enforced at the MCP route; docker arg-builder + bypass rule; threat model draft.",
-    "resume_file": ".harness/phases/14-trust-isolation/.continue-here.json",
-    "stopped_at": "Diagnosed .planning/<->.harness drift (.planning/ROADMAP+STATE stuck at Phase 9/17%, .harness shows Phase 14/16 complete). Sync task queued, not yet started: rewrite .planning/ROADMAP.md (Phase Details 7-16 + Progress table) and .planning/STATE.md (frontmatter + Current Position) to match Phase 14 reality, then archive/reconcile .planning/phases/10-14 (PHASE-SPEC only, no PLAN/SUMMARY)."
+    "phase": "15-deploy-everywhere",
+    "active": "Phase 15 complete: TD-M Node-22 convergence (live WS+REST verified), memex doctor/backup/restore/service, profiles, install scripts, deploy compose (full-stack containerized E2E passed: scope create + OCC write through 6 services), ADR-48. 449 tests, tsc clean.",
+    "resume_file": null,
+    "stopped_at": "Phase 15 closed (commits 61c7d01c..6d947a62). Next: Phase 16 (memexos-one) — skills install side + skills-guard, eval metrics layer, QUICKSTART/SECURITY/CHANGELOG, release checksums, closeout ADR."
   }
 }
