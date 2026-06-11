@@ -133,6 +133,20 @@ describe('processAgentTurn — ADR-21 trigger selection', () => {
     expect(recordTemplateInjection).not.toHaveBeenCalled();
   });
 
+  it('ADR-46 D-4: principal from X-Agent-ID is merged into the payload before the OCC write', async () => {
+    await processAgentTurn(pool, 'scope-1', makeEvent('task_spawned'), 4000, embed, 'agent:coder-1');
+
+    const writeArgs = occWrite.mock.calls[0]![1] as { payload: Record<string, unknown> };
+    expect(writeArgs.payload['_principal']).toBe('agent:coder-1');
+    expect(writeArgs.payload['description']).toBe('do the thing'); // original content intact
+  });
+
+  it('no principal → payload unchanged (no _principal key)', async () => {
+    await processAgentTurn(pool, 'scope-1', makeEvent('task_spawned'), 4000, embed);
+    const writeArgs = occWrite.mock.calls[0]![1] as { payload: Record<string, unknown> };
+    expect('_principal' in writeArgs.payload).toBe(false);
+  });
+
   it('does not record injection when reflect returns no procedural ids', async () => {
     isScopeColdStart.mockResolvedValue(true);
     memReflect.mockResolvedValue({

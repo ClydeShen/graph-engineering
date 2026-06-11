@@ -189,4 +189,49 @@ describe('memReflect', () => {
     expect(result.proceduralIds).toEqual([]);
     expect(result.sections.antiPatterns).toBe('');
   });
+
+  // ── Phase 13 (ADR-46 D-3): visibility enforcement — security red line ─────
+
+  it('EVERY retrieval route (HNSW + BM25, all tiers + anti-patterns) carries the visibility filter', async () => {
+    const captured: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = makePool((sql, params) => {
+      captured.push({ sql, params: params ?? [] });
+      return Promise.resolve({ rows: [] });
+    });
+
+    await memReflect(pool, makeEmbed(), {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+      principal: 'agent:alpha',
+    });
+
+    // every memory query must contain the agent-private guard and bind the principal
+    const memoryQueries = captured.filter((c) => /episodic_memory|semantic_memory|procedural_memory/.test(c.sql));
+    expect(memoryQueries.length).toBeGreaterThanOrEqual(4);
+    for (const q of memoryQueries) {
+      expect(q.sql).toContain(`!= 'agent-private' OR owner_principal =`);
+      expect(q.params).toContain('agent:alpha');
+    }
+  });
+
+  it('omitted principal binds the empty string — private rows of ANY owner are unreachable', async () => {
+    const captured: Array<{ params: unknown[] }> = [];
+    const pool = makePool((sql, params) => {
+      captured.push({ params: params ?? [] });
+      return Promise.resolve({ rows: [] });
+    });
+
+    await memReflect(pool, makeEmbed(), {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    for (const q of captured.filter((c) => c.params.length >= 3)) {
+      expect(q.params).toContain('');
+    }
+  });
 });

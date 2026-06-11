@@ -63,6 +63,13 @@ export async function processAgentTurn(
   event: AgentEventInput,
   wMax: number,
   embeddingProvider: EmbeddingProvider,
+  /**
+   * Requesting principal from X-Agent-ID (ADR-46 D-4). Merged into the payload
+   * as `_principal` BEFORE the OCC write, so a demoted write's conflict_detected
+   * row carries the loser's identity — cross-agent conflicts become attributable
+   * Trail data without changing hash semantics.
+   */
+  principal?: string,
 ): Promise<AgentTurnOutcome> {
   // 1. Suspended lockout (ADR 39)
   if (await checkSuspended(pool, scopeId)) {
@@ -94,13 +101,19 @@ export async function processAgentTurn(
     }
   }
 
-  // 2. OCC write
+  // 2. OCC write — attribution merge happens AFTER the dedup check (the tool
+  // result's content identity must not vary by submitter).
+  const attributedPayload =
+    principal !== undefined && event.payload !== null && typeof event.payload === 'object'
+      ? { ...(event.payload as Record<string, unknown>), _principal: principal }
+      : event.payload;
+
   const { version_hash, occ_result } = await occWrite(pool, {
     scopeId,
     entityId: event.entity_id,
     predecessorHash: event.predecessor_hash,
     eventType: event.event_type,
-    payload: event.payload,
+    payload: attributedPayload,
   });
 
   // 3. Inline Watchdog (ADR 19 Tier 3)

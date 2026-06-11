@@ -212,6 +212,41 @@ T6 was originally "graph inspection TUI." Superseded: graph visualization belong
 Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
 a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
 
+## Phase 13 — Agent Federation (2026-06-11)
+
+### Multi-candidate ranking is advisory, not assignment
+
+ADR-42 D-1 (no assigned_agent_id) stands. rankCandidates() orders choices where a
+choice exists (delegation target, claim-side suggestion); FrontierScheduler remains
+availability-gating + SKIP-LOCKED self-claim. Per-agent success history accumulates
+from D-4 conflict attribution; until then ranking degrades to trust signal (declared).
+
+### A2A bridge deferred with evidence
+
+The A2A spec could not be verified in this environment (no network guarantee) and the
+spec evolves quickly. Interface reservation already exists (self AgentCard declares
+protocols ['mcp','a2a'] + endpoints.a2a since Phase 6 side-branch). Landing condition:
+verifiable current spec + a real external A2A counterpart. Recorded in ADR-46 D-6.
+
+### principal_alias is a projection table, not graph-only
+
+O(1) alias resolution on every message ingest cannot ride a graph traversal; the table
+is the lookup face, the memex::identity::same_as audit event is the graph face. Same
+pattern as template_injection (Phase 10).
+
+### Visibility filter is deliberately one function
+
+visibilityFilter() in reflect.function.ts is the single point the post-1.0 federated
+mesh will extend (shared = pairing-group scoping). All six retrieval routes (3 tiers ×
+2 routes + anti-patterns) bind the principal parameter — red-line test asserts every
+memory query carries the guard.
+
+### Delegation cap is opt-in at call sites
+
+spawnChildScope's concurrency guard activates only when countActiveChildren is injected
+— existing call sites unaffected until they opt in (surgical-change principle). Default
+cap 5 (GRAPH_MAX_CONCURRENT_CHILDREN env).
+
 ## Phase 12 — Connector Matrix (2026-06-11)
 
 ### Slack implemented without the Slack SDK

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mem::reflect — Reflection Track hybrid retrieval (ADR-21, ADR-20 supplement).
  *
  * Pure function implementing the sequential greedy truncation across the three
@@ -18,6 +18,22 @@ export interface MemReflectInput {
   trigger_type: 'cold_start' | 'conflict_detected' | 'macro_planning';
   w_max: number;
   scope_id: string;
+  /**
+   * Requesting principal (ADR-46 D-3). agent-private rows belonging to OTHER
+   * principals are NEVER returned — visibility filtering is a security
+   * semantic, applied on every retrieval route (HNSW + BM25, all three tiers).
+   * Omitted → only shared/global rows are visible.
+   */
+  principal?: string;
+}
+
+/**
+ * Visibility predicate fragment (ADR-46 D-3). Single definition — the
+ * post-1.0 federated-mesh extension changes exactly this one function.
+ * $N is the parameter index that carries the principal.
+ */
+export function visibilityFilter(paramIndex: number): string {
+  return `(COALESCE(visibility, 'global') != 'agent-private' OR owner_principal = $${paramIndex})`;
 }
 
 export interface MemReflectOutput {
@@ -75,19 +91,21 @@ async function hybridSearchEpisodic(
   queryEmbeddingLiteral: string,
   queryText: string,
   limit: number,
+  principal: string,
 ): Promise<EpisodicRow[]> {
   const { rows } = await pool.query<EpisodicRow>(
     `WITH
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS vector_rank
          FROM episodic_memory
+         WHERE ${visibilityFilter(4)}
          ORDER BY embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM episodic_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query
+         WHERE ts_doc @@ query AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -109,7 +127,7 @@ async function hybridSearchEpisodic(
      JOIN episodic_memory e ON r.id = e.id
      ORDER BY r.rrf_score DESC
      LIMIT $3`,
-    [queryEmbeddingLiteral, queryText, limit],
+    [queryEmbeddingLiteral, queryText, limit, principal],
   );
   return rows;
 }
@@ -119,20 +137,21 @@ async function hybridSearchSemantic(
   queryEmbeddingLiteral: string,
   queryText: string,
   limit: number,
+  principal: string,
 ): Promise<SemanticRow[]> {
   const { rows } = await pool.query<SemanticRow>(
     `WITH
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS vector_rank
          FROM semantic_memory
-         WHERE superseded_by IS NULL
+         WHERE superseded_by IS NULL AND ${visibilityFilter(4)}
          ORDER BY embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM semantic_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query AND superseded_by IS NULL
+         WHERE ts_doc @@ query AND superseded_by IS NULL AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -154,7 +173,7 @@ async function hybridSearchSemantic(
      JOIN semantic_memory s ON r.id = s.id
      ORDER BY r.rrf_score DESC
      LIMIT $3`,
-    [queryEmbeddingLiteral, queryText, limit],
+    [queryEmbeddingLiteral, queryText, limit, principal],
   );
   return rows;
 }
@@ -164,6 +183,7 @@ async function hybridSearchProcedural(
   queryEmbeddingLiteral: string,
   queryText: string,
   limit: number,
+  principal: string,
 ): Promise<ProceduralRow[]> {
   // Three-signal rerank per P0-B decision: rrf_norm×0.6 + quality×0.3 + recency×0.1.
   // rrf_score is normalized against the pool max — raw RRF (~0.01 scale) would be
@@ -173,14 +193,14 @@ async function hybridSearchProcedural(
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY intent_embedding <=> $1::vector) AS vector_rank
          FROM procedural_memory
-         WHERE is_anti_pattern = FALSE
+         WHERE is_anti_pattern = FALSE AND ${visibilityFilter(4)}
          ORDER BY intent_embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM procedural_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query AND is_anti_pattern = FALSE
+         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -214,7 +234,7 @@ async function hybridSearchProcedural(
      FROM scored
      ORDER BY final_score DESC
      LIMIT $3`,
-    [queryEmbeddingLiteral, queryText, limit],
+    [queryEmbeddingLiteral, queryText, limit, principal],
   );
   return rows;
 }
@@ -235,6 +255,7 @@ async function searchAntiPatterns(
   pool: Pool,
   queryText: string,
   limit: number,
+  principal: string,
 ): Promise<AntiPatternRow[]> {
   const { rows } = await pool.query<AntiPatternRow>(
     `SELECT id, intent_description
@@ -242,9 +263,10 @@ async function searchAntiPatterns(
      WHERE is_anti_pattern = TRUE
        AND ts_doc @@ query
        AND COALESCE(template_graph->>'correlation_confidence', 'high') <> 'low'
+       AND ${visibilityFilter(3)}
      ORDER BY ts_rank_cd(ts_doc, query) DESC
      LIMIT $2`,
-    [queryText, limit],
+    [queryText, limit, principal],
   );
   return rows;
 }
@@ -332,24 +354,28 @@ export async function memReflect(
   const { vector } = await embed.embed(input.query_text);
   const queryEmbeddingLiteral = '[' + vector.join(',') + ']';
 
+  // Visibility principal (ADR-46 D-3): '' matches no owner_principal, so an
+  // anonymous request sees only shared/global rows.
+  const principal = input.principal ?? '';
+
   // Step 1 — Procedural (positive templates, three-signal rerank)
-  const procRows = await hybridSearchProcedural(pool, queryEmbeddingLiteral, input.query_text, limit);
+  const procRows = await hybridSearchProcedural(pool, queryEmbeddingLiteral, input.query_text, limit, principal);
   const { text: procText, ids: proceduralIds } = formatProcedural(procRows, budget);
   const pTokens = countTokens(procText);
 
   // Step 1b — Anti-patterns (negative injection, Phase 10): slotted directly after
   // positive procedural in the truncation order — both are procedural-tier content.
-  const antiRows = await searchAntiPatterns(pool, input.query_text, 2);
+  const antiRows = await searchAntiPatterns(pool, input.query_text, 2, principal);
   const antiText = formatAntiPatterns(antiRows, Math.max(0, budget - pTokens));
   const aTokens = countTokens(antiText);
 
   // Step 2 — Episodic
-  const epiRows = await hybridSearchEpisodic(pool, queryEmbeddingLiteral, input.query_text, 5);
+  const epiRows = await hybridSearchEpisodic(pool, queryEmbeddingLiteral, input.query_text, 5, principal);
   const epiText = formatEpisodic(epiRows, Math.max(0, budget - pTokens - aTokens));
   const eTokens = countTokens(epiText);
 
   // Step 3 — Semantic
-  const semRows = await hybridSearchSemantic(pool, queryEmbeddingLiteral, input.query_text, 5);
+  const semRows = await hybridSearchSemantic(pool, queryEmbeddingLiteral, input.query_text, 5, principal);
   const semText = formatSemantic(semRows, Math.max(0, budget - pTokens - aTokens - eTokens));
   const sTokens = countTokens(semText);
 

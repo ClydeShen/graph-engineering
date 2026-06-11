@@ -24,7 +24,11 @@ export function buildEventsRoute(pool: Pool, wMax: number, embeddingProvider: Em
     const invalid = validateScopeIdParam(c, id);
     if (invalid) return invalid;
 
-    const result = await processAgentTurn(pool, id, c.req.valid('json'), wMax, embeddingProvider);
+    // ADR-46 D-4: X-Agent-ID (pairing identity) flows into payload attribution.
+    const result = await processAgentTurn(
+      pool, id, c.req.valid('json'), wMax, embeddingProvider,
+      c.req.header('X-Agent-ID'),
+    );
 
     if (result.suspended) {
       return c.json({ error: 'scope suspended', scope_status: 'suspended' }, 409);

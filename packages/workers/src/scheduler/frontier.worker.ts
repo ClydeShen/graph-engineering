@@ -75,6 +75,7 @@ export const FRONTIER_PRIORITY_SQL = `
     entity_id,
     event_type,
     payload,
+    spawned_by,
     (
       base_priority * 10
       + age_bonus
@@ -122,6 +123,37 @@ const ACTIVE_COUNT_SQL = `
   FROM execution_event_log
   WHERE status = 'processing'
     AND scope_id = $1
+`;
+
+/**
+ * Cycle detection (ADR-42 D-6 / ADR-46 D-7, TD-J): walk the spawned_by
+ * ancestry of a candidate (depth cap 10). A repeated entity_id in the chain
+ * means a delegation cycle — the task must be terminated, not left to the
+ * TTL+watchdog fallback.
+ */
+export const CYCLE_CHECK_SQL = `
+  WITH RECURSIVE chain AS (
+    SELECT entity_id, spawned_by, 1 AS depth
+    FROM execution_event_log
+    WHERE id = $1
+    UNION ALL
+    SELECT e.entity_id, e.spawned_by, c.depth + 1
+    FROM execution_event_log e
+    JOIN chain c ON e.entity_id = c.spawned_by
+    WHERE c.depth < 10
+  )
+  SELECT entity_id
+  FROM chain
+  GROUP BY entity_id
+  HAVING COUNT(*) > 1
+  LIMIT 1
+`;
+
+/** Terminate a cycle-detected task (idempotent on status). */
+const TERMINATE_CYCLE_SQL = `
+  UPDATE execution_event_log
+  SET status = 'terminated'
+  WHERE id = $1 AND status = 'pending_scheduling'
 `;
 
 // ---------------------------------------------------------------------------
@@ -211,6 +243,20 @@ export class FrontierSchedulerWorker {
     const eligibleIds: number[] = [];
 
     for (const row of frontierResult.rows) {
+      // Cycle detection (TD-J / ADR-46 D-7): spawned tasks get an ancestry walk.
+      if (row.spawned_by != null) {
+        const cycle = await this.pool.query(CYCLE_CHECK_SQL, [row.id]);
+        if (cycle.rows.length > 0) {
+          console.warn(
+            '[FrontierScheduler] ERR_CYCLE_DETECTED: delegation cycle in spawned_by ' +
+              'ancestry — task terminated (ADR-42 D-6).',
+            { id: row.id, repeated_entity: cycle.rows[0] },
+          );
+          await this.pool.query(TERMINATE_CYCLE_SQL, [row.id]);
+          continue;
+        }
+      }
+
       // Parse payload — TEXT column per ADR 02.
       let parsed: Record<string, unknown> = {};
       try {

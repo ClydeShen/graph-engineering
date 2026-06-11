@@ -272,16 +272,16 @@ export function buildMcpServer(pool: Pool): McpServer {
   );
 
   // ── Tool 5: wait_all_tasks ───────────────────────────────────────────────
-  // NOTE: Phase 3 implementation uses polling with LISTEN/NOTIFY basis.
-  // Partial-completion semantics are deferred to Phase 4 per CONTEXT.md.
-  // Decision recorded in .harness/implementation-notes.md.
+  // TD-K (ADR-46 D-8): event-driven via LISTEN graph_event_ready with a 10s
+  // safety-net poll — replaces the Phase 3 fixed 2s polling. Return shape is
+  // unchanged ({ timed_out, completed, pending }) for backward compatibility.
   server.registerTool(
     'wait_all_tasks',
     {
       description:
         'Wait for all specified tasks to reach a terminal state (completed or failed). ' +
         'On timeout returns { timed_out: true, completed: [], pending: [] }. ' +
-        'Partial-completion semantics are Phase 4 scope.',
+        'Event-driven (LISTEN/NOTIFY) with a 10s safety-net poll.',
       inputSchema: z.object({
         task_ids: z.array(z.string().uuid()).min(1),
         timeout_s: z.number().min(1).max(600).default(60),
@@ -289,9 +289,9 @@ export function buildMcpServer(pool: Pool): McpServer {
     },
     async ({ task_ids, timeout_s }) => {
       const deadline = Date.now() + timeout_s * 1000;
-      const POLL_INTERVAL_MS = 2000;
+      const FALLBACK_POLL_MS = 10_000;
 
-      while (Date.now() < deadline) {
+      const checkStatus = async (): Promise<{ completed: string[]; pending: string[] }> => {
         const result = await pool.query<{ entity_id: string; status: string }>(
           `SELECT DISTINCT ON (entity_id) entity_id, status
            FROM execution_event_log
@@ -299,49 +299,54 @@ export function buildMcpServer(pool: Pool): McpServer {
            ORDER BY entity_id, created_at DESC`,
           [task_ids],
         );
-
         const statusMap = new Map(result.rows.map((r) => [r.entity_id, r.status]));
         const completed: string[] = [];
         const pending: string[] = [];
-
         for (const id of task_ids) {
           const s = statusMap.get(id) ?? 'unknown';
-          if (s === 'completed' || s === 'done') {
-            completed.push(id);
-          } else {
-            pending.push(id);
+          if (s === 'completed' || s === 'done') completed.push(id);
+          else pending.push(id);
+        }
+        return { completed, pending };
+      };
+
+      const client = await pool.connect();
+      let wake: (() => void) | null = null;
+      try {
+        await client.query('LISTEN graph_event_ready');
+        client.on('notification', () => {
+          wake?.();
+        });
+
+        while (Date.now() < deadline) {
+          const { completed, pending } = await checkStatus();
+          if (pending.length === 0) {
+            return {
+              content: [
+                { type: 'text' as const, text: JSON.stringify({ timed_out: false, completed, pending: [] }) },
+              ],
+            };
           }
+          // Sleep until the next graph event or the fallback poll, bounded by deadline.
+          const waitMs = Math.min(FALLBACK_POLL_MS, deadline - Date.now());
+          if (waitMs <= 0) break;
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, waitMs);
+            wake = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+          wake = null;
         }
-
-        if (pending.length === 0) {
-          return {
-            content: [
-              { type: 'text' as const, text: JSON.stringify({ timed_out: false, completed, pending: [] }) },
-            ],
-          };
-        }
-
-        // Wait before next poll (bounded by deadline)
-        const waitMs = Math.min(POLL_INTERVAL_MS, deadline - Date.now());
-        if (waitMs > 0) {
-          await new Promise<void>((r) => setTimeout(r, waitMs));
-        }
+      } finally {
+        wake = null;
+        await client.query('UNLISTEN *').catch(() => {});
+        client.release();
       }
 
       // Timeout — return partial state
-      const result = await pool.query<{ entity_id: string; status: string }>(
-        `SELECT DISTINCT ON (entity_id) entity_id, status
-         FROM execution_event_log
-         WHERE entity_id = ANY($1::uuid[])
-         ORDER BY entity_id, created_at DESC`,
-        [task_ids],
-      );
-      const statusMap = new Map(result.rows.map((r) => [r.entity_id, r.status]));
-      const completed = task_ids.filter(
-        (id) => statusMap.get(id) === 'completed' || statusMap.get(id) === 'done',
-      );
-      const pending = task_ids.filter((id) => !completed.includes(id));
-
+      const { completed, pending } = await checkStatus();
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify({ timed_out: true, completed, pending }) },

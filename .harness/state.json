@@ -3,13 +3,13 @@
   "session": {
     "status": "active",
     "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-11T23:30:00.000Z",
-    "last_active": "2026-06-11T23:30:00.000Z"
+    "last_session": "2026-06-12T00:30:00.000Z",
+    "last_active": "2026-06-12T00:30:00.000Z"
   },
   "position": {
-    "phase": "12-connector-matrix",
-    "active": "Phase 12 implementation complete (commits ada4f79d, 9af60ff0, f5f48a0e + closeout). Five connectors against the frozen contract; ADR-45 cron live; DeliveryRouter with expects_reply slot; cross-platform continuation helper.",
-    "resume_file": ".planning/phases/12-connector-matrix/12-PHASE-SPEC.md",
-    "stopped_at": "Phase 12 closeout: 392 tests, tsc clean. Email transport binding + live E2E (G5 cross-platform journey, G7 mail container) deferred to install/live environment. Next: Phase 13 (agent-federation) — TD-I skill granularity decision first per 13-PHASE-SPEC."
+    "phase": "13-agent-federation",
+    "active": "Phase 13 implementation complete. ADR-46 (skill two-tier, ranking, visibility domains, conflict attribution, same_as, A2A deferral) + migration 015; TD-I/J/K cleared; reflect visibility red-line tests pass.",
+    "resume_file": ".planning/phases/13-agent-federation/13-PHASE-SPEC.md",
+    "stopped_at": "Phase 13 closeout: 401 tests, tsc clean. A2A minimal bridge deferred (external-dependency block, ADR-46 D-6). Next: Phase 14 (trust-isolation) — vault decision first per 14-PHASE-SPEC."
   }
 }

@@ -44,11 +44,20 @@ import type { GraphHandle } from './graph-handle.js';
  * @throws               If parentDepth + 1 > MAX_CHILD_SCOPE_DEPTH (depth guard)
  * @throws               If GRAPH_AGENT_CHILD_SCOPE env var is not set (in-process guard)
  */
+/** Default concurrent-children cap (hermes delegation.max_concurrent_children parity). */
+export const DEFAULT_MAX_CONCURRENT_CHILDREN = 5;
+
 export async function spawnChildScope(
   graph: GraphHandle,
   parentScopeId: string,
   parentDepth: number,
   input: unknown,
+  opts?: {
+    /** Phase 13 (ADR-46): cap on simultaneously active child scopes. */
+    maxConcurrentChildren?: number;
+    /** Injectable counter (scope_lineage WHERE parent=$1 AND status='active'). */
+    countActiveChildren?: (parentScopeId: string) => Promise<number>;
+  },
 ): Promise<{ childScopeId: string }> {
   // Guard 1: nesting depth limit
   const childDepth = parentDepth + 1;
@@ -57,6 +66,21 @@ export async function spawnChildScope(
       `SubagentDepthExceeded: cannot spawn child at depth ${childDepth}; ` +
       `MAX_CHILD_SCOPE_DEPTH=${MAX_CHILD_SCOPE_DEPTH} (ADR 34 D-7)`,
     );
+  }
+
+  // Guard 1b (Phase 13, ADR-46): concurrent-children cap. Checked only when a
+  // counter is injected — existing call sites are unaffected until they opt in.
+  if (opts?.countActiveChildren !== undefined) {
+    const cap =
+      opts.maxConcurrentChildren ??
+      Number(process.env['GRAPH_MAX_CONCURRENT_CHILDREN'] ?? DEFAULT_MAX_CONCURRENT_CHILDREN);
+    const active = await opts.countActiveChildren(parentScopeId);
+    if (active >= cap) {
+      throw new Error(
+        `SubagentConcurrencyExceeded: parent ${parentScopeId} already has ${active} ` +
+        `active children (cap ${cap}, ADR-46)`,
+      );
+    }
   }
 
   // Guard 2: in-process only (Phase 1)
