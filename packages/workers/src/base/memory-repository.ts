@@ -36,6 +36,8 @@ interface SemanticRepository {
 interface ProceduralRepository {
   insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void>;
   reinforceTemplate(templateId: string): Promise<void>;
+  /** Template ids injected into this scope by mem::reflect (migration 013). */
+  getInjectedTemplateIds(scopeId: string): Promise<string[]>;
   lookupLesson(fingerprintId: string): Promise<LessonRecord | null>;
   reinforceLessonConfidence(fingerprintId: string): Promise<void>;
   insertLesson(fingerprintId: string, content: string): Promise<void>;
@@ -154,6 +156,14 @@ export class PoolMemoryRepository implements MemoryRepository {
     );
   }
 
+  async getInjectedTemplateIds(scopeId: string): Promise<string[]> {
+    const { rows } = await this.pool.query<{ template_id: string }>(
+      `SELECT template_id FROM template_injection WHERE scope_id = $1`,
+      [scopeId],
+    );
+    return rows.map((r) => r.template_id);
+  }
+
   async lookupLesson(fingerprintId: string): Promise<LessonRecord | null> {
     const { rows } = await this.pool.query<{
       fingerprint_id: string;
@@ -225,6 +235,7 @@ export class StubMemoryRepository implements MemoryRepository {
     supersede: [] as Array<{ oldId: string; newId: string }>,
     insertProceduralTemplate: [] as ProceduralTemplateParams[],
     reinforceTemplate: [] as string[],
+    getInjectedTemplateIds: [] as string[],
     lookupLesson: [] as string[],
     reinforceLessonConfidence: [] as string[],
     insertLesson: [] as Array<{ fingerprintId: string; content: string }>,
@@ -289,6 +300,18 @@ export class StubMemoryRepository implements MemoryRepository {
 
   async reinforceTemplate(templateId: string): Promise<void> {
     this.calls.reinforceTemplate.push(templateId);
+  }
+
+  private _injectedTemplateIds: string[] = [];
+
+  setInjectedTemplateIds(ids: string[]): void {
+    this._injectedTemplateIds = ids;
+  }
+
+  async getInjectedTemplateIds(scopeId: string): Promise<string[]> {
+    this.maybeThrow('getInjectedTemplateIds');
+    this.calls.getInjectedTemplateIds.push(scopeId);
+    return this._injectedTemplateIds;
   }
 
   async lookupLesson(fingerprintId: string): Promise<LessonRecord | null> {

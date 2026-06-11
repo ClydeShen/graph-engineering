@@ -3,6 +3,12 @@ import type { EventWriter, LLMProvider, EmbeddingProvider } from '@graph/shared'
 import type { EventLogNode } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
+import { computeWLEmbedding } from './wl-embedding.js';
+import {
+  buildTemplateGraphFromEvents,
+  canonicalizeTemplateGraph,
+  type TemplateGraph,
+} from './template-graph.js';
 
 export const TEMPLATE_PROPOSAL_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -10,14 +16,23 @@ export const TEMPLATE_PROPOSAL_TRIGGER_CONFIG = {
   config: { topic: 'graph::scope::closed' },
 } as const;
 
-export class TemplateProposalWorker {
-  /**
-   * Zero-vector placeholder for topology_embedding on orphan anti-pattern writes.
-   * WL kernel not available in Phase 9; Phase 10 backfills real embeddings.
-   */
-  private static readonly ZERO_TOPOLOGY_EMBEDDING =
-    '[' + Array(128).fill(0).join(',') + ']';
+/**
+ * Low-conflict gate for positive skeleton extraction: a scope qualifies as a
+ * golden template source when conflicts are ≤10% of its events (ROADMAP Phase 10
+ * "低冲突收敛路径"). The scope already converged — scope_closed implies it.
+ */
+const LOW_CONFLICT_RATIO = 0.1;
 
+/** WL topology embedding as a pgvector literal for a canonical template graph. */
+function wlLiteral(graph: TemplateGraph): string {
+  const embedding = computeWLEmbedding(
+    graph.nodes.map((n) => ({ id: n.id, event_type: n.label })),
+    graph.edges.map((e) => ({ source: e.from, target: e.to })),
+  );
+  return '[' + Array.from(embedding).join(',') + ']';
+}
+
+export class TemplateProposalWorker {
   constructor(
     private readonly reader: TrailReader,
     private readonly memory: MemoryRepository,
@@ -27,17 +42,22 @@ export class TemplateProposalWorker {
   ) {}
 
   /**
-   * Detect entity_ids in the scope that have no successor events — orphan (terminal) nodes.
-   *
-   * An entity is an orphan if its version_hash never appears as a predecessor_hash in any
-   * event within the scope. These become negative samples (anti-patterns) in procedural_memory.
+   * Detect events whose version_hash never appears as a predecessor — orphan
+   * (dead-end) nodes. One event per orphan entity_id. These seed the
+   * success-correlation negative samples (anti-patterns).
    */
-  private detectOrphanEntityIds(events: EventLogNode[]): string[] {
+  private detectOrphanEvents(events: EventLogNode[]): EventLogNode[] {
     const predecessorHashes = new Set(events.map((e) => e.predecessor_hash));
-    const orphans = events
-      .filter((e) => e.entity_id != null && !predecessorHashes.has(e.version_hash))
-      .map((e) => e.entity_id);
-    return [...new Set(orphans)];
+    const seenEntities = new Set<string>();
+    const orphans: EventLogNode[] = [];
+    for (const e of events) {
+      if (e.entity_id == null) continue;
+      if (predecessorHashes.has(e.version_hash)) continue;
+      if (seenEntities.has(e.entity_id)) continue;
+      seenEntities.add(e.entity_id);
+      orphans.push(e);
+    }
+    return orphans;
   }
 
   async onScopeClosed(
@@ -74,17 +94,20 @@ export class TemplateProposalWorker {
     }
 
     // Step 3: LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
+    // The intent+outcome embedding is reused as the positive template's intent_embedding
+    // (one embed call serves both writes — token efficiency, ADR-25 suppl 2).
+    let intentEmbeddingLiteral: string | null = null;
     try {
       const { vector } = await this.embed.embed(
         writeGuard(intentSummary) + '\n' + writeGuard(outcomeSummary),
       );
-      const embeddingLiteral = '[' + vector.join(',') + ']';
+      intentEmbeddingLiteral = '[' + vector.join(',') + ']';
       await this.memory.appendEpisodicSummary(
         scopeId,
         entityId,
         writeGuard(intentSummary),
         writeGuard(outcomeSummary),
-        embeddingLiteral,
+        intentEmbeddingLiteral,
       );
     } catch {
       // Embedding failure — write empty-vector episodic row rather than skip entirely.
@@ -108,31 +131,80 @@ export class TemplateProposalWorker {
       eventType: 'memory_updated',
     });
 
-    // Step 5: Orphan detection and anti-pattern writes (D-05)
-    const orphanEntityIds = this.detectOrphanEntityIds(events);
-    for (const orphanEntityId of orphanEntityIds) {
+    // Step 5 (Phase 10): positive skeleton extraction — low-conflict converged scopes only.
+    // Topology is built deterministically from the event DAG (zero LLM — ADR-25 suppl 2 D-3).
+    const conflictCount = events.filter((e) => e.event_type === 'conflict_detected').length;
+    if (conflictCount <= events.length * LOW_CONFLICT_RATIO) {
       try {
+        const skeleton = canonicalizeTemplateGraph(buildTemplateGraphFromEvents(events));
         await this.memory.insertProceduralTemplate({
           scopeId,
-          content: writeGuard('orphan-entity:' + orphanEntityId),
+          content: writeGuard(intentSummary),
+          intentDescription: writeGuard(intentSummary),
+          templateGraph: skeleton,
+          embeddingLiteral: wlLiteral(skeleton),
+          intentEmbeddingLiteral,
+          isAntiPattern: false,
+        });
+        await this.writes.write({
+          scopeId,
+          entityId,
+          predecessorHash,
+          payload: {
+            memory_type: 'procedural',
+            content_hash: contentFingerprint(intentSummary),
+            is_anti_pattern: false,
+          },
+          eventType: 'memory_updated',
+        });
+      } catch {
+        /* positive skeleton failure must not break the scope_closed pass */
+      }
+    }
+
+    // Step 6 (Phase 10): reinforcement closure — templates injected into this scope
+    // are adopted (the scope converged and closed). P1-D SQL call path.
+    try {
+      const injectedIds = await this.memory.getInjectedTemplateIds(scopeId);
+      for (const templateId of injectedIds) {
+        await this.memory.reinforceTemplate(templateId);
+      }
+    } catch {
+      /* reinforcement failure must not break the scope_closed pass */
+    }
+
+    // Step 7: success-correlation negative samples (D-05 upgraded, Phase 10).
+    // failure→fix causal pair: orphan event + the corrective path that followed it.
+    const orphanEvents = this.detectOrphanEvents(events);
+    for (const orphan of orphanEvents) {
+      try {
+        const orphanIndex = events.indexOf(orphan);
+        const correctivePath = events.slice(orphanIndex + 1);
+        const failureGraph = canonicalizeTemplateGraph({
+          ...buildTemplateGraphFromEvents([orphan, ...correctivePath]),
+          correlation_confidence: correctivePath.length > 0 ? 'high' : 'low',
+        });
+        await this.memory.insertProceduralTemplate({
+          scopeId,
+          content: writeGuard('orphan-entity:' + orphan.entity_id),
           intentDescription: writeGuard(
             'Orphan node — entity ' +
-              orphanEntityId +
+              orphan.entity_id +
               ' had no successor events in scope ' +
               scopeId,
           ),
-          templateGraph: { orphan_entity_id: orphanEntityId, scope_id: scopeId },
-          embeddingLiteral: TemplateProposalWorker.ZERO_TOPOLOGY_EMBEDDING,
+          templateGraph: failureGraph,
+          embeddingLiteral: wlLiteral(failureGraph),
           intentEmbeddingLiteral: null,
           isAntiPattern: true,
         });
         await this.writes.write({
           scopeId,
-          entityId: orphanEntityId,
+          entityId: orphan.entity_id,
           predecessorHash,
           payload: {
             memory_type: 'procedural',
-            content_hash: contentFingerprint('orphan:' + orphanEntityId),
+            content_hash: contentFingerprint('orphan:' + orphan.entity_id),
             is_anti_pattern: true,
           },
           eventType: 'memory_updated',

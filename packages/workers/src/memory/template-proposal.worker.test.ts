@@ -160,4 +160,97 @@ describe('TemplateProposalWorker', () => {
     expect(TEMPLATE_PROPOSAL_TRIGGER_CONFIG.function_id).toBe('graph::memory::template-proposal');
     expect(TEMPLATE_PROPOSAL_TRIGGER_CONFIG.config.topic).toBe('graph::scope::closed');
   });
+
+  // ── Phase 10: positive skeleton extraction ─────────────────────────────────
+
+  it('writes a positive skeleton (isAntiPattern=false) with canonical template_graph on low-conflict scope', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive).toBeDefined();
+    const graph = positive!.templateGraph as {
+      version: number;
+      abstraction: string;
+      nodes: { id: string; label: string }[];
+      edges: { from: string; to: string }[];
+    };
+    expect(graph.version).toBe(1);
+    expect(graph.abstraction).toBe('interface-edge');
+    expect(graph.nodes.every((n) => /^n\d+$/.test(n.id))).toBe(true);
+    // WL topology literal is a 128-dim non-zero vector
+    expect(positive!.embeddingLiteral).toMatch(/^\[/);
+    expect(positive!.embeddingLiteral).not.toBe('[' + Array(128).fill(0).join(',') + ']');
+    // intent embedding reused from the episodic embed call (one embed call, two writes)
+    expect(positive!.intentEmbeddingLiteral).toMatch(/^\[/);
+    expect(mockEmbed).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips positive skeleton when conflicts exceed 10% of scope events', async () => {
+    const events = makeScopeEvents();
+    // 1 conflict out of 2 events = 50% > 10%
+    events[0] = { ...events[0]!, event_type: 'conflict_detected' };
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(events);
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive).toBeUndefined();
+  });
+
+  // ── Phase 10: reinforcement closure (P1-D call path) ───────────────────────
+
+  it('reinforces every template injected into the scope (adoption = converged closure)', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    memory.setInjectedTemplateIds(['tpl-a', 'tpl-b']);
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(memory.calls.getInjectedTemplateIds).toEqual(['scope-1']);
+    expect(memory.calls.reinforceTemplate).toEqual(['tpl-a', 'tpl-b']);
+  });
+
+  it('reinforcement failure does not break the scope_closed pass', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    memory.throwOn('getInjectedTemplateIds');
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await expect(
+      worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64)),
+    ).resolves.toBeUndefined();
+    // orphan negative still written after the reinforcement failure
+    expect(memory.calls.insertProceduralTemplate.some((p) => p.isAntiPattern === true)).toBe(true);
+  });
+
+  // ── Phase 10: success-correlation negatives ────────────────────────────────
+
+  it('anti-pattern rows carry correlation_confidence and a real WL embedding (not zero vector)', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const negative = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === true);
+    expect(negative).toBeDefined();
+    const graph = negative!.templateGraph as { correlation_confidence?: string };
+    // ev-2 is the last event — no corrective path follows → low confidence
+    expect(graph.correlation_confidence).toBe('low');
+    expect(negative!.embeddingLiteral).not.toBe('[' + Array(128).fill(0).join(',') + ']');
+  });
+
+  it('orphan followed by corrective events gets correlation_confidence=high', async () => {
+    const events = makeScopeEvents();
+    // make ev-1 the orphan (nothing consumes hash-of-ev1) and ev-2 the corrective tail
+    events[1] = { ...events[1]!, predecessor_hash: 'unrelated-hash' };
+    // now both are orphans; ev-1 has ev-2 as corrective path → high
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(events);
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const negatives = memory.calls.insertProceduralTemplate.filter((p) => p.isAntiPattern === true);
+    const confidences = negatives.map(
+      (n) => (n.templateGraph as { correlation_confidence?: string }).correlation_confidence,
+    );
+    expect(confidences).toContain('high'); // ev-1: corrective path exists
+    expect(confidences).toContain('low');  // ev-2: terminal, no corrective path
+  });
 });
