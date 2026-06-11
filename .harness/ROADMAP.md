@@ -190,6 +190,14 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 
 **前置条件：** Phase 08-context-assembly 完成（Pipeline lifecycle hooks 中 Reflection Track 插槽已预留）。
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Foundation seams: migration 012, MemoryRepository extensions, TrailReader.getScopeEvents, Worker.shouldReflect
+- [ ] 09-02-PLAN.md — TemplateProposalWorker: replaces EpisodicMemoryWorker, full DAG read, episodic write with embedding + orphan anti-pattern writes
+- [ ] 09-03-PLAN.md — SemanticMemoryWorker supersession: embedding write path, suggestedMerge hint, supersede
+- [ ] 09-04-PLAN.md — reflect.function.ts hybrid search + cold_start wiring in assemble.ts + index.ts boot wiring
+
 ---
 
 ## 10-trail-discovery
