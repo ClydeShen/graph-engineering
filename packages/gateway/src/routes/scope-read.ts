@@ -16,8 +16,7 @@ import { Hono } from 'hono';
 import type { Pool } from 'pg';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 import { assembleContext } from '@graph/workers/context/assemble';
-import type { KnapsackGraph } from '@graph/workers/context/knapsack';
-import type { EventLogNode } from '@shared/types';
+import { makeKnapsackGraph } from '../knapsack-graph.js';
 
 /**
  * Build the scope-read route.
@@ -70,43 +69,8 @@ export function buildScopeReadRoute(pool: Pool, wMax: number): Hono {
 
     const rootHash = latestResult.rows[0]?.version_hash ?? '';
 
-    // Build a read-only KnapsackGraph backed by the event log
-    const eventCache = new Map<string, EventLogNode>();
-
-    const graph: KnapsackGraph = {
-      getEventByHash(hash: string): EventLogNode | undefined {
-        return eventCache.get(hash);
-      },
-      getSiblings(_scopeId: string, _excludeHash: string): EventLogNode[] {
-        // Phase 1: sibling lookup not activated in read path — return empty
-        return [];
-      },
-    };
-
-    // Pre-populate cache with the causal chain for this scope.
-    // Try scope_lineage_view (materialized cache) first — O(1) index lookup for
-    // large scopes (>50 tasks). Falls back to direct table scan if view is stale
-    // or unavailable (correctness over speed, ADR 05 supplement / migration 009).
-    if (rootHash) {
-      const CHAIN_COLS = `id, scope_id, entity_id, event_type, predecessor_hash,
-                version_hash, payload, status, base_priority, unlocks_count,
-                spawned_by, last_active_at, created_at`;
-      let chainResult: { rows: EventLogNode[] };
-      try {
-        chainResult = await pool.query<EventLogNode>(
-          `SELECT ${CHAIN_COLS} FROM scope_lineage_view WHERE scope_id = $1 ORDER BY id ASC`,
-          [id],
-        );
-      } catch {
-        chainResult = await pool.query<EventLogNode>(
-          `SELECT ${CHAIN_COLS} FROM execution_event_log WHERE scope_id = $1 ORDER BY id ASC`,
-          [id],
-        );
-      }
-      for (const row of chainResult.rows) {
-        eventCache.set(row.version_hash, row);
-      }
-    }
+    // Read path: view-first with fallback (ADR 05 supplement / migration 009).
+    const graph = await makeKnapsackGraph(pool, id);
 
     const context = await assembleContext(
       graph,

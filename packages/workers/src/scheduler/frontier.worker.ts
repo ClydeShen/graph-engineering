@@ -23,7 +23,7 @@ import { TokenBucket } from './token-bucket.js';
 // in index.ts prevents double-registration.
 // ---------------------------------------------------------------------------
 
-export interface TriggerConfig {
+interface TriggerConfig {
   type: 'durable:subscriber';
   function_id: string;
   config: { topic: string };

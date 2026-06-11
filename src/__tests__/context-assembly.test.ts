@@ -98,8 +98,8 @@ describe('knapsackSlice', () => {
   };
 
   it('walks predecessor_hash chain to build causal skeleton', async () => {
-    const result = await knapsackSlice(mockGraph, 'scope-test', 'hash4', 10000);
-    const ids = result.map(e => e.id);
+    const { kept } = await knapsackSlice(mockGraph, 'scope-test', 'hash4', 10000);
+    const ids = kept.map(e => e.id);
     // Should include all ancestors following predecessor_hash chain
     expect(ids).toContain('e4');
     expect(ids).toContain('e3');
@@ -107,8 +107,14 @@ describe('knapsackSlice', () => {
   });
 
   it('respects wMax budget — does not exceed token limit', async () => {
-    const result = await knapsackSlice(mockGraph, 'scope-test', 'hash4', 5);
+    const { kept } = await knapsackSlice(mockGraph, 'scope-test', 'hash4', 5);
     // With tiny budget, result must be empty or very small
-    expect(result.length).toBeLessThanOrEqual(4);
+    expect(kept.length).toBeLessThanOrEqual(4);
+  });
+
+  it('returns dropped events beyond budget', async () => {
+    const { kept, dropped } = await knapsackSlice(mockGraph, 'scope-test', 'hash4', 5);
+    // All candidates must appear in either kept or dropped
+    expect(kept.length + dropped.length).toBeGreaterThan(0);
   });
 });

@@ -16,6 +16,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
+import { PoolTrailReader } from '../base/trail-reader.js';
+import { PoolMemoryRepository } from '../base/memory-repository.js';
+import { OccEventWriter } from '@graph/shared';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
 const skip = !DATABASE_URL;
@@ -42,7 +45,7 @@ it.skipIf(skip)('G3-1: episodic_memory receives a row after EpisodicMemoryWorker
   const predecessorHash = '0'.repeat(64);
   const content = 'Test execution trace G3-1';
 
-  const worker = new EpisodicMemoryWorker(pool);
+  const worker = new EpisodicMemoryWorker(new PoolMemoryRepository(pool), new OccEventWriter(pool));
   try {
     await worker.onEvent(scopeId, entityId, content, predecessorHash);
   } catch {
@@ -71,7 +74,7 @@ it.skipIf(skip)('G3-2: semantic_memory receives a row after SemanticMemoryWorker
   );
 
   const mockLlm = { chat: async () => 'Distilled fact from G3-2 test' };
-  const worker = new SemanticMemoryWorker(pool, mockLlm as never);
+  const worker = new SemanticMemoryWorker(new PoolTrailReader(pool), new PoolMemoryRepository(pool), new OccEventWriter(pool), mockLlm as never);
   try {
     await worker.onScopeClosed(scopeId, randomUUID(), '0'.repeat(64));
   } catch {
@@ -96,7 +99,7 @@ it.skipIf(skip)('G3-3: procedural_memory receives a row with non-NULL topology_e
   const edges = [{ source: 'n1', target: 'n2' }];
   // Minimal EmbeddingProvider stub — embed failures fall back to NULL intent_embedding (safe)
   const mockLlmForG3 = { embed: async () => ({ vector: [], countedAgainstBudget: false as const }) };
-  const worker = new ProceduralMemoryWorker(pool, mockLlmForG3);
+  const worker = new ProceduralMemoryWorker(new PoolMemoryRepository(pool), new OccEventWriter(pool), mockLlmForG3);
 
   try {
     await worker.onSynthesizerOutput(
@@ -175,7 +178,7 @@ it.skipIf(skip)('G3-6: Ebbinghaus decay marks stale records with superseded_by =
   expect(staleId).toBeDefined();
 
   const mockLlm = { chat: async () => '' };
-  const worker = new MemorySynthesizerWorker(pool, mockLlm as never);
+  const worker = new MemorySynthesizerWorker(new PoolTrailReader(pool), new PoolMemoryRepository(pool), mockLlm as never);
   await worker.runDecay();
 
   const { rows } = await pool.query<{ superseded_by: string }>(

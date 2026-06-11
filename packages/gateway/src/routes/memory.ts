@@ -47,6 +47,33 @@ FROM rrf_scored r JOIN semantic_memory s ON r.id = s.id
 ORDER BY r.rrf_score DESC LIMIT $3
 `;
 
+/**
+ * Search semantic memory using hybrid Reciprocal Rank Fusion (vector + BM25) when an
+ * embedding is available, falling back to BM25-only when the embedding provider fails or
+ * returns an empty vector. RRF weights: 0.6 vector / 0.4 BM25.
+ *
+ * Exported for independent testing and future reuse (e.g. Trail Discovery).
+ */
+export async function searchSemanticMemory(
+  pool: Pool,
+  embedding: EmbeddingProvider,
+  query: string,
+  scopeId: string,
+  limit: number,
+): Promise<unknown[]> {
+  try {
+    const embedResult = await embedding.embed(query);
+    if (embedResult.vector.length === 0) throw new Error('empty vector');
+    const embeddingLiteral = `[${embedResult.vector.join(',')}]`;
+    const { rows } = await pool.query(HYBRID_RRF_SQL, [embeddingLiteral, query, limit, scopeId]);
+    return rows;
+  } catch {
+    // Embedding unavailable or empty — fall back to BM25-only search
+    const { rows } = await pool.query(BM25_ONLY_SQL, [query, limit, scopeId]);
+    return rows;
+  }
+}
+
 export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider): Hono {
   const app = new Hono();
 
@@ -58,17 +85,8 @@ export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider): Hono
     if (!UUID_V4_RE.test(scopeId)) return c.json({ error: 'scope_id must be a valid UUID v4' }, 400);
 
     try {
-      let rows: unknown[];
-      try {
-        const embedResult = await embedding.embed(q);
-        if (embedResult.vector.length === 0) throw new Error('empty vector');
-        const embeddingLiteral = `[${embedResult.vector.join(',')}]`;
-        ({ rows } = await pool.query(HYBRID_RRF_SQL, [embeddingLiteral, q, 10, scopeId]));
-      } catch {
-        // Embedding unavailable or empty — fall back to BM25-only search
-        ({ rows } = await pool.query(BM25_ONLY_SQL, [q, 10, scopeId]));
-      }
-      return c.json({ results: rows });
+      const results = await searchSemanticMemory(pool, embedding, q, scopeId, 10);
+      return c.json({ results });
     } catch {
       return c.json({ error: 'internal server error' }, 500);
     }

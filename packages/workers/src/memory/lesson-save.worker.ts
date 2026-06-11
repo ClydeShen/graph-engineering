@@ -1,8 +1,7 @@
-import { createHash } from 'crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Pool } from 'pg';
-import { notify } from '@graph/shared';
+import { notify, contentFingerprint } from '@graph/shared';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const LESSON_SAVE_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -14,7 +13,7 @@ export class LessonSaveWorker {
   private readonly skillsDir: string;
 
   constructor(
-    private readonly pool: Pool,
+    private readonly memory: MemoryRepository,
     skillsDir?: string,
   ) {
     this.skillsDir = skillsDir ?? process.env['SKILLS_DIR'] ?? './skills';
@@ -23,25 +22,16 @@ export class LessonSaveWorker {
   async onLessonSave(
     payload: { content: string; confidence?: number },
   ): Promise<{ fingerprint_id: string; action: 'reinforced' | 'created' }> {
-    const fingerprintId = createHash('sha256').update(payload.content).digest('hex');
+    const fingerprintId = contentFingerprint(payload.content);
     const threshold = parseFloat(process.env['SKILL_EXPORT_THRESHOLD'] ?? '0.7');
 
-    const { rows } = await this.pool.query<{ fingerprint_id: string; confidence: number }>(
-      `SELECT fingerprint_id, confidence FROM procedural_memory WHERE fingerprint_id = $1 LIMIT 1`,
-      [fingerprintId],
-    );
+    const existing = await this.memory.lookupLesson(fingerprintId);
 
-    if (rows.length > 0) {
+    if (existing !== null) {
       // Ebbinghaus reinforcement: confidence += 0.1 * (1 - confidence), capped at 1.0
-      await this.pool.query(
-        `UPDATE procedural_memory
-         SET confidence = LEAST(1.0, confidence + 0.1 * (1 - confidence)),
-             reinforcement_count = reinforcement_count + 1
-         WHERE fingerprint_id = $1`,
-        [fingerprintId],
-      );
+      await this.memory.reinforceLessonConfidence(fingerprintId);
 
-      const prevConf = rows[0].confidence;
+      const prevConf = existing.confidence;
       const newConf = Math.min(1.0, prevConf + 0.1 * (1 - prevConf));
       if (prevConf < threshold && newConf >= threshold) {
         await this.exportSkill(fingerprintId, payload.content);
@@ -52,12 +42,7 @@ export class LessonSaveWorker {
 
     // New lesson: always inserted with confidence=0.5 regardless of payload.confidence.
     // Lessons earn export through Ebbinghaus reinforcement, not on first appearance.
-    await this.pool.query(
-      `INSERT INTO procedural_memory
-         (fingerprint_id, content, confidence, quality_score, reinforcement_count, last_used_at, superseded_by)
-       VALUES ($1, $2, 0.5, 0.5, 0, NOW(), NULL)`,
-      [fingerprintId, payload.content],
-    );
+    await this.memory.insertLesson(fingerprintId, payload.content);
     return { fingerprint_id: fingerprintId, action: 'created' };
   }
 

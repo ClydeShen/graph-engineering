@@ -64,12 +64,20 @@ export async function occWrite(
   const canonicalText = hashablePayload(payload);
 
   const result = await pool.query<{
+    id: string | null;
     event_type: string;
     version_hash: string;
     occ_result: string;
   }>(OCC_WRITE_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText, eventType]);
 
   const row = result.rows[0];
+  const rowId = row.id ? Number(row.id) : null;
+  if (rowId) {
+    void pool.query(
+      "SELECT pg_notify('graph_event_ready', $1::text)",
+      [JSON.stringify({ id: rowId })],
+    ).catch(() => {});
+  }
   return {
     version_hash: row.version_hash,
     event_type: row.event_type as WriteResult['event_type'],
@@ -95,6 +103,7 @@ export async function occWriteIdempotent(
   const canonicalText = hashablePayload(payload);
 
   const result = await pool.query<{
+    id: string | null;
     event_type: string;
     version_hash: string;
     occ_result: string;
@@ -102,6 +111,13 @@ export async function occWriteIdempotent(
 
   if (result.rows.length === 0) return null;
   const row = result.rows[0];
+  const rowId = row.id ? Number(row.id) : null;
+  if (rowId) {
+    void pool.query(
+      "SELECT pg_notify('graph_event_ready', $1::text)",
+      [JSON.stringify({ id: rowId })],
+    ).catch(() => {});
+  }
   return {
     version_hash: row.version_hash,
     event_type: row.event_type as WriteResult['event_type'],

@@ -1,555 +1,422 @@
-# Graph-Native Agent Runtime — Architecture Document
+<!-- generated-by: gsd-doc-writer -->
+# Memex — Graph-Native Agent Runtime: Architecture
 
-> 基于 23 条 ADR 的全面架构概述。本文档为 Phase 1 实施的规范性参考。
-
----
-
-## 1. What & Why
-
-本系统是一个**图原生 Agent 运行时**，将 AI Agent 的控制流、长期记忆、任务编排完全融合在一张 PostgreSQL append-only 事件图（Execution Graph）中。
-
-核心设计原则借鉴区块链账本哲学：
-- **不可变追加**：任何状态变更均为图的新节点（Version），不覆写历史
-- **内容寻址**：每个节点以 SHA-256 Version Hash 唯一标识，scope_id 作为密码学盐值
-- **去中心化编排**：无中央控制代码，Worker 通过事件总线订阅制驱动控制流前进（Choreography Pattern）
-- **SSOT**：PostgreSQL 是单一事实来源，外部系统（向量库、缓存）仅是衍生层
-
-三层解耦：
-- **知识层（SSOT）** — PostgreSQL append-only 事件图 + 四层记忆表
-- **控制层（大脑）** — Control Plane Daemon（我们的 TypeScript 代码）+ iii 引擎（现成二进制）：Pulse-Fetch 桥接、Knapsack Slicing、Watchdog
-- **执行层（四肢）** — Workers（我们的 TypeScript 代码，通过 `iii-sdk` 注册）：SELECT/INSERT 权限，调用工具/LLM 后写回图
+> "The human mind operates by association. With one item in its grasp, it snaps instantly to the next
+> that is suggested by the association of thoughts, in accordance with some intricate web of trails
+> carried by the cells of the brain."
+> — Vannevar Bush, *As We May Think* (1945)
 
 ---
 
-## 2. 组件架构图（ASCII）
+## 1. System Overview
 
-> **重要边界说明（2026-06-01，ctx7 核实）**：  
-> iii 是现成引擎二进制（安装使用，非本项目自行实现）。  
-> 本项目自行实现的代码：**Control Plane Daemon**（TypeScript）+ **Workers**（TypeScript）。
+Memex is a graph-native runtime that externalizes AI agent cognition into an append-only causal graph
+stored in PostgreSQL. Every agent action, memory write, conflict, and task transition becomes an
+immutable node in the Trail Mesh — the system's single source of truth. There is no workflow engine,
+no DAG authoring tool, and no pipeline configuration layer. What appear to be "workflows" are
+statistical patterns that emerge from accumulated execution trails and are discovered automatically by
+the PatternDiscoveryWorker.
+
+Three core principles govern all design decisions:
+
+- **Immutable append-only ledger** — state changes are new graph nodes (Versions), never overwrites.
+  The `execution_event_log` is partitioned by scope, constrained by `UNIQUE(predecessor_hash, scope_id)`,
+  and hashed by `pgcrypto` SHA-256 inside the database.
+- **Context is a projection** — the LLM's context window is assembled per call from the graph's
+  causal lineage (Knapsack Slicing). `Graph → Context`, never `Context = State`.
+- **Choreography, not orchestration** — Workers subscribe to the iii Engine event bus and react to
+  events; there is no central controller. Control flow advances through decentralized event subscriptions.
+
+---
+
+## 2. Three-Layer Architecture
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║        iii Engine Binary  (pre-installed, NOT our code)                      ║
-║        Worker Registry · Function Routing · WebSocket Server                 ║
-║        Storage backend: PostgreSQL or Redis (iii's own internal tables)      ║
-╚═════════════════════════╤════════════════════════════════════════════════════╝
-                          │ WebSocket  registerWorker() / iii.trigger()
-        ┌─────────────────┴──────────────────────────────────────┐
-        │                                                        │
-╔═══════▼═══════════════════════════════════╗  ╔════════════════▼══════════════════╗
-║  Control Plane Daemon  (OUR TypeScript)   ║  ║  Worker Layer  (OUR TypeScript)   ║
-║                                           ║  ║                                   ║
-║  ┌───────────────────────────────────┐    ║  ║  ┌──────────────────────────────┐ ║
-║  │  Pulse-Fetch Bridge  (ADR 09)     │    ║  ║  │  Standard Workers            │ ║
-║  │  pg-listen LISTEN/NOTIFY          │    ║  ║  │  • iii-sdk registerFn()      │ ║
-║  │  → HWM advance (bus_state)        │    ║  ║  │  • SELECT/INSERT only DB     │ ║
-║  │  → iii.trigger(worker::evt_type)  │    ║  ║  │  • canonicalJson + CTE write │ ║
-║  └───────────────────────────────────┘    ║  ║  └──────────────────────────────┘ ║
-║  ┌───────────────────────────────────┐    ║  ║  ┌──────────────────────────────┐ ║
-║  │  3-Phase Nesting (ADR 05)         │    ║  ║  │  Synthesis Workers           │ ║
-║  │  DDL exclusive connection pool    │    ║  ║  │  • ConflictResolverWorker    │ ║
-║  │  CREATE PARTITION + HNSW          │    ║  ║  │  • TemplateProposalWorker    │ ║
-║  └───────────────────────────────────┘    ║  ║  │  • SubScopeResultWorker      │ ║
-║  ┌───────────────────────────────────┐    ║  ║  │    (Phase 3)                 │ ║
-║  │  Convergence Watchdog (ADR 19)    │    ║  ║  └──────────────────────────────┘ ║
-║  │  3-level defense · scope_closed   │    ║  ║  ┌──────────────────────────────┐ ║
-║  └───────────────────────────────────┘    ║  ║  │  mem::reflect Function       │ ║
-║  ┌───────────────────────────────────┐    ║  ║  │  (iii-registered, ADR 21)    │ ║
-║  │  Direct-write control events      │    ║  ║  │  BM25+HNSW RRF retrieval     │ ║
-║  │  context_oom_throttled (ADR 13s)  │    ║  ║  └──────────────────────────────┘ ║
-║  │  sub_scope_resolved    (ADR 23)   │    ║  ╚════════════════════╤══════════════╝
-║  └───────────────────────────────────┘    ║                       │
-║  ┌───────────────────────────────────┐    ║  ╔════════════════════▼══════════════╗
-║  │  Wasm Tokenizer (@dqbd/tiktoken)  │    ║  ║  LLM / Embedding Provider         ║
-║  │  <1ms token count, ADR 15         │    ║  ║  OpenAI-compatible REST /v1/      ║
-║  └───────────────────────────────────┘    ║  ║  ollama | llama.cpp | OpenAI      ║
-╚═══════════════════════╤═══════════════════╝  ╚═══════════════════════════════════╝
-                        │ DDL (exclusive) + SELECT/INSERT + LISTEN/NOTIFY
-                        ▼
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                       PostgreSQL  (SSOT)                                     ║
-║                                                                              ║
-║  execution_event_log  (PARTITION BY LIST scope_id)                           ║
-║  ├─ scope_A   UNIQUE(predecessor_hash, scope_id)  ←── OCC 硬防线             ║
-║  ├─ scope_B                                                                  ║
-║  └─ ...                                                                      ║
-║                                                                              ║
-║  archived_event_log   (cold archive, no UNIQUE constraint)                   ║
-║                                                                              ║
-║  episodic_memory      (HNSW + tsvector BM25)                                 ║
-║  semantic_memory      (partial HNSW, WHERE superseded_by IS NULL)            ║
-║  procedural_memory    (±HNSW partial indexes + tsvector BM25)                ║
-║                                                                              ║
-║  bus_state            (HWM: last_processed_event_id)                         ║
-║  worker_subscriptions (subscription cold backup)                             ║
-║  worker_profiles      (△_padding per Worker channel)                         ║
-║  scope_lineage        (parent-child scope metadata, Phase 3)                 ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Knowledge Layer (SSOT)                                                   │
+│  PostgreSQL — execution_event_log (partitioned) + four memory tables      │
+│  pgcrypto SHA-256 · pgvector HNSW · pg_notify                             │
+└───────────────────────────┬─────────────────────────────────────────────┘
+                            │ DDL (exclusive) / SELECT + INSERT / LISTEN/NOTIFY
+┌───────────────────────────▼─────────────────────────────────────────────┐
+│  Control Layer (Brain)                                                    │
+│  @graph/control-plane — Pulse-Fetch bridge, Convergence Watchdog, DDL    │
+│  @graph/gateway       — Hono HTTP server, MCP Streamable HTTP, REST       │
+│  iii Engine binary    — Worker registry, WebSocket push, HWM advance      │
+└───────────────────────────┬─────────────────────────────────────────────┘
+                            │ WebSocket ws://localhost:49134 / HTTP :3000
+┌───────────────────────────▼─────────────────────────────────────────────┐
+│  Execution Layer (Limbs)                                                  │
+│  @graph/workers — 12 iii-registered Workers (SELECT/INSERT only)          │
+│  External agents — MCP / A2A / iii protocol, registered in agent_registry │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**权限边界**（硬性约束）：
-- Worker DB 账户：`SELECT / INSERT` only，无 DDL 权限
-- Control Plane DDL 连接：独占，1–2 个连接，只在三阶段筑巢时使用
-- 五大法定认知事件 + 2 个控制面直写信号（`context_oom_throttled` / `sub_scope_resolved`）
+**MemexCore** is the graph engine implemented in this repository (all packages below). **MemexShell**
+(a future interactive layer) is not yet implemented.
 
 ---
 
-## 3. 数据流（Mermaid）
+## 3. Package Structure
 
-```mermaid
-graph LR
-    UI([User Intent]) --> CP
+| Package | Name | Runtime | Responsibility |
+|---|---|---|---|
+| `packages/gateway` | `@graph/gateway` | Bun | Hono HTTP server (port 3000), REST endpoints, MCP Streamable HTTP server, agent pairing |
+| `packages/control-plane` | `@graph/control-plane` | Node.js/tsx | Pulse-Fetch bridge (pg-listen → HWM → iii.trigger), Convergence Watchdog, DDL-exclusive pool for scope nesting |
+| `packages/workers` | `@graph/workers` | Node.js/tsx | All 12 iii-registered Workers plus context assembly (Knapsack Slicing, overflow handling) |
+| `packages/shared` | `@graph/shared` | Both | `occWrite`, `occWriteIdempotent`, canonical JSON, OCC Writable CTE SQL, tokenizer, LLM provider abstraction, logger, write guard, command gate, `pg_notify` helper |
+| `packages/cli` | `@graph/cli` | Node.js | `graph-runtime connect` TUI — patches `~/.claude.json` for Claude Code MCP, installs Pi Terminal extension |
+| `packages/gateway-bot` | `@graph/gateway-bot` | Node.js/tsx | Telegram (long-poll or webhook) and Discord (slash commands) messaging bridge; dispatches messages as `task_spawned` events |
+| `packages/pi-extension` | `@graph/pi-extension` | Pi Terminal SDK | Pi Terminal extension with rehearsal (shadow) mode, `spawn_task`/`complete_task` tools, `/fork-ext` and `/fork-end` commands |
 
-    subgraph OurCode["Our Code (TypeScript)"]
-        CP[Control Plane Daemon]
-        PF[Pulse-Fetch Bridge]
-        WD[Convergence Watchdog]
-        MR["mem::reflect<br/>(RRF retrieval)"]
-        LP[LLMProvider]
-        EP[EmbeddingProvider]
-        WT["Wasm Tokenizer<br/>(@dqbd/tiktoken)"]
-    end
-
-    subgraph IIIEngine["iii Engine (pre-installed binary)"]
-        III_ROUTE[Function Router]
-        III_WS[WebSocket Server]
-    end
-
-    subgraph PG["PostgreSQL — SSOT"]
-        EEL["execution_event_log<br/>(partitioned by scope_id)"]
-        BS[bus_state / HWM]
-        WS[worker_subscriptions]
-        WP["worker_profiles (△_padding)"]
-        EM[episodic_memory]
-        SM[semantic_memory]
-        PM[procedural_memory]
-        ARC[archived_event_log]
-    end
-
-    subgraph WL["Worker Layer"]
-        SW[Standard Workers]
-        CRW[ConflictResolverWorker]
-        TPW[TemplateProposalWorker]
-    end
-
-    subgraph LLM_Tier["LLM / Embedding"]
-        LLM_API[OpenAI-compatible API]
-    end
-
-    %% Scope initialization
-    CP -->|"3-phase DDL: CREATE PARTITION + HNSW"| PG
-    CP -->|"plan_created → INSERT"| EEL
-
-    %% Event bus pipeline
-    EEL -->|"AFTER INSERT trigger\npg_notify ≤64B"| PF
-    PF -->|"point-query by BIGSERIAL id"| EEL
-    PF -->|"DashMap route → WebSocket push"| WL
-    PF -->|"advance HWM"| BS
-
-    %% Worker write-back
-    SW -->|"canonicalJson + Writable CTE INSERT"| EEL
-    CRW -->|"v_merged INSERT with convergence_gate"| EEL
-    TPW -->|"episodic / semantic / procedural write"| EM
-    TPW --> SM
-    TPW --> PM
-
-    %% Reflection track
-    SW -->|"mem::reflect(query_text, trigger_type)"| MR
-    MR -->|"BM25+HNSW RRF query"| EM
-    MR -->|"BM25+HNSW RRF query"| SM
-    MR -->|"BM25+HNSW RRF query"| PM
-    MR -->|"embed(query_text)"| EP
-    EP --> LLM_API
-
-    %% LLM calls
-    SW -->|"complete(messages)"| LP
-    CRW --> LP
-    TPW --> LP
-    LP --> LLM_API
-
-    %% Wasm token counting
-    SW -->|"countTokens(payload)"| WT
-
-    %% Watchdog
-    WD -->|"B-Tree terminal SQL check"| EEL
-    WD -->|"scope_closed INSERT"| EEL
-    WD -->|"trigger cold path"| TPW
-
-    %% Cold archive
-    EEL -.->|"DETACH PARTITION on scope_closed"| ARC
-
-    %% Disconnect recovery
-    PF -->|"HWM replay on reconnect"| BS
-```
+**Dependency direction:** `gateway` → `workers`, `control-plane`, `shared`. `workers` → `shared`. No
+package imports from `gateway`.
 
 ---
 
-## 4. 关键时序流（Mermaid）
+## 4. Data Flow: Agent → Graph → Workers
 
-### 4.1 Scope 生命周期（筑巢协议 → 关闭）
+The canonical write path for an external agent using the REST API:
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant CP as Control Plane<br/>(iii-engine)
-    participant PG as PostgreSQL
-    participant PF as Pulse-Fetch
-    participant W as Standard Worker
-    participant WD as Convergence Watchdog
-    participant TPW as TemplateProposalWorker
-
-    User->>CP: New Scope intent
-
-    Note over CP: Phase 1 — 拦截意图，生成 scope_id，内存挂起入网流量
-    CP->>PG: DDL BEGIN (exclusive control connection)
-    CP->>PG: CREATE TABLE execution_event_log_scope_{id} PARTITION OF ...
-    CP->>PG: ADD CONSTRAINT uk_scope_composite_occ_{id} UNIQUE(predecessor_hash, scope_id)
-    CP->>PG: CREATE INDEX HNSW ...
-    CP->>PG: DDL COMMIT
-
-    Note over CP: Phase 3 — 开闸放水
-    CP->>PG: INSERT plan_created (N_root, no predecessor_hash)
-    PG->>PF: pg_notify("iii_engine_channel", '{"id":1}')
-    PF->>PG: SELECT * FROM events WHERE id = 1
-    PF->>W: WebSocket push(plan_created)
-
-    loop Task execution
-        W->>PG: INSERT task_spawned / memory_updated (Writable CTE)
-        PG->>PF: pg_notify
-        PF->>W: push next event
-        W->>WD: (implicit) task_count / complete_count update
-    end
-
-    WD->>WD: Level 1: atomic counter check
-    WD->>WD: Level 2: conflict topology lock check
-    WD->>PG: Level 3: B-Tree terminal SQL (NOT EXISTS)
-    alt COUNT = 0 (converged)
-        WD->>PG: INSERT scope_closed
-        PG->>PF: pg_notify
-        PF->>TPW: WebSocket push(scope_closed)
-        TPW->>PG: write episodic_memory + procedural_memory
-        CP->>PG: DETACH PARTITION → archived_event_log
-    else COUNT > 0 (still pending)
-        WD->>WD: reject, self-heal in-memory counters
-    end
 ```
+Agent (MCP / REST / Telegram / Discord)
+  │
+  │ POST /v1/scopes/:id/events  { event_type, entity_id, predecessor_hash, payload }
+  ▼
+@graph/gateway (Hono, Bun)
+  │ Zod validation (400 before any DB access)
+  │ occWrite() → OCC_WRITE_SQL (partitioned INSERT)
+  ▼
+PostgreSQL: execution_event_log_scope_{id}
+  │ UNIQUE(predecessor_hash, scope_id) — first-writer-wins OCC
+  │ pgcrypto digest() computes version_hash in-transaction
+  │ pg_notify('graph_event_ready', '{"id": N}')   ← ≤64B pulse only
+  ▼
+@graph/control-plane: Pulse-Fetch bridge (pg-listen)
+  │ Point-query by BIGSERIAL id — fetches full event row
+  │ advanceHwm() — updates bus_state.last_processed_event_id
+  │ Routes sub_scope_resolved → graph::scope::sub_scope_resolved topic
+  │ All other events → graph::scheduler::frontier
+  │                  + graph::memory::episodic   (task_spawned / memory_updated)
+  ▼
+iii Engine binary (WebSocket ws://localhost:49134)
+  │ DashMap in-memory subscription routing
+  │ WebSocket push to subscribed Workers
+  ▼
+@graph/workers
+  │ FrontierSchedulerWorker → marks pending_dispatch (SKIP LOCKED claim-ready)
+  │ EpisodicMemoryWorker    → appends to episodic_memory
+  │ Agent claims via MCP claim_next_task → SKIP LOCKED → SET status='processing'
+  │ Agent completes via MCP complete_task → occWrite (memory_updated)
+  ▼
+PostgreSQL (new event row) → pg_notify → loop
+```
+
+**OCC outcome signals** returned to the caller:
+- `occ_result: 'won'` — first writer claimed the predecessor_hash slot
+- `occ_result: 'demoted'` — late writer; event stored as `conflict_detected`, `ConflictResolverWorker` triggered
+
+After each event write the Gateway also runs the inline Convergence Watchdog SQL. If all tasks are
+complete and no conflicts are open, it writes `scope_closed` directly (infra-write right).
 
 ---
 
-### 4.2 正常 Worker 执行（含双轨检索）
+## 5. Key Data Models
 
-```mermaid
-sequenceDiagram
-    participant PF as Pulse-Fetch
-    participant W as Worker
-    participant KS as Knapsack Slicing
-    participant MR as mem::reflect
-    participant PG as PostgreSQL
-    participant LLM as LLMProvider
-    participant WT as Wasm Tokenizer
+### Five Canonical Event Types
 
-    PF->>W: WebSocket push(task_spawned event)
+Only these five event types are accepted by the database `CHECK` constraint on `execution_event_log`:
 
-    W->>WT: countTokens(each candidate node payload)
-    W->>KS: slice(N_current, W_max)
-    Note over KS: ① N_root (rigid root)<br/>② N_current + siblings (pending/conflict)<br/>③ fill ancestors newest-first until ΔW exhausted
+| Event type | Who writes it | Meaning |
+|---|---|---|
+| `plan_created` | Control Plane (scope init) | Scope root node; `predecessor_hash = ZERO_HASH` |
+| `task_spawned` | Agents, `spawn_subtask` MCP tool | Sub-task created; `status = 'pending_scheduling'` |
+| `memory_updated` | Agents, Workers | Task completed or memory advanced; carries full payload snapshot |
+| `conflict_detected` | OCC CTE (automatic) | Late-arriving write; triggers `ConflictResolverWorker` |
+| `scope_closed` | Gateway (inline Watchdog) | Scope converged; triggers cold-archive and memory synthesis |
 
-    opt conflict_detected / macro_planning / cold_start
-        W->>MR: mem::reflect(query_text, trigger_type, w_max, scope_id)
-        MR->>PG: EmbeddingProvider.embed(query_text)
-        MR->>PG: BM25+HNSW RRF(episodic, k=5)
-        MR->>PG: BM25+HNSW RRF(semantic, k=5)
-        MR->>PG: BM25+HNSW RRF(procedural, k=1–3)
-        MR-->>W: [REFLECTION MEMORY] partition (≤min(2000,W_max×0.3) tokens)
-    end
+Infrastructure-level direct writes (`context_oom_throttled`, `sub_scope_resolved`) bypass the CHECK
+constraint and are written by the Control Plane or Gateway directly.
 
-    W->>W: build prompt:<br/>[SYSTEM] | [EXECUTION CONTEXT] | [REFLECTION MEMORY?]
-    W->>LLM: complete(messages)
-    LLM-->>W: response
+### Scope
 
-    W->>W: canonicalJson(payload) — BTreeMap recursive sort
-    W->>PG: Writable CTE INSERT<br/>canonical_json_text as TEXT constant
-    Note over PG: digest(scope_id|entity_id|pred_hash|event_type|canonical_text)<br/>UNIQUE(predecessor_hash, scope_id) enforced
-    PG-->>W: {result: "won"} → memory_updated written
+A Scope groups all events for one top-level task. Each Scope gets its own LIST partition sub-table
+(`execution_event_log_scope_{uuid_no_dashes}`) with two unique constraints:
+
+- `UNIQUE(predecessor_hash, scope_id)` — OCC first-writer-wins
+- `UNIQUE(scope_id, entity_id, version_hash)` — idempotent re-delivery
+
+The `scope_id` is injected into the SHA-256 hash formula as a cryptographic salt, giving each Scope
+collision-isolated hash space.
+
+### Entity and Version
+
+An Entity is a stable UUID business object. A Version is its immutable state at one point in time,
+identified by:
+
+```
+version_hash = SHA-256(scope_id | entity_id | predecessor_hash | event_type | canonical_json(payload))
+```
+
+The hash is computed exclusively by `pgcrypto digest()` inside the Writable CTE. Application code
+never computes the hash. Payload is stored as `TEXT` (never `JSONB`) to preserve canonical key order.
+
+### HyperEdge (Association)
+
+Each row in `execution_event_log` is a HyperEdge: a directed immutable tuple
+`(source_entity, target_entity, event_type, version_hash, timestamp)`. The `predecessor_hash` chain
+forms a blockchain-style append-only version history.
+
+### ZERO_HASH
+
+The sentinel value `"0000...0000"` (64 zero hex chars) used as the `predecessor_hash` for all
+`plan_created` root nodes. Because any real hash cannot collide with this value (2⁻²⁵⁶ probability),
+it safely prevents duplicate scope initialization via the unique constraint.
+
+---
+
+## 6. Worker Registry
+
+All Workers are registered at boot in `packages/workers/src/index.ts` using `registerWorker` from
+`iii-sdk`. Workers hold only `SELECT/INSERT` database rights — no DDL.
+
+| Worker | iii function ID | Trigger | What it does |
+|---|---|---|---|
+| **FrontierSchedulerWorker** | `graph::scheduler::frontier` | durable:subscriber on `graph::frontier::changed` | LLM-free priority dispatch: computes `base_priority×10 + age_bonus + unlocks×5 + spawned_by_bonus + active_bonus`; marks rows `pending_dispatch` via `SKIP LOCKED`-safe UPDATE |
+| **EpisodicMemoryWorker** | `graph::memory::episodic` | durable:subscriber on `graph::memory::episodic::ingest` | Appends `task_spawned` and `memory_updated` events to `episodic_memory`; fired by Pulse-Fetch on every non-self event |
+| **SemanticMemoryWorker** | `graph::memory::semantic` | durable:subscriber on `graph::scope::closed` | Distils episodic records into `semantic_memory` via LLM on scope close |
+| **MemorySynthesizerWorker** | `graph::memory::synthesizer` | cron 2AM daily | Batch episodic→procedural distillation for scopes with records in the past 25 hours; chains into ProceduralMemoryWorker |
+| **ProceduralMemoryWorker** | `graph::memory::procedural` | durable:subscriber on synthesizer output | Stores WL-embedded workflow templates into `procedural_memory` with intent embedding |
+| **ConflictResolverWorker** | `graph::conflict-resolver` | explicit trigger on `conflict_detected` | LLM-assisted semantic merge of conflicting OCC writes; writes `v_merged` with a `convergence_gate` payload |
+| **SubScopeResultWorker** | `graph::scope::sub-scope-result` | durable:subscriber on `graph::scope::sub_scope_resolved` | Reads child scope final node, synthesizes result via LLM, writes `memory_updated` to parent scope |
+| **CrystallizeWorker** | `graph::memory::crystallize` | durable:subscriber on `graph::scope::closed` | Real-time LLM digest of episodic records into a Crystal entity; triggers `LessonSaveWorker` |
+| **LessonSaveWorker** | `graph::memory::lesson-save` | durable:subscriber on `graph::memory::lesson-save` | Content-addressed dedup via SHA-256 fingerprint; Ebbinghaus confidence reinforcement (`confidence += 0.1 × (1 − confidence)`); exports to `skills/` when threshold crossed |
+| **PatternDiscoveryWorker** | `graph::patterns::discover` | cron every 6 hours | WL graph-kernel cross-domain cluster discovery; guarded by `MIN_CORPUS_THRESHOLD`; writes `cross_domain_cluster_id` to `procedural_memory`; base_priority=1 (lowest) |
+| **McpClientWorker** | `graph::integration::mcp-client` | boot + manual trigger | Connects to external MCP servers; registers per-tool iii functions dynamically at startup |
+| **UserProfileWorker** | `graph::memory::user-profile` | cron 3AM daily | Synthesizes cross-scope user profile from Crystal entities for all `protocol='human'` agents |
+
+Cron workers (`MemorySynthesizerWorker` decay + TTL variants are also registered):
+- `graph::memory::decay` — 3AM daily, Ebbinghaus decay scan
+- `graph::memory::ttl` — 4AM daily, working_memory 24h TTL purge
+
+---
+
+## 7. MCP Server Tools
+
+The MCP server (`/mcp`, `/mcp/messages`) implements the MCP Streamable HTTP 2025-11-25 spec via
+`WebStandardStreamableHTTPServerTransport` (stateless — fresh transport per request). SSE at
+`/mcp/sse` carries availability signals only (no task content).
+
+Eight tools are registered (tool 8 conditional on `EXECUTE_BASH_ENABLED=true`):
+
+| Tool | Description |
+|---|---|
+| `spawn_subtask` | Write a `task_spawned` event via OCC. D-1 guard rejects `assigned_agent_id` or `preferred_agent` in payload; routing is by `required_skills` only. Returns `{ task_id }`. |
+| `claim_next_task` | `FOR UPDATE SKIP LOCKED` on `execution_event_log` filtered by `skills` and optionally `scope_id`. Returns task or `{}`. |
+| `get_task_status` | Query latest `status`, `version_hash`, `scope_id`, `event_type` for an entity UUID. |
+| `complete_task` | Write a `memory_updated` event via OCC to mark a task completed. Looks up `scope_id` and `predecessor_hash` from ledger if not supplied. |
+| `wait_all_tasks` | Poll until all specified task UUIDs reach a terminal status (`completed`/`done`) or timeout. Returns `{ timed_out, completed, pending }`. |
+| `register_agent` | Upsert an external AgentCard into `agent_registry` (`ON CONFLICT DO UPDATE` refreshes heartbeat). Returns `{ registered: agent_id }`. |
+| `query_context` | Return the most recent N events for a `scope_id`. |
+| `execute_bash` | Execute a shell command (requires `EXECUTE_BASH_ENABLED=true`). Gated by `CommandGate` (hardline and dangerous commands blocked). Writes result as `memory_updated` audit event. |
+
+---
+
+## 8. REST Endpoints
+
+Three REST endpoints are mounted on the Hono app at port 3000:
+
+```
+POST /v1/scopes              — Create a new Scope (delegates DDL to Control Plane)
+POST /v1/scopes/:id/events   — Submit an event (OCC write + inline Watchdog + context assembly)
+GET  /v1/scopes/:id          — Read scope state + assembled context
+GET  /v1/health              — Health check
+GET  /v1/topology            — Graph topology query
+POST /v1/memory              — Memory retrieval endpoint
+POST /v1/agents/register     — Register an external agent AgentCard
+GET  /.well-known/agent-card.json — graph-os self AgentCard (static, no DB)
+POST /pair/generate          — Admin: generate agent pairing code (Bearer token gated)
+POST /pair                   — Agent: verify pairing code, mark as paired
 ```
 
 ---
 
-### 4.3 OCC 因果倒置 + 收敛合并
+## 9. PostgreSQL Schema Overview
 
-```mermaid
-sequenceDiagram
-    participant WA as Worker A
-    participant WB as Worker B
-    participant PG as PostgreSQL
-    participant PF as Pulse-Fetch
-    participant CRW as ConflictResolverWorker
-    participant LLM as LLMProvider
+All migrations are in `migrations/` and applied via `scripts/migrate.ts`.
 
-    par concurrent writes at H_basis
-        WA->>PG: Writable CTE INSERT (predecessor=H_basis)
-        WB->>PG: Writable CTE INSERT (predecessor=H_basis)
-    end
+### Core event table
 
-    Note over PG: UNIQUE(predecessor_hash, scope_id) arbitrates
-    PG-->>WA: won — event_type=memory_updated, hash=H_v1
-    PG-->>WB: demoted — event_type=conflict_detected<br/>predecessor FORCED to H_v1<br/>payload retains actual_basis_hash=H_basis<br/>new hash=H_v2 (recomputed atomically)
-
-    PG->>PF: pg_notify(conflict_detected id)
-    PF->>PG: point-query
-    PF->>PF: DashMap → ConflictResolverWorker subscription
-    PF->>CRW: WebSocket push(conflict_detected event)
-
-    CRW->>PG: read full branch: v_basis→v1 (WA path)
-    CRW->>PG: read v2.payload (WB demoted content)
-    CRW->>LLM: semantic merge(WA_fact, WB_fact)
-    LLM-->>CRW: merged_fact
-
-    CRW->>PG: INSERT v_merged<br/>event_type=memory_updated<br/>predecessor=H_v2<br/>convergence_gate{legitimate:H_v1, conflicted:H_v2, root:H_basis}
-    PG-->>CRW: won — H_merged written
-    PF->>PF: convergence_gate detected → release flow-control lock on Scope siblings
+```sql
+-- Partitioned BY LIST(scope_id); one sub-table per Scope
+execution_event_log (
+  id               BIGSERIAL,        -- surrogate, auto-increment per partition
+  scope_id         UUID NOT NULL,    -- partition key
+  entity_id        UUID NOT NULL,    -- stable business object UUID
+  event_type       TEXT CHECK (...), -- five canonical types only
+  predecessor_hash TEXT NOT NULL,    -- SHA-256 of prior version (ZERO_HASH for root)
+  version_hash     TEXT NOT NULL,    -- pgcrypto SHA-256, computed in-transaction
+  payload          TEXT NOT NULL,    -- pre-serialized canonical JSON (NEVER JSONB)
+  status           TEXT DEFAULT 'pending_scheduling',
+  base_priority    INT DEFAULT 1,
+  unlocks_count    INT DEFAULT 0,
+  spawned_by       UUID,
+  last_active_at   TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (scope_id, id)
+) PARTITION BY LIST (scope_id);
 ```
+
+Per-partition constraints (created by Control Plane DDL at scope init):
+- `UNIQUE(predecessor_hash, scope_id)` — OCC first-writer-wins
+- `UNIQUE(scope_id, entity_id, version_hash)` — idempotent re-delivery
+
+### Memory tables
+
+| Table | Purpose | Indexes |
+|---|---|---|
+| `episodic_memory` | Concrete past event records; what happened and when | GIN `ts_doc` (BM25), B-tree `scope_id` |
+| `semantic_memory` | Distilled cross-scope knowledge facts | GIN `ts_doc`, B-tree `scope_id`; `embedding vector(1536)` (HNSW pending) |
+| `procedural_memory` | Reusable execution topology templates | GIN `ts_doc`; HNSW on `topology_embedding vector(128)` (partial: `WHERE is_anti_pattern = FALSE`); `fingerprint_id` unique (lesson dedup) |
+| `working_memory` | Transient within-scope working state; expires with Scope | GIN `ts_doc`, B-tree `scope_id` |
+
+### Infrastructure tables
+
+| Table | Purpose |
+|---|---|
+| `bus_state` | HWM: `last_processed_event_id` per worker ID; enables gap-free replay on reconnect |
+| `scope_lineage` | Parent-child Scope causality metadata; written atomically in DDL transaction at nesting time |
+| `agent_registry` | AgentCard store for all registered agents (internal Workers + external MCP/A2A); includes `skills TEXT[]`, `protocol`, `last_heartbeat`, `status` |
+| `worker_profiles` | Per-(worker_type, model_fingerprint) `△_padding` token buffer; auto-adapts to real LLM usage |
 
 ---
 
-### 4.4 Context OOM 三级降级链路
-
-```mermaid
-sequenceDiagram
-    participant W as Worker (pre-call)
-    participant KS as Knapsack Slicing
-    participant CP as Control Plane
-    participant LLM as LLMProvider
-    participant WT as Wasm Tokenizer
-    participant PG as PostgreSQL
-
-    W->>KS: slice(N_current, W_max)
-    KS->>KS: W_core = Size(N_root) + Size(N_current) + siblings
-    alt W_core > W_max — width fuse
-        KS->>KS: drop siblings, keep only N_root + N_current
-        alt Size(N_root) + Size(N_current) still > W_max
-            Note over CP: Level 1 — N_root Distillation ⚠️ LLM call
-            CP->>LLM: distill(N_root.payload) → {Core Goal, Hard Constraints, Output Format}
-            LLM-->>CP: N_root_distilled (10–20% original size)
-            alt distilled + N_current ≤ W_max
-                CP->>W: proceed with N_root_distilled, _meta.context_pressure=level_1
-            else still > W_max
-                Note over WT: Level 2 — N_current Tail Truncation
-                WT->>WT: scan N_current, keep tail min(2000, W_max-Size(N_root_distilled)) tokens
-                WT->>WT: head replaced with [...Byte-Level Truncated: N tokens omitted...]
-                alt truncated + distilled ≤ W_max
-                    WT->>W: proceed with truncated payload, _meta.context_pressure=level_2
-                else still > W_max
-                    Note over CP: Level 3 — Hard Kernel Fuse
-                    CP->>PG: INSERT context_oom_throttled (control-plane direct write)
-                    Note over PG: Scope enters Suspended state<br/>Watchdog blocks scope_closed
-                    CP->>CP: emit max-severity alert to iii-observability
-                end
-            end
-        end
-    end
-```
-
----
-
-### 4.5 发散性反思轨道 — 冷启动骨架注入
-
-```mermaid
-sequenceDiagram
-    participant CP as Control Plane
-    participant EP as EmbeddingProvider
-    participant PG as PostgreSQL
-    participant W as First Worker
-    participant LLM as LLMProvider
-
-    Note over CP: After plan_created, cold-start match
-    CP->>EP: embed(new_scope_intent_text)
-    EP-->>CP: intent_embedding[1536]
-
-    CP->>PG: Two-phase Top-20 ANN + 4-signal rerank<br/>FROM procedural_memory WHERE is_anti_pattern=FALSE<br/>score = rrf×0.5 + quality×0.25 + recency×0.1 + diversity×0.15
-    PG-->>CP: top-3 templates
-
-    alt final_score > threshold
-        CP->>PG: INSERT Skeleton Graph (template_graph as initial task_spawned events)
-        CP->>PG: UPDATE procedural_memory SET last_used_at, success_count++
-        Note over W: Worker sees pre-populated task nodes, no planning from scratch
-    else no match
-        Note over W: Worker starts planning from N_root only
-    end
-
-    CP->>PG: anti-pattern query WHERE is_anti_pattern=TRUE (top-3)
-    PG-->>CP: failure pattern templates
-    CP->>W: inject anti-patterns into System Prompt as "禁止重蹈的坑"
-
-    W->>W: mem::reflect(trigger_type=cold_start, budget=min(2000,W_max×0.3))
-```
-
----
-
-## 5. Scope 生命周期状态机
+## 10. Event Chain Diagram (ASCII)
 
 ```
-                     ┌─────────────────────────────┐
-  User Intent ──────▶│         INITIALIZING          │
-                     │  (Control Plane DDL 3-phase)  │
-                     └──────────────┬────────────────┘
-                                    │ plan_created inserted
-                                    ▼
-                     ┌─────────────────────────────┐
-         ┌───────────│           RUNNING             │◀──────────────┐
-         │           │  Workers consuming events     │               │
-         │           └──────────────┬────────────────┘               │
-         │                          │                                 │
-         │       conflict_detected  │  context_oom_throttled         │
-         │       (auto CRW)         │  (control-plane direct write)  │ convergence_gate
-         │                          ▼                                 │ detected
-         │           ┌─────────────────────────────┐                 │
-         │           │          SUSPENDED            │                 │
-         │           │  Watchdog blocks scope_closed │                 │
-         │           │  awaiting_intervention        │                 │
-         │           └──────────────┬────────────────┘                 │
-         │                          │ human unblocks                  │
-         │                          └────────────────────────────────▶┘
-         │
-         │ Watchdog: 3-level defense passes (COUNT=0)
-         ▼
-         ┌─────────────────────────────┐
-         │           CLOSED             │
-         │  scope_closed inserted       │
-         │  → cold archive DETACH       │
-         │  → TemplateProposalWorker    │
-         └─────────────────────────────┘
-```
-
----
-
-## 6. 内存热图与快照重建
-
-iii-engine 在内存中维护活跃 Scope 的拓扑结构（`execution_event_log` 的内存投影）：
-
-- **热图范围**：严格限定在单 scope_id 分区，不跨 Scope
-- **重建策略**：快照 + 增量重放（O(1) 冷启动）
-- **快照写入时机**：与 `scope_closed` 事件强对齐
-- **增量追加**：冷启动后从 `last_event_id` 顺序追加，不触发全量重放
-
-```
-冷启动 = 反序列化 snapshot + stream(event_id > snapshot.last_id) ← O(1)
-```
-
----
-
-## 7. 订阅路由架构（DashMap Hot Path）
-
-```
-Worker 注册时 → iii-engine 在内存 DashMap 中注入路由规则：
-  DashMap<EventType, Vec<WorkerHandle>>
-
-事件到达时（pg_notify → point-query）：
-  match event.event_type → DashMap lookup → WebSocket push to matching Workers
-
-冷备份（Write-Behind，5秒阻尼器）：
-  worker_subscriptions 表 ← 异步 Upsert
-
-重启恢复：
-  1. 读 worker_subscriptions 预物化骨架
-  2. 心跳 Ping 确认存活后挂载句柄
-  3. 驱逐无响应的幽灵连接
-```
-
----
-
-## 8. 哈希计算流水线（两阶段契约）
-
-```
-应用层（Rust/TypeScript）——阶段一（只做一次）：
-  payload object
+New Scope request
       │
-      ▼ BTreeMap recursive sort (alphabetical key order)
-  canonical_json_text: &str  ← immutable TEXT constant, never ::jsonb again
+      ▼
+Control Plane: 3-phase DDL
+  ├── CREATE TABLE execution_event_log_scope_{id} PARTITION OF ...
+  ├── ADD CONSTRAINT uk_occ_{id} UNIQUE(predecessor_hash, scope_id)
+  └── CREATE INDEX HNSW ...
 
-PostgreSQL 事务内核——阶段二（hash compute & re-compute）：
-  content_input = "{scope_id}|{entity_id}|{predecessor_hash}|{event_type}|{canonical_json_text}"
+Gateway: INSERT plan_created (predecessor_hash = ZERO_HASH)
       │
-      ▼ pgcrypto digest(content_input, 'sha256')
-  version_hash: SHA-256 hex string
+      ▼ pg_notify('graph_event_ready', '{"id":1}')
+      │
+Pulse-Fetch (pg-listen): point-query → advanceHwm
+      │
+      ├──► iii.trigger('graph::scheduler::frontier', {scope_id})
+      │         └► FrontierSchedulerWorker: marks rows pending_dispatch
+      │
+      └──► iii.trigger('graph::memory::episodic', {scope_id, content, ...})
+                └► EpisodicMemoryWorker: appends to episodic_memory
 
-Writable CTE 因果倒置时（predecessor_hash 改写后）：
-  同一 canonical_json_text 常数 + 新 predecessor_hash → digest() → new version_hash
-  不回调应用层，不做 ::jsonb 转换
+Agent (MCP): claim_next_task → SKIP LOCKED → status='processing'
+Agent (MCP): complete_task  → occWrite → memory_updated
+      │
+      ▼ pg_notify → Pulse-Fetch → FrontierScheduler + Episodic loop
+
+[Concurrent write race]
+  Worker A: occWrite → WON   → memory_updated (H_v1)
+  Worker B: occWrite → DEMOTED → conflict_detected (H_v2, predecessor=H_v1)
+      │
+      ▼ pg_notify → ConflictResolverWorker
+  LLM merge → INSERT v_merged (convergence_gate payload)
+
+[All tasks pending=0, conflicts=0]
+Gateway inline Watchdog: INSERT scope_closed
+      │
+      ├──► CrystallizeWorker:    episodic records → Crystal → LessonSaveWorker
+      │        └► LessonSaveWorker: fingerprint dedup, Ebbinghaus confidence
+      │
+      ├──► SemanticMemoryWorker: episodic → semantic_memory via LLM
+      │
+      └──► PatternDiscoveryWorker (6h cron):
+               topology clustering → cross_domain_cluster_id
 ```
 
 ---
 
-## 9. 双轨检索上下文注入结构
+## 11. Concurrency and OCC
 
-```
-[SYSTEM PROMPT]
-  Core Schema Rules
-  tRPC-like domain contracts (from procedural_memory)
-  Anti-pattern injections (cold-start only)
+The system enforces optimistic concurrency at the database level. No application-level locking exists.
 
-[EXECUTION CONTEXT]   ← 确定性执行轨道（Knapsack Slicing）
-  N_root (plan_created — rigid origin)
-  [ancestors, newest→oldest, within ΔW budget]
-  N_current (current processing node)
-  S_siblings (pending / conflict_detected in same scope)
+The Writable CTE (`OCC_WRITE_SQL`) is a three-branch SQL transaction:
 
-[REFLECTION MEMORY]   ← 发散性反思轨道（按需，3 触发场景）
-  === Procedural ===   (LIMIT 1–3, budget ×0.6)
-    template_graph JSON or summary if oversized
-  === Episodic ===     (LIMIT 5, remaining budget)
-    intent_summary, outcome_summary, error_patterns
-  === Semantic ===     (LIMIT 5, remaining budget)
-    fact_text (WHERE superseded_by IS NULL)
+1. `attempt` — try to INSERT with the claimed `predecessor_hash`; `ON CONFLICT DO NOTHING`
+2. `winner` — find whichever row now holds that slot
+3. `conflict` — if `attempt` returned 0 rows, INSERT a `conflict_detected` row chained after the winner
 
-Token budget:
-  W_max = W_physical - W_system_prompt - △_padding
-  Reflection budget = min(2000, W_max × 0.3)
-  Truncation order if over budget: Procedural > Episodic > Semantic (keep head)
-```
+The result is always a row with `occ_result='won'` (claimed) or `occ_result='demoted'` (conflict
+recorded). No retry, no exception, no rollback — the losing write is preserved in the ledger as a
+`conflict_detected` node, which is signal, not error.
 
 ---
 
-## 10. 关联文档索引
+## 12. Knapsack Slicing (Context Assembly)
 
-| 主题 | 文档 |
-|------|------|
-| 完整 ADR 列表（ADR 01–22） | `docs/ADR_v4.md` |
-| 系统 RFC（原始设计动机） | `docs/RFC_v4.md` |
-| 领域术语表 | `CONTEXT.md` |
-| BM25+HNSW RRF 混合检索规范 | `docs/adr/0021-adr20-supplement-hybrid-retrieval-bm25-rrf.md` |
-| mem::reflect 接口与 Token 预算 | `docs/adr/0022-adr21-reflection-track-trigger-spec.md` |
-| LLM/Embedding Provider 抽象 | `docs/adr/0023-adr22-llm-provider-abstraction.md` |
-| Context OOM 三级降级链路 | `docs/adr/0024-adr13-supplement-context-oom-degradation.md` |
-| 嵌套 Scope 传导协议（Phase 3） | `docs/adr/0025-adr23-nested-scope-propagation.md` |
-| 开放问题追踪 | `docs/未决问题追踪.md` |
-| Tech Stack 外部引用索引 | `docs/TECH_STACK.md` §7 |
+When the Gateway assembles context after an event write (for return to the calling agent), it calls
+`assembleContext` from `@graph/workers/context/assemble`. The algorithm:
+
+1. Load `N_root` (the `plan_created` node — rigid causal anchor)
+2. Load `N_current` (the event just written)
+3. Load sibling nodes (`pending_scheduling` / `conflict_detected` in the same scope)
+4. Fill ancestor chain (newest-first along `predecessor_hash`) within `W_max` token budget
+5. If `N_root + N_current > W_max` → trigger Context OOM three-level degradation:
+   - Level 1: LLM distillation of `N_root` to 10–20% original size
+   - Level 2: tail-truncate `N_current` to min(2000, remaining budget) tokens
+   - Level 3: write `context_oom_throttled` directly; Scope enters Suspended state
 
 ---
 
-## 11. 外部引用（External Citations）
+## 13. Four-Layer Memory and Retrieval
 
-> 本节列出架构中每个关键设计主张的外部文献支撑。所有库级引用均通过 ctx7 核实。
+Agents access historical knowledge through the Divergent Reflection Track, triggered only in three
+scenarios: `conflict_detected`, global macro-planning, or cold-start Scope initialization.
 
-### 库 / 工具（官方文档，ctx7 核实）
+```
+[EXECUTION CONTEXT]  — Knapsack causal chain (deterministic, always present)
+[REFLECTION MEMORY]  — BM25 + HNSW RRF retrieval (on-demand, token-capped)
+  Procedural  (LIMIT 1–3,  budget × 0.6)  — workflow templates + anti-patterns
+  Episodic    (LIMIT 5,    remaining)       — past scope outcomes
+  Semantic    (LIMIT 5,    remaining)       — distilled facts (WHERE superseded_by IS NULL)
+```
 
-| 组件 | 引用位置 | 官方来源 | ctx7 核实项 |
-|------|---------|---------|-----------|
-| **iii-sdk** | §2 Worker 连接模式，§4.2 时序流 | [github.com/iii-hq/iii](https://github.com/iii-hq/iii)，[quickstart.mdx](https://github.com/iii-hq/iii/blob/main/docs/quickstart.mdx) | `registerWorker(III_URL)`、`registerFunction(id, handler)`、`npm install iii-sdk` |
-| **pgvector** | §2 HNSW 索引，§4.2 检索流 | [github.com/pgvector/pgvector](https://github.com/pgvector/pgvector) | `m=16, ef_construction=64` 是默认值；过滤器**后执行**（非下推）；`iterative_scan` 是 v0.8.0 新增 |
-| **node-postgres (pg)** | §2 Writable CTE INSERT，§2.3 Control Plane | [github.com/brianc/node-postgres](https://github.com/brianc/node-postgres) | `Pool`、`client.on('notification')`（LISTEN/NOTIFY EventEmitter） |
-| **@dqbd/tiktoken** | §3 Wasm Tokenizer，ADR 15 | [github.com/dqbd/tiktoken](https://github.com/dqbd/tiktoken)，[npm](https://www.npmjs.com/package/@dqbd/tiktoken) | tiktoken Rust → Wasm；`get_encoding('cl100k_base').encode(text)` |
-| **pg-listen** | §2.3 Control Plane Daemon 桥接 | [github.com/andywer/pg-listen](https://github.com/andywer/pg-listen)，[npm](https://www.npmjs.com/package/pg-listen) | `createSubscriber`、`.listenTo(channel)`、`.notifications.on(channel, cb)` |
-| **pgcrypto** | §4.2 pgcrypto，ADR 02 哈希计算 | [postgresql.org/docs/current/pgcrypto.html](https://www.postgresql.org/docs/current/pgcrypto.html) | `digest(content_input, 'sha256')` 返回 bytea；contrib 扩展内置 |
-| **agentmemory** | §7 RRF 权重来源 | [github.com/rohitg00/agentmemory](https://github.com/rohitg00/agentmemory) | `BM25_WEIGHT=0.4, VECTOR_WEIGHT=0.6`；RRF `k=60`（源码直接确认） |
+Retrieval is hybrid: `ts_doc` BM25 full-text (GIN index) combined with `pgvector` HNSW cosine
+similarity, merged via Reciprocal Rank Fusion (RRF k=60). Token budget: `min(2000, W_max × 0.3)`.
 
-### 研究论文（核心算法依据）
+---
 
-| 设计主张 | 论文 | DOI / URL |
-|---------|------|-----------|
-| **RRF K=60 常数** | Cormack, G.V., Clarke, C.L.A., Buettcher, S. (2009). "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods." *SIGIR 2009* | https://dl.acm.org/doi/10.1145/1571941.1572114 |
-| **OCC UNIQUE 约束裁决** | Kung, H.T. & Robinson, J.T. (1981). "On Optimistic Methods for Concurrency Control." *ACM TODS 6(2)* | https://dl.acm.org/doi/10.1145/319566.319567 |
-| **mem::reflect 集中式反思** | MemR3: Memory-Retrieval and Reflection for Multi-Agent Systems (2024) | https://arxiv.org/abs/2512.20237 |
-| **集中式反思接口设计** | Packer, C. et al. (2023). "MemGPT: Towards LLMs as Operating Systems." *arXiv:2310.08560* | https://arxiv.org/abs/2310.08560 |
-| **Event Sourcing** | Fowler, M. — *Event Sourcing* | https://martinfowler.com/eaaDev/EventSourcing.html |
-| **Choreography Pattern** | Hohpe, G. & Woolf, B. — *Enterprise Integration Patterns* | https://www.enterpriseintegrationpatterns.com/patterns/messaging/EventBus.html |
+## 14. Agent Connectivity
+
+Three protocols for connecting agents to the runtime:
+
+| Protocol | Entry point | Notes |
+|---|---|---|
+| **MCP** | `POST /mcp` or `/mcp/messages` | MCP Streamable HTTP 2025-11-25; 8 tools; optional agent pairing (`REQUIRE_AGENT_PAIRING=true`) |
+| **A2A** | `GET /.well-known/agent-card.json` | graph-os self AgentCard; external A2A agents register via `POST /v1/agents/register` |
+| **iii** | `ws://localhost:49134` | Internal workers only; `registerWorker` + `registerFunction` |
+
+The CLI (`graph-runtime connect`) patches `~/.claude.json` to wire Claude Code as an MCP client
+and installs the Pi Terminal extension into `~/.pi/agent/extensions/`.
+
+---
+
+## 15. Related Documents
+
+| Topic | Document |
+|---|---|
+| Canonical terminology (English + Chinese) | `CONTEXT.md` |
+| Full ADR listing (ADR 01–40+) | `docs/ADR_v4.md` |
+| Original system RFC | `docs/RFC_v4.md` |
+| BM25+HNSW RRF hybrid retrieval | `docs/adr/0021-adr20-supplement-hybrid-retrieval-bm25-rrf.md` |
+| mem::reflect interface and token budget | `docs/adr/0022-adr21-reflection-track-trigger-spec.md` |
+| Context OOM three-level degradation | `docs/adr/0024-adr13-supplement-context-oom-degradation.md` |
+| Nested Scope propagation | `docs/adr/0025-adr23-nested-scope-propagation.md` |
+| Cross-domain topology algorithm | `docs/adr/0027-adr25-cross-domain-topology-algorithm.md` |
+| Event-as-Snapshot philosophy | `docs/adr/0028-adr26-event-as-snapshot-philosophy.md` |
+| Frontier Scheduler architecture | `docs/adr/0033-adr31-frontier-scheduler-architecture.md` |
+| PgQueueAdapter and idempotency | `docs/adr/0034-adr32-pgqueueadapter-and-idempotency.md` |

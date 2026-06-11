@@ -78,13 +78,7 @@ export async function spawnChildScope(
 
   // Read the current tip of the parent scope chain so the hyperedge appends correctly.
   // Using ZERO_HASH would conflict with plan_created which already owns that slot.
-  const tipRows = await graph.query<{ version_hash: string }>(
-    `SELECT version_hash FROM execution_event_log
-     WHERE scope_id = $1 AND event_type <> 'conflict_detected'
-     ORDER BY id DESC LIMIT 1`,
-    [parentScopeId],
-  );
-  const predecessorHash = tipRows[0]?.version_hash ?? ZERO_HASH;
+  const predecessorHash = await graph.getTailVersionHash(parentScopeId);
 
   // Build the spawned_by hyperedge payload.
   // Shape: (parent_scope_id, child_scope_id, 'scope_spawned', version_hash, timestamp)

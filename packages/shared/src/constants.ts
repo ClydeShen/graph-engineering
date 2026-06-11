@@ -3,6 +3,8 @@
  * All values are LOCKED per ADR references.
  */
 
+import { CANONICAL_EVENT_TYPES, type CanonicalEventType } from './types.js';
+
 /**
  * Sentinel predecessor_hash for the graph root (plan_created event).
  * 64 zeros — used as the first predecessor_hash in a new Scope chain.
@@ -12,15 +14,10 @@ export const ZERO_HASH = '0'.repeat(64) as string;
 
 /**
  * Five canonical event types. Any other type is rejected at bus level.
+ * Derived from CANONICAL_EVENT_TYPES in @graph/types — single source of truth.
  * @see ADR 12
  */
-export const EVENT_TYPES = [
-  'plan_created',
-  'task_spawned',
-  'memory_updated',
-  'conflict_detected',
-  'scope_closed',
-] as const;
+export const EVENT_TYPES = Object.values(CANONICAL_EVENT_TYPES) as CanonicalEventType[];
 
 /**
  * Maximum number of concurrent Worker slots in the iii execution pool.
@@ -56,3 +53,11 @@ export const MIN_CORPUS_THRESHOLD = 10;
  * @see .harness/phases/side-branch/DESIGN.md §3.2 — agent_registry schema
  */
 export const AGENT_HEARTBEAT_TTL_S = 60;
+
+/**
+ * iii topic for sub_scope_resolved events.
+ * Pulse-Fetch routes this event type to its own topic (not the frontier topic).
+ * SubScopeResultWorker registers a durable:subscriber on this topic.
+ * @see ADR 23 §4
+ */
+export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';

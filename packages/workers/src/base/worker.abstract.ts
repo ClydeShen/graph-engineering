@@ -29,6 +29,24 @@ export interface WorkerExecutionContext {
 }
 
 /**
+ * Read-only metadata describing a single context-assembly pipeline pass.
+ * Passed to the Phase 08 pipeline observability hooks below.
+ *
+ * Hooks MUST NOT mutate this object — typed Readonly<PipelineContext> at
+ * call sites (TS-level contract per D-07; not runtime-enforced).
+ */
+export interface PipelineContext {
+  scopeId: string;
+  wMax: number;
+  /** Tokens in the current input payload (Layer 3 volatile only). */
+  volatileTokens: number;
+  /** Tokens in the assembled Layer 2 context array (events + optional sentinel). */
+  contextLayerTokens: number;
+  ccrHashes: readonly string[];
+  droppedCount: number;
+}
+
+/**
  * Abstract Worker base class.
  *
  * Subclasses must implement all lifecycle hooks. The runLifecycle() driver
@@ -40,6 +58,13 @@ export interface WorkerExecutionContext {
  *  - onCompleted:  called when Processing succeeds (Writing phase — writes allowed)
  *  - onFailed:     called on non-conflict failure (Writing phase or terminal)
  *  - onConflicted: called when OCC returns 'demoted' (Writing phase, conflict path)
+ *
+ * Two hook layers:
+ *  - ADR-27 lifecycle hooks (above, abstract): driven by lifecycle.ts's
+ *    runLifecycle() state machine. Subclasses MUST implement all five.
+ *  - Phase 08 pipeline observability hooks (below, protected no-op): fired
+ *    from the context-assembly path (see packages/workers/src/context/assemble.ts),
+ *    NOT from runLifecycle(). Subclasses MAY override any subset.
  */
 export abstract class Worker {
   /**
@@ -72,4 +97,37 @@ export abstract class Worker {
    * May write conflict_detected event or reconcile in-process.
    */
   abstract onConflicted(ctx: WorkerExecutionContext): Promise<void>;
+
+  // --- Phase 08 pipeline observability hooks (pipeline assembly path, NOT lifecycle.ts) ---
+
+  /**
+   * Fired after assembleContext() produces a context slice.
+   * No-op by default. Override to observe context assembly (e.g. Phase 09 Reflection Track).
+   */
+  protected async onContextAssembled(ctx: Readonly<PipelineContext>): Promise<void> {}
+
+  /**
+   * Fired only when CCR triggers (ctx.droppedCount > 0).
+   * No-op by default.
+   */
+  protected async onContextCompressed(ctx: Readonly<PipelineContext>): Promise<void> {}
+
+  /**
+   * Fired after the LLM call returns.
+   * No-op by default.
+   */
+  protected async onLLMCalled(ctx: Readonly<PipelineContext>): Promise<void> {}
+
+  /**
+   * Fired after the Worker writes its result to the graph (Writing phase).
+   * No-op by default.
+   */
+  protected async onResultWritten(ctx: Readonly<PipelineContext>): Promise<void> {}
+
+  /**
+   * Returns true if this Worker participates in the Reflection Track (D-11, Phase 09).
+   * Override to return false to opt out of mem::reflect cold_start injection.
+   * Default: true — memory augmentation is on by default for all Workers.
+   */
+  shouldReflect(): boolean { return true; }
 }

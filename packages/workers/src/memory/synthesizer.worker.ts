@@ -1,6 +1,7 @@
-import type { Pool } from 'pg';
 import { writeGuard } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const SYNTHESIZER_CRON_TRIGGER = {
   type: 'cron' as const,
@@ -33,26 +34,18 @@ type SynthesisResult =
 
 export class MemorySynthesizerWorker {
   readonly base_priority = 1;
-  private readonly pool: Pool;
-  private readonly llm: LLMProvider;
 
-  constructor(pool: Pool, llm: LLMProvider) {
-    this.pool = pool;
-    this.llm = llm;
-  }
+  constructor(
+    private readonly reader: TrailReader,
+    private readonly memory: MemoryRepository,
+    private readonly llm: LLMProvider,
+  ) {}
 
   async runSynthesis(scopeId: string): Promise<SynthesisResult> {
-    const { rows } = await this.pool.query<{ scope_id: string; content: string }>(
-      `SELECT scope_id, content FROM episodic_memory
-       WHERE created_at > NOW() - INTERVAL '25 hours'
-         AND scope_id = $1
-       ORDER BY created_at ASC
-       LIMIT 100`,
-      [scopeId],
-    );
-    if (rows.length === 0) return { skipped: true };
+    const records = await this.reader.getEpisodicRecords(scopeId, { sinceHours: 25, limit: 100 });
+    if (records.length === 0) return { skipped: true };
 
-    const combined = rows.map((r) => r.content).join('\n');
+    const combined = records.join('\n');
     // LLM CALL — ADR 22 (batch distillation; cannot be deterministic)
     const summary = await this.llm.chat([
       {
@@ -71,8 +64,8 @@ export class MemorySynthesizerWorker {
     }
 
     const intentDescription = parsed.intent_description ?? summary;
-    const nodes = rows.map((_, i) => ({ id: `node-${i}`, event_type: 'episodic_trace' }));
-    const edges = rows
+    const nodes = records.map((_, i) => ({ id: `node-${i}`, event_type: 'episodic_trace' }));
+    const edges = records
       .slice(1)
       .map((_, i) => ({ source: `node-${i}`, target: `node-${i + 1}` }));
 
@@ -88,19 +81,11 @@ export class MemorySynthesizerWorker {
 
   async runDecay(): Promise<void> {
     // Ebbinghaus decay — pure SQL, NO LLM call (ADR 20 Task 3)
-    await this.pool.query(`
-      UPDATE procedural_memory
-      SET superseded_by = id
-      WHERE reinforcement_count = 0
-        AND last_used_at < NOW() - INTERVAL '90 days'
-        AND superseded_by IS NULL
-    `);
+    await this.memory.markSupersededByEbbinghaus();
   }
 
   async runTtlPurge(): Promise<void> {
     // working_memory 24h TTL — pure SQL, NO LLM call
-    await this.pool.query(
-      `DELETE FROM working_memory WHERE created_at < NOW() - INTERVAL '24 hours'`,
-    );
+    await this.memory.purgeTTLWorkingMemory();
   }
 }

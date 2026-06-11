@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { writeGuard } from './write-guard.js';
+import { writeGuard } from './redaction.js';
 
 describe('writeGuard', () => {
   it('passes clean payload through unchanged', () => {

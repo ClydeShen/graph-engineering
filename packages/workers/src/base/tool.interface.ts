@@ -9,7 +9,7 @@
  */
 
 import type { z } from 'zod';
-import type { ReadOnlyGraphHandle } from './read-only-handle.js';
+import type { ReadOnlyGraphHandle } from './graph-handle.js';
 
 /**
  * Execution context passed to a Tool's execute() method.

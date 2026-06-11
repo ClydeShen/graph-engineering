@@ -21,26 +21,12 @@
 import createSubscriber from 'pg-listen';
 import type { Pool } from 'pg';
 import { advanceHwm, readHwm } from './hwm.js';
-import { logger, LOG_EVENTS } from '@graph/shared';
+import { logger, LOG_EVENTS, SUB_SCOPE_TOPIC } from '@graph/shared';
 
 const log = logger.child({ component: 'control-plane', module: 'pulse-fetch' });
 
 const CHANNEL = 'graph_event_ready';
 const CONTROL_PLANE_WORKER_ID = 'control-plane';
-
-/**
- * Dedicated topic for sub_scope_resolved events.
- * SubScopeResultWorker (Plan 03-06) registers a durable:subscriber on this topic.
- * Exported so Plan 06 imports the identical string — no magic string duplication.
- *
- * sub_scope_resolved is a Control Plane direct-write that bypasses the bus enum
- * (ADR 12 / ADR 23). It must NOT route to graph::scheduler::frontier — doing so
- * would cause FrontierScheduler to treat it as a dispatchable frontier node.
- *
- * @see ADR 23 §4 — 总线感知到此事件后，激活 SubScopeResultWorker 订阅
- * @see RESEARCH.md Pitfall 3 — iii-sdk rejects non-canonical event types; use topic routing
- */
-export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';
 
 export interface PulseFetchDeps {
   iiiWorker: {
@@ -82,17 +68,26 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
   for (const row of missed.rows) {
     log.debug({ event_id: row.id, event_type: row.event_type }, LOG_EVENTS.PULSE_REPLAY);
     await advanceHwm(readPool, CONTROL_PLANE_WORKER_ID, row.id);
-    // sub_scope_resolved routes to its own topic — NOT the frontier topic (ADR 23)
-    if (row.event_type === 'sub_scope_resolved') {
-      await iiiWorker.trigger({
-        function_id: SUB_SCOPE_TOPIC,
-        payload: { scope_id: row.scope_id, event_id: row.id },
-      });
-    } else {
-      await iiiWorker.trigger({
-        function_id: 'graph::scheduler::frontier',
-        payload: { scope_id: row.scope_id },
-      });
+    try {
+      // sub_scope_resolved routes to its own topic — NOT the frontier topic (ADR 23)
+      if (row.event_type === 'sub_scope_resolved') {
+        await iiiWorker.trigger({
+          function_id: SUB_SCOPE_TOPIC,
+          payload: { scope_id: row.scope_id, event_id: row.id },
+        });
+      } else {
+        await iiiWorker.trigger({
+          function_id: 'graph::scheduler::frontier',
+          payload: { scope_id: row.scope_id },
+        });
+      }
+      // Note: replay does NOT re-trigger EpisodicMemoryWorker — events replayed at boot
+      // were already processed (or missed intentionally). Episodic writes are idempotent
+      // per content_hash but re-triggering on replay would create duplicate records.
+    } catch (err) {
+      // function_not_found during replay means the subscriber worker hasn't registered yet.
+      // HWM has already advanced — skip this event and continue. Non-fatal.
+      log.warn({ event_id: row.id, event_type: row.event_type, err }, LOG_EVENTS.PULSE_REPLAY + ' trigger skipped — function not found');
     }
   }
 
@@ -141,17 +136,44 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
 
     // Route by event_type: sub_scope_resolved gets its own dedicated topic (ADR 23).
     // All other event types route to Frontier Scheduler as before.
-    if (event.event_type === 'sub_scope_resolved') {
-      await iiiWorker.trigger({
-        function_id: SUB_SCOPE_TOPIC,
-        payload: { scope_id: event.scope_id, event_id: event.id },
-      });
-    } else {
-      // Route to Frontier Scheduler — passes scope_id for priority queue update
-      await iiiWorker.trigger({
-        function_id: 'graph::scheduler::frontier',
-        payload: { scope_id: event.scope_id },
-      });
+    try {
+      if (event.event_type === 'sub_scope_resolved') {
+        await iiiWorker.trigger({
+          function_id: SUB_SCOPE_TOPIC,
+          payload: { scope_id: event.scope_id, event_id: event.id },
+        });
+      } else {
+        // Route to Frontier Scheduler — passes scope_id for priority queue update
+        await iiiWorker.trigger({
+          function_id: 'graph::scheduler::frontier',
+          payload: { scope_id: event.scope_id },
+        });
+
+        // Also feed episodic memory for task_spawned and agent-originated memory_updated events.
+        // Skip events that EpisodicMemoryWorker itself wrote (memory_type:'episodic') to break
+        // the self-write loop: Episodic writes memory_updated → pg_notify fires → skip here.
+        if (event.event_type === 'task_spawned' || event.event_type === 'memory_updated') {
+          let isEpisodicSelf = false;
+          try {
+            const parsed = JSON.parse(event.payload as string) as Record<string, unknown>;
+            isEpisodicSelf = parsed['memory_type'] === 'episodic';
+          } catch { /* non-JSON payload — treat as agent-originated */ }
+
+          if (!isEpisodicSelf) {
+            await iiiWorker.trigger({
+              function_id: 'graph::memory::episodic',
+              payload: {
+                scope_id: event.scope_id,
+                entity_id: event.entity_id,
+                content: event.payload,
+                predecessor_hash: event.predecessor_hash,
+              },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      log.warn({ event_id: event.id, event_type: event.event_type, err }, LOG_EVENTS.PULSE_ERROR + ' trigger failed — subscriber may not be registered');
     }
   });
 

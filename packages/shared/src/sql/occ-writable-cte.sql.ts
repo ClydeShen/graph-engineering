@@ -66,7 +66,7 @@ attempt AS (
     $4::text, NOW()
   )
   ON CONFLICT (predecessor_hash, scope_id) DO NOTHING
-  RETURNING event_type, version_hash
+  RETURNING id, event_type, version_hash
 ),
 winner AS (
   SELECT version_hash AS wh
@@ -90,10 +90,11 @@ conflict AS (
   FROM winner
   WHERE NOT EXISTS (SELECT 1 FROM attempt)
   ON CONFLICT (predecessor_hash, scope_id) DO NOTHING
-  RETURNING event_type, version_hash
+  RETURNING id, event_type, version_hash
 ),
 demoted_fallback AS (
   SELECT
+    NULL::bigint AS id,
     'conflict_detected'::text AS event_type,
     encode(
       digest($1::text || '|' || $2::text || '|' || wh || '|conflict_detected|' || $4::text, 'sha256'),
@@ -103,13 +104,13 @@ demoted_fallback AS (
   WHERE NOT EXISTS (SELECT 1 FROM attempt)
     AND NOT EXISTS (SELECT 1 FROM conflict)
 )
-SELECT event_type, version_hash,
+SELECT id, event_type, version_hash,
   CASE event_type WHEN 'conflict_detected' THEN 'demoted' ELSE 'won' END AS occ_result
 FROM attempt
 UNION ALL
-SELECT event_type, version_hash, 'demoted' AS occ_result FROM conflict
+SELECT id, event_type, version_hash, 'demoted' AS occ_result FROM conflict
 UNION ALL
-SELECT event_type, version_hash, 'demoted' AS occ_result FROM demoted_fallback;
+SELECT id, event_type, version_hash, 'demoted' AS occ_result FROM demoted_fallback;
 `; }
 
 /**
@@ -152,9 +153,10 @@ WITH attempt AS (
     NOW()
   )
   ON CONFLICT (scope_id, entity_id, version_hash) DO NOTHING
-  RETURNING event_type, version_hash
+  RETURNING id, event_type, version_hash
 )
 SELECT
+  id,
   event_type,
   version_hash,
   'won' AS occ_result

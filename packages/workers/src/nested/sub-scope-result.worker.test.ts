@@ -1,16 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Pool } from 'pg';
-
-vi.mock('@graph/shared', () => ({
-  occWrite: vi.fn().mockResolvedValue({
-    version_hash: 'abc123def456abc123def456abc123def456abc123def456abc123def456abc1',
-    event_type: 'memory_updated',
-    occ_result: 'won',
-  }),
-}));
-
-import { occWrite } from '@graph/shared';
-import { SubScopeResultWorker, SUB_SCOPE_RESULT_TRIGGER_CONFIG } from './sub-scope-result.worker.js';
+import { StubTrailReader } from '../base/trail-reader.js';
+import type { EventWriter } from '@graph/shared';
 
 const CHILD_SCOPE_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
 const PARENT_SCOPE_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -25,40 +15,49 @@ const BASE_PAYLOAD = {
   parent_scope_id: PARENT_SCOPE_ID,
 };
 
+const MOCK_CHILD_NODE = {
+  id: '1', scope_id: CHILD_SCOPE_ID, entity_id: 'e1',
+  event_type: 'memory_updated', predecessor_hash: '0'.repeat(64),
+  version_hash: CHILD_FINAL_HASH, payload: '{"result":"child done"}',
+  status: 'completed', base_priority: 0, unlocks_count: 0,
+  spawned_by: null, last_active_at: null, created_at: new Date(),
+} as never;
+
+function makeWriter(): EventWriter & { write: ReturnType<typeof vi.fn> } {
+  return {
+    write: vi.fn().mockResolvedValue({
+      version_hash: 'abc123def456abc123def456abc123def456abc123def456abc123def456abc1',
+      event_type: 'memory_updated',
+      occ_result: 'won',
+    }),
+  };
+}
+
 describe('SubScopeResultWorker', () => {
-  let mockQuery: ReturnType<typeof vi.fn>;
-  let pool: Pool;
+  let reader: StubTrailReader;
+  let writer: ReturnType<typeof makeWriter>;
   let mockChat: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockChat = vi.fn().mockResolvedValue('synthesized result summary');
-    // Default: child node found + parent task_spawned found
-    mockQuery = vi.fn()
-      .mockResolvedValueOnce({
-        rows: [{ payload: { result: 'child done' }, event_type: 'memory_updated' }],
-        rowCount: 1,
-      })
-      .mockResolvedValueOnce({
-        rows: [{ version_hash: PARENT_TASK_HASH }],
-        rowCount: 1,
-      });
-    pool = { query: mockQuery } as unknown as Pool;
+    reader = new StubTrailReader();
+    vi.spyOn(reader, 'getVersionByHash').mockResolvedValue(MOCK_CHILD_NODE);
+    vi.spyOn(reader, 'getTailVersionHash').mockResolvedValue(PARENT_TASK_HASH);
+    writer = makeWriter();
   });
 
-  it('(a) reads child node by child_final_version_hash from child scope partition', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+  it('(a) reads child node by child_final_version_hash from child scope', async () => {
+    const { SubScopeResultWorker } = await import('./sub-scope-result.worker.js');
+    const worker = new SubScopeResultWorker(reader, writer, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
-    expect(mockQuery).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('version_hash = $2'),
-      [CHILD_SCOPE_ID, CHILD_FINAL_HASH],
-    );
+    expect(reader.getVersionByHash).toHaveBeenCalledWith(CHILD_SCOPE_ID, CHILD_FINAL_HASH);
   });
 
   it('(b) calls LLM with child final node content', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+    const { SubScopeResultWorker } = await import('./sub-scope-result.worker.js');
+    const worker = new SubScopeResultWorker(reader, writer, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
     expect(mockChat).toHaveBeenCalledOnce();
@@ -71,13 +70,13 @@ describe('SubScopeResultWorker', () => {
     );
   });
 
-  it('(c) occWrites memory_updated to PARENT scope with result_summary', async () => {
-    const worker = new SubScopeResultWorker(pool, { chat: mockChat });
+  it('(c) writes memory_updated to PARENT scope with result_summary', async () => {
+    const { SubScopeResultWorker } = await import('./sub-scope-result.worker.js');
+    const worker = new SubScopeResultWorker(reader, writer, { chat: mockChat });
     await worker.onSubScopeResolved(BASE_PAYLOAD);
 
-    expect(vi.mocked(occWrite)).toHaveBeenCalledOnce();
-    expect(vi.mocked(occWrite)).toHaveBeenCalledWith(
-      pool,
+    expect(writer.write).toHaveBeenCalledOnce();
+    expect(writer.write).toHaveBeenCalledWith(
       expect.objectContaining({
         scopeId: PARENT_SCOPE_ID,
         eventType: 'memory_updated',
@@ -91,18 +90,15 @@ describe('SubScopeResultWorker', () => {
   });
 
   it('(d) child-not-found path writes error memory_updated to parent and does NOT throw', async () => {
-    const emptyQuery = vi.fn()
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // child not found
-      .mockResolvedValueOnce({ rows: [{ version_hash: PARENT_TASK_HASH }], rowCount: 1 });
-    const emptyPool = { query: emptyQuery } as unknown as Pool;
-    const worker = new SubScopeResultWorker(emptyPool, { chat: mockChat });
+    vi.spyOn(reader, 'getVersionByHash').mockResolvedValue(null);
+    const { SubScopeResultWorker } = await import('./sub-scope-result.worker.js');
+    const worker = new SubScopeResultWorker(reader, writer, { chat: mockChat });
 
     await expect(worker.onSubScopeResolved(BASE_PAYLOAD)).resolves.toBeUndefined();
 
     expect(mockChat).not.toHaveBeenCalled();
-    expect(vi.mocked(occWrite)).toHaveBeenCalledOnce();
-    expect(vi.mocked(occWrite)).toHaveBeenCalledWith(
-      emptyPool,
+    expect(writer.write).toHaveBeenCalledOnce();
+    expect(writer.write).toHaveBeenCalledWith(
       expect.objectContaining({
         scopeId: PARENT_SCOPE_ID,
         eventType: 'memory_updated',
@@ -115,7 +111,8 @@ describe('SubScopeResultWorker', () => {
     );
   });
 
-  it('SUB_SCOPE_RESULT_TRIGGER_CONFIG has correct type, function_id, and topic', () => {
+  it('SUB_SCOPE_RESULT_TRIGGER_CONFIG has correct type, function_id, and topic', async () => {
+    const { SUB_SCOPE_RESULT_TRIGGER_CONFIG } = await import('./sub-scope-result.worker.js');
     expect(SUB_SCOPE_RESULT_TRIGGER_CONFIG.type).toBe('durable:subscriber');
     expect(SUB_SCOPE_RESULT_TRIGGER_CONFIG.function_id).toBe('graph::scope::sub-scope-result');
     expect(SUB_SCOPE_RESULT_TRIGGER_CONFIG.config.topic).toBe('graph::scope::sub_scope_resolved');

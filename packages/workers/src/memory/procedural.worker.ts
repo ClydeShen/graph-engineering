@@ -1,8 +1,7 @@
-import type { Pool } from 'pg';
-import { createHash } from 'crypto';
-import { writeGuard, occWrite } from '@graph/shared';
-import type { EmbeddingProvider } from '@graph/shared';
+import { writeGuard, contentFingerprint } from '@graph/shared';
+import type { EventWriter, EmbeddingProvider } from '@graph/shared';
 import { computeWLEmbedding } from './wl-embedding.js';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const PROCEDURAL_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -11,13 +10,11 @@ export const PROCEDURAL_TRIGGER_CONFIG = {
 } as const;
 
 export class ProceduralMemoryWorker {
-  private readonly pool: Pool;
-  private readonly llm: EmbeddingProvider;
-
-  constructor(pool: Pool, llm: EmbeddingProvider) {
-    this.pool = pool;
-    this.llm = llm;
-  }
+  constructor(
+    private readonly memory: MemoryRepository,
+    private readonly writes: EventWriter,
+    private readonly llm: EmbeddingProvider,
+  ) {}
 
   async onSynthesizerOutput(
     scopeId: string,
@@ -33,10 +30,6 @@ export class ProceduralMemoryWorker {
     const embeddingLiteral = `[${Array.from(embedding).join(',')}]`;
 
     // LLM CALL — ADR 22 (embedding calls excluded from Worker token budget)
-    // intent_embedding is the semantic embedding of the intent_description (1536-dim).
-    // Distinct from topology_embedding (WL kernel output, 128-dim) — used by
-    // CrossScopePatternDiscoveryWorker as the cross-domain guard (ADR 25).
-    // Falls back to NULL on provider failure; topology_embedding write is unaffected.
     let intentEmbeddingLiteral: string | null = null;
     try {
       const result = await this.llm.embed(intentDescription);
@@ -47,24 +40,18 @@ export class ProceduralMemoryWorker {
       // Embedding failure — write NULL for intent_embedding; topology write still proceeds
     }
 
-    await this.pool.query(
-      `INSERT INTO procedural_memory
-         (scope_id, content, intent_description, template_graph, topology_embedding,
-          intent_embedding, success_count, reinforcement_count, last_used_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW())`,
-      [
-        scopeId,
-        writeGuard(intentDescription),
-        writeGuard(intentDescription),
-        JSON.stringify(templateGraph),
-        embeddingLiteral,
-        intentEmbeddingLiteral,
-      ],
-    );
+    await this.memory.insertProceduralTemplate({
+      scopeId,
+      content: writeGuard(intentDescription),
+      intentDescription: writeGuard(intentDescription),
+      templateGraph,
+      embeddingLiteral,
+      intentEmbeddingLiteral,
+    });
 
-    const contentHash = createHash('sha256').update(intentDescription).digest('hex');
+    const contentHash = contentFingerprint(intentDescription);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,
@@ -74,12 +61,6 @@ export class ProceduralMemoryWorker {
   }
 
   async reinforce(templateId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE procedural_memory
-       SET success_count = success_count + 1,
-           last_used_at = NOW()
-       WHERE id = $1`,
-      [templateId],
-    );
+    await this.memory.reinforceTemplate(templateId);
   }
 }

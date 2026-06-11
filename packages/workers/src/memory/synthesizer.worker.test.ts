@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Pool } from 'pg';
+import { StubTrailReader } from '../base/trail-reader.js';
+import { StubMemoryRepository } from '../base/memory-repository.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => `[guarded]:${s}`),
+  contentFingerprint: vi.fn((s: string) => `fp:${s}`),
 }));
 
 import {
@@ -13,80 +15,66 @@ import {
 } from './synthesizer.worker.js';
 
 describe('MemorySynthesizerWorker', () => {
-  let mockQuery: ReturnType<typeof vi.fn>;
-  let pool: Pool;
+  let reader: StubTrailReader;
+  let memory: StubMemoryRepository;
   let mockChat: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
-    pool = { query: mockQuery } as unknown as Pool;
+    memory = new StubMemoryRepository();
+    reader = new StubTrailReader();
     mockChat = vi
       .fn()
       .mockResolvedValue('{"intent_description":"test workflow","steps":["a","b"]}');
   });
 
-  it('runDecay() calls pool.query with SQL containing superseded_by = id and correct WHERE conditions', async () => {
-    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+  it('runDecay() calls memory.markSupersededByEbbinghaus once', async () => {
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
     await worker.runDecay();
 
-    expect(mockQuery).toHaveBeenCalledOnce();
-    const sql = mockQuery.mock.calls[0][0] as string;
-    expect(sql).toContain('superseded_by = id');
-    expect(sql).toContain('reinforcement_count = 0');
-    expect(sql).toContain("INTERVAL '90 days'");
+    expect(memory.calls.markSupersededByEbbinghaus).toBe(1);
   });
 
-  it('runDecay() — pool throws → error propagates', async () => {
-    const failQuery = vi.fn().mockRejectedValue(new Error('db error'));
-    const failPool = { query: failQuery } as unknown as Pool;
-    const worker = new MemorySynthesizerWorker(failPool, { chat: mockChat });
+  it('runDecay() — memory throws → error propagates', async () => {
+    memory.throwOn('markSupersededByEbbinghaus');
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
 
     await expect(worker.runDecay()).rejects.toThrow('db error');
   });
 
-  it('runTtlPurge() calls pool.query with DELETE FROM working_memory WHERE created_at < NOW() - INTERVAL 24 hours', async () => {
-    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+  it('runTtlPurge() calls memory.purgeTTLWorkingMemory once', async () => {
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
     await worker.runTtlPurge();
 
-    expect(mockQuery).toHaveBeenCalledOnce();
-    const sql = mockQuery.mock.calls[0][0] as string;
-    expect(sql).toContain('DELETE FROM working_memory');
-    expect(sql).toContain("INTERVAL '24 hours'");
+    expect(memory.calls.purgeTTLWorkingMemory).toBe(1);
   });
 
-  it('runSynthesis(scopeId) returns { skipped: true } when episodic_memory returns 0 rows', async () => {
-    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+  it('runTtlPurge() — memory throws → error propagates', async () => {
+    memory.throwOn('purgeTTLWorkingMemory');
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
+
+    await expect(worker.runTtlPurge()).rejects.toThrow('db error');
+  });
+
+  it('runSynthesis(scopeId) returns { skipped: true } when no episodic records', async () => {
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
     const result = await worker.runSynthesis('sc-1');
 
     expect(result).toEqual({ skipped: true });
     expect(mockChat).not.toHaveBeenCalled();
   });
 
-  it('runSynthesis(scopeId) passes scope_id to query and returns scope_id from parameter', async () => {
-    const rows = [
-      { scope_id: 'sc-1', content: 'trace A' },
-      { scope_id: 'sc-1', content: 'trace B' },
-    ];
-    mockQuery = vi.fn().mockResolvedValueOnce({ rows, rowCount: 2 });
-    pool = { query: mockQuery } as unknown as Pool;
-    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+  it('runSynthesis(scopeId) passes scope_id to reader', async () => {
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B']);
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
 
     await worker.runSynthesis('sc-1');
-    const [sql, params] = mockQuery.mock.calls[0] as [string, string[]];
-    expect(sql).toContain('scope_id = $1');
-    expect(params).toEqual(['sc-1']);
+    expect(reader.getEpisodicRecords).toHaveBeenCalledWith('sc-1', { sinceHours: 25, limit: 100 });
   });
 
-  it('runSynthesis(scopeId) returns skipped:false with scope_id from parameter, not from rows', async () => {
-    const rows = [
-      { scope_id: 'sc-OTHER', content: 'trace A' },
-      { scope_id: 'sc-OTHER', content: 'trace B' },
-      { scope_id: 'sc-OTHER', content: 'trace C' },
-    ];
-    mockQuery = vi.fn().mockResolvedValueOnce({ rows, rowCount: 3 });
-    pool = { query: mockQuery } as unknown as Pool;
-    const worker = new MemorySynthesizerWorker(pool, { chat: mockChat });
+  it('runSynthesis(scopeId) returns skipped:false with scope_id from parameter', async () => {
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B', 'trace C']);
+    const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
 
     const result = await worker.runSynthesis('sc-PARAM');
     const r = result as {
@@ -98,8 +86,8 @@ describe('MemorySynthesizerWorker', () => {
     };
     expect(r.skipped).toBe(false);
     expect(r.scope_id).toBe('sc-PARAM');
-    expect(r.nodes).toHaveLength(rows.length);
-    expect(r.edges).toHaveLength(rows.length - 1);
+    expect(r.nodes).toHaveLength(3);
+    expect(r.edges).toHaveLength(2);
     expect(r.intent_description).toBe('test workflow');
   });
 

@@ -1,12 +1,11 @@
 import { randomUUID } from 'crypto';
-import type { Pool } from 'pg';
-import { occWrite } from '@graph/shared';
-import type { LLMProvider } from '@graph/shared';
+import { type EventWriter, type LLMProvider, SUB_SCOPE_TOPIC } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
 
 export const SUB_SCOPE_RESULT_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
   function_id: 'graph::scope::sub-scope-result',
-  config: { topic: 'graph::scope::sub_scope_resolved' },
+  config: { topic: SUB_SCOPE_TOPIC },
 } as const;
 
 interface SubScopeResolvedPayload {
@@ -17,45 +16,24 @@ interface SubScopeResolvedPayload {
 }
 
 export class SubScopeResultWorker {
-  private readonly pool: Pool;
-  private readonly llm: LLMProvider;
-
-  constructor(pool: Pool, llm: LLMProvider) {
-    this.pool = pool;
-    this.llm = llm;
-  }
+  constructor(
+    private readonly reader: TrailReader,
+    private readonly writes: EventWriter,
+    private readonly llm: LLMProvider,
+  ) {}
 
   async onSubScopeResolved(payload: SubScopeResolvedPayload): Promise<void> {
     const { child_scope_id, trigger_task_id, child_final_version_hash, parent_scope_id } = payload;
 
     // Step 1: Read child scope's final node by child_final_version_hash (ADR 23 §3 step 1)
-    const childResult = await this.pool.query<{ payload: unknown; event_type: string }>(
-      `SELECT payload, event_type
-       FROM execution_event_log
-       WHERE scope_id = $1 AND version_hash = $2
-       LIMIT 1`,
-      [child_scope_id, child_final_version_hash],
-    );
+    const childNode = await this.reader.getVersionByHash(child_scope_id, child_final_version_hash);
 
     // Step 3: Use parent's tail version_hash as predecessor.
-    // resolveSubScope wrote sub_scope_resolved using the parent's tail at that point,
-    // so the tail is now sub_scope_resolved. Writing memory_updated after it avoids
-    // the OCC conflict that would occur if we re-used the task_spawned predecessor slot.
-    const parentTailResult = await this.pool.query<{ version_hash: string }>(
-      `SELECT version_hash
-       FROM execution_event_log
-       WHERE scope_id = $1
-       ORDER BY id DESC
-       LIMIT 1`,
-      [parent_scope_id],
-    );
-
-    const parentPredecessorHash =
-      parentTailResult.rows[0]?.version_hash ?? '0'.repeat(64);
+    const parentPredecessorHash = await this.reader.getTailVersionHash(parent_scope_id);
 
     // Error path: child final node not found (T-03-06-01 backstop — do NOT throw)
-    if (childResult.rows.length === 0) {
-      await occWrite(this.pool, {
+    if (childNode === null) {
+      await this.writes.write({
         scopeId: parent_scope_id,
         entityId: randomUUID(),
         predecessorHash: parentPredecessorHash,
@@ -70,7 +48,7 @@ export class SubScopeResultWorker {
     }
 
     // Step 2: LLM CALL — ADR 22 — synthesize result summary from child final node content
-    const childContent = JSON.stringify(childResult.rows[0].payload ?? {});
+    const childContent = childNode.payload;
     const result_summary = await this.llm.chat([
       {
         role: 'system',
@@ -81,8 +59,8 @@ export class SubScopeResultWorker {
       { role: 'user', content: childContent },
     ]);
 
-    // Step 4: occWrite memory_updated to PARENT scope (ADR 23 §3 step 3)
-    await occWrite(this.pool, {
+    // Step 4: write memory_updated to PARENT scope (ADR 23 §3 step 3)
+    await this.writes.write({
       scopeId: parent_scope_id,
       entityId: randomUUID(),
       predecessorHash: parentPredecessorHash,

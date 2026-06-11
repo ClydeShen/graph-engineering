@@ -1,7 +1,7 @@
-import type { Pool } from 'pg';
-import { createHash } from 'crypto';
-import { writeGuard, occWrite } from '@graph/shared';
-import type { LLMProvider } from '@graph/shared';
+import { writeGuard, contentFingerprint } from '@graph/shared';
+import type { EventWriter, LLMProvider } from '@graph/shared';
+import type { TrailReader } from '../base/trail-reader.js';
+import type { MemoryRepository } from '../base/memory-repository.js';
 
 export const SEMANTIC_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -10,37 +10,30 @@ export const SEMANTIC_TRIGGER_CONFIG = {
 } as const;
 
 export class SemanticMemoryWorker {
-  private readonly pool: Pool;
-  private readonly llm: LLMProvider;
-
-  constructor(pool: Pool, llm: LLMProvider) {
-    this.pool = pool;
-    this.llm = llm;
-  }
+  constructor(
+    private readonly reader: TrailReader,
+    private readonly memory: MemoryRepository,
+    private readonly writes: EventWriter,
+    private readonly llm: LLMProvider,
+  ) {}
 
   async onScopeClosed(scopeId: string, entityId: string, predecessorHash: string): Promise<void> {
-    const { rows } = await this.pool.query<{ content: string }>(
-      `SELECT content FROM episodic_memory WHERE scope_id = $1 ORDER BY created_at ASC LIMIT 50`,
-      [scopeId],
-    );
-    if (rows.length === 0) return;
+    const records = await this.reader.getEpisodicRecords(scopeId, { limit: 50 });
+    if (records.length === 0) return;
 
-    const combined = rows.map((r) => r.content).join('\n');
+    const combined = records.join('\n');
     // LLM CALL — ADR 22 (distillation from episodic to semantic; cannot be deterministic)
     const fact = await this.llm.chat([
       { role: 'system', content: 'Distill the following execution traces into key facts. Be concise.' },
       { role: 'user', content: writeGuard(combined) },
     ]);
 
-    await this.pool.query(
-      `INSERT INTO semantic_memory (scope_id, content, valid_from, created_at)
-       VALUES ($1, $2, NOW(), NOW())`,
-      [scopeId, writeGuard(fact)],
-    );
+    // TODO(Plan 03): pass real embedding — Plan 03 replaces this with EmbeddingProvider.embed()
+    await this.memory.insertSemanticFact(scopeId, writeGuard(fact), []);
 
-    const contentHash = createHash('sha256').update(fact).digest('hex');
+    const contentHash = contentFingerprint(fact);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
-    await occWrite(this.pool, {
+    await this.writes.write({
       scopeId,
       entityId,
       predecessorHash,

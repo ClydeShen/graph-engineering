@@ -1,16 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { EventWriter } from '@graph/shared';
+import { StubTrailReader } from '../base/trail-reader.js';
+import { StubMemoryRepository } from '../base/memory-repository.js';
 
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => s),
-  occWrite: vi.fn().mockResolvedValue({ version_hash: 'v-hash', occ_result: 'won', event_type: 'memory_updated' }),
   notify: vi.fn().mockResolvedValue(undefined),
+  contentFingerprint: vi.fn((s: string) => `fp:${s}`),
 }));
 
 import { CrystallizeWorker } from './crystallize.worker.js';
 
-function makePool(rows: { content: string }[]) {
+function makeWriter(): EventWriter & { write: ReturnType<typeof vi.fn> } {
   return {
-    query: vi.fn().mockResolvedValue({ rows, rowCount: rows.length }),
+    write: vi.fn().mockResolvedValue({ version_hash: 'v-hash', occ_result: 'won', event_type: 'memory_updated' }),
   };
 }
 
@@ -27,8 +30,10 @@ describe('CrystallizeWorker', () => {
   });
 
   it('returns { skipped: true } when no episodic records', async () => {
-    const pool = makePool([]);
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, makeSdk());
+    const reader = new StubTrailReader();
+    const memory = new StubMemoryRepository();
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'ZERO');
 
     expect(result).toEqual({ skipped: true });
@@ -36,9 +41,12 @@ describe('CrystallizeWorker', () => {
   });
 
   it('fires sdk.trigger with confidence: 0.6 when episodic records exist', async () => {
-    const pool = makePool([{ content: 'trace A' }, { content: 'trace B' }]);
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace A', 'trace B']);
+    const memory = new StubMemoryRepository();
     const sdk = makeSdk();
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, sdk);
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, sdk);
 
     const result = await worker.onScopeClosed('scope-1', 'entity-1', 'PRED_HASH');
 
@@ -54,11 +62,42 @@ describe('CrystallizeWorker', () => {
 
   it('passes combined episodic content through writeGuard to LLM', async () => {
     const { writeGuard } = await import('@graph/shared');
-    const pool = makePool([{ content: 'trace X' }]);
-    const worker = new CrystallizeWorker(pool as never, { chat: mockChat }, makeSdk());
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['trace X']);
+    const memory = new StubMemoryRepository();
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
 
     await worker.onScopeClosed('scope-2', 'entity-2', 'HASH');
 
     expect(vi.mocked(writeGuard)).toHaveBeenCalledWith('trace X');
+  });
+
+  it('uses delta prompt when existing lesson found via memory.lookupLesson', async () => {
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['new trail event']);
+    const memory = new StubMemoryRepository();
+    memory.setLookupLesson({ fingerprintId: 'fp', confidence: 0.5, content: 'prior lesson text' });
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
+
+    await worker.onScopeClosed('scope-3', 'entity-3', 'HASH');
+
+    const [messages] = mockChat.mock.calls[0];
+    expect(messages[0].content).toContain('ONLY the delta');
+    expect(messages[1].content).toContain('EXISTING LESSON:');
+  });
+
+  it('uses full distillation prompt when no existing lesson in memory', async () => {
+    const reader = new StubTrailReader();
+    vi.spyOn(reader, 'getEpisodicRecords').mockResolvedValue(['fresh trace']);
+    const memory = new StubMemoryRepository();
+    const writer = makeWriter();
+    const worker = new CrystallizeWorker(reader, memory, writer, { chat: mockChat }, makeSdk());
+
+    await worker.onScopeClosed('scope-4', 'entity-4', 'HASH');
+
+    const [messages] = mockChat.mock.calls[0];
+    expect(messages[0].content).toBe('Distill these execution traces into a concise Crystal: key insight, pattern, and recommendation. Be brief.');
   });
 });
