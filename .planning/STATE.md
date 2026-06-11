@@ -3,42 +3,41 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-06-11T17:15:00.000Z"
+last_updated: "2026-06-12T02:30:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 1
+  total_phases: 16
+  completed_phases: 14
   total_plans: 6
   completed_plans: 6
-  percent: 17
+  percent: 88
 ---
 
 ## Current Position
 
-Phase: 09 (memory-layers) — COMPLETE (4/4)
-Plan: 4 of 4
+Phase: 14 (trust-isolation) — COMPLETE; Phases 15–16 in progress this session.
 
-- All 4 plans (09-01..09-04) complete, merged to master, code-review fixed (4122a4db),
-  and verified (09-VERIFICATION.md, status: passed, 7/8 gates VERIFIED + G6 PARTIAL/non-blocking).
-- npm run typecheck clean; 283/283 tests passing (35 skipped, DB-gated).
-- Next: plan Phase 10 (trail-discovery) — prerequisites satisfied (Episodic + Procedural
-  tables live, BM25+HNSW retrieval available).
-
-- Phase: 05-architecture-hardening
-- Current Plan: 6 / 6 (UAT complete — 9/9 passed)
-- Stopped At: Phase 5 Architecture Hardening complete. All 6 ARCH plans executed and UAT-verified. 254 tests passing. tsc clean. Ready for Phase 6 planning.
+- Phases 10–14 (trail-discovery, memex-shell, connector-matrix, agent-federation,
+  trust-isolation) completed in a single autonomous session (commits 9bb5035d →
+  a709c9d8). 418 tests passing, tsc clean, red-line security tests green.
+- Canonical roadmap from Phase 7 onward: `.harness/ROADMAP.md`. Per-phase specs:
+  `.planning/phases/NN-*/NN-PHASE-SPEC.md` (09–14 written; 15–16 this session).
+- Deviation log: `.harness/implementation-notes.md` (per-phase sections, including
+  carried-forward live-environment items).
+- Next: Phase 15 (deploy-everywhere), Phase 16 (memexos-one).
 
 ## Last Session
 
-- Timestamp: 2026-06-11T17:15:00.000Z
-- Stopped At: Phase 9 (memory-layers) closed out — regression gate (283/283 tests,
-  tsc clean), schema/codebase drift gates skipped (no drift), gsd-verifier passed
-  (09-VERIFICATION.md). Phase marked Complete (4/4) in ROADMAP.
-- Resume File: .planning/phases/09-memory-layers/.continue-here.md (historical — phase closed)
+- Timestamp: 2026-06-12T02:30:00.000Z
+- Stopped At: .planning ↔ .harness drift reconciled (this file + ROADMAP Progress
+  table now match .harness/state.json reality). Phase 15/16 PHASE-SPECs next.
+- Resume File: .harness/state.json (single source of truth for position)
 
 ## Roadmap Evolution
 
 - Phase 5 added: Architecture Hardening — LLM Provider registry+FallbackProvider, WebSocket/SSE stream API, @graph/types package, global config.json, SKILL.md progressive loading, CrystallizeWorker surgical distillation
 - Phase 6 added: Gateway Seam Extraction — processAgentTurn, makeKnapsackGraph+makeKnapsackGraphFromView factories, knapsackSlice {kept,dropped}, KnapsackConfig
+- 2026-06-11: Phases 12–16 product arc + tech debt ledger TD-A~M written into .harness/ROADMAP.md (19199ca9, af68fd2d); PHASE-SPECs 09–14 (7af8311d)
+- 2026-06-12: .planning demoted to progress ledger; .harness/ROADMAP.md is canonical for Phase 7+
 
 ## Decisions
 
@@ -48,9 +47,11 @@ Plan: 4 of 4
 - SUB_SCOPE_TOPIC exported from pulse-fetch.ts so Plan 03-06 imports identical string without duplication
 - resolveSubScope falls back to ZERO_HASH if child partition has no events (defensive)
 - wait_all_tasks uses polling loop (2s interval) not LISTEN/NOTIFY; stateless transport incompatible with persistent pg subscription
+  (superseded in Phase 13: LISTEN-driven with 10s polling fallback)
 - SDK import path is webStandardStreamableHttp.js not web.js (RESEARCH.md had wrong path)
 - complete_task auto-resolves scope_id + predecessor_hash from ledger when not supplied (ergonomic for GATE4-4b)
 - Stable UUIDs a1000000-0000-4000-8000-00000000000{1-7} assigned per internal Worker for agent_registry (D-2); coarse skill vocabulary; try/catch ensures boot failure does not crash Workers
+- Phase 10–14 decisions: see ADR-50..56 (docs/adr/0050–0056) and .harness/implementation-notes.md
 
 ## Performance Metrics
 

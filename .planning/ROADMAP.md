@@ -105,6 +105,10 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 
 ## Progress
 
+> **Canonical roadmap from Phase 7 onward lives in `.harness/ROADMAP.md`.** This file keeps
+> the progress ledger and Phase 1–6 details only — phase goals/specs for 7+ are in
+> `.harness/ROADMAP.md` and `.planning/phases/NN-*/NN-PHASE-SPEC.md`. Do not duplicate them here.
+
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Graph Engine | 11/11 | Complete | 2026-06-03 |
@@ -112,7 +116,17 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | 3. Pattern Discovery + MCP Bridging | 7/7 | Complete | 2026-06-05 |
 | 4. External Integrations | 3/3 | Complete | 2026-06-08 |
 | 5. Architecture Hardening | 6/6 | Complete | 2026-06-10 |
-| 9. Memory Layers | 4/4 | Complete   | 2026-06-11 |
+| 6. Gateway Seam Extraction | — | Complete (folded into Phase 7 arch sprint) | 2026-06-10 |
+| 7. Architecture (arch sprint) | — | Complete | 2026-06-10 |
+| 8. Context Assembly | — | Complete (review-fixed WR-01..05) | 2026-06-11 |
+| 9. Memory Layers | 4/4 | Complete | 2026-06-11 |
+| 10. Trail Discovery | — | Complete (9bb5035d, 313 tests) | 2026-06-11 |
+| 11. Memex Shell | — | Complete (b4167e32, 356 tests) | 2026-06-11 |
+| 12. Connector Matrix | — | Complete (442d47e1, 392 tests) | 2026-06-12 |
+| 13. Agent Federation | — | Complete (ba442b72, 401 tests) | 2026-06-12 |
+| 14. Trust Isolation | — | Complete (a709c9d8, 418 tests) | 2026-06-12 |
+| 15. Deploy Everywhere | — | Not started | — |
+| 16. MemexOS 1.0 | — | Not started | — |
 
 ### Phase 5: Architecture Hardening
 
