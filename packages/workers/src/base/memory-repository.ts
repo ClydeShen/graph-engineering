@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 
-export interface ProceduralTemplateParams {
+interface ProceduralTemplateParams {
   scopeId: string;
   content: string;
   intentDescription: string;
@@ -11,24 +11,24 @@ export interface ProceduralTemplateParams {
   intentEmbeddingLiteral: string | null;
 }
 
-export interface LessonRecord {
+interface LessonRecord {
   fingerprintId: string;
   confidence: number;
   content: string;
 }
 
 /** Episodic memory tier — records what happened within a Scope. */
-export interface EpisodicRepository {
+interface EpisodicRepository {
   appendEpisodicTrace(scopeId: string, entityId: string, content: string): Promise<void>;
 }
 
 /** Semantic memory tier — cross-Scope generalised facts. */
-export interface SemanticRepository {
+interface SemanticRepository {
   insertSemanticFact(scopeId: string, content: string): Promise<void>;
 }
 
 /** Procedural memory tier — positive/negative workflow templates and lessons. */
-export interface ProceduralRepository {
+interface ProceduralRepository {
   insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void>;
   reinforceTemplate(templateId: string): Promise<void>;
   lookupLesson(fingerprintId: string): Promise<LessonRecord | null>;
@@ -38,7 +38,7 @@ export interface ProceduralRepository {
 }
 
 /** Working memory tier — short-lived TTL entries. */
-export interface WorkingRepository {
+interface WorkingRepository {
   purgeTTLWorkingMemory(): Promise<void>;
 }
 

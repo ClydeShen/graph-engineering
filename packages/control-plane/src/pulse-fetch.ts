@@ -21,26 +21,12 @@
 import createSubscriber from 'pg-listen';
 import type { Pool } from 'pg';
 import { advanceHwm, readHwm } from './hwm.js';
-import { logger, LOG_EVENTS } from '@graph/shared';
+import { logger, LOG_EVENTS, SUB_SCOPE_TOPIC } from '@graph/shared';
 
 const log = logger.child({ component: 'control-plane', module: 'pulse-fetch' });
 
 const CHANNEL = 'graph_event_ready';
 const CONTROL_PLANE_WORKER_ID = 'control-plane';
-
-/**
- * Dedicated topic for sub_scope_resolved events.
- * SubScopeResultWorker (Plan 03-06) registers a durable:subscriber on this topic.
- * Exported so Plan 06 imports the identical string — no magic string duplication.
- *
- * sub_scope_resolved is a Control Plane direct-write that bypasses the bus enum
- * (ADR 12 / ADR 23). It must NOT route to graph::scheduler::frontier — doing so
- * would cause FrontierScheduler to treat it as a dispatchable frontier node.
- *
- * @see ADR 23 §4 — 总线感知到此事件后，激活 SubScopeResultWorker 订阅
- * @see RESEARCH.md Pitfall 3 — iii-sdk rejects non-canonical event types; use topic routing
- */
-export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';
 
 export interface PulseFetchDeps {
   iiiWorker: {

@@ -1,28 +1,32 @@
 {
   "version": "1.0",
   "phase": "07-architecture",
-  "task": "candidates-abc-implementation",
-  "status": "in_progress",
-  "last_updated": "2026-06-10T14:30:00.000Z",
-  "current_state": "Architecture review run 2 complete. HTML report at C:\\Users\\Kuraido\\AppData\\Local\\Temp\\architecture-review-20260610b.html. Three candidates identified, none yet implemented. User intent: fix all candidates before entering Phase 6 (gateway-seam-extraction).",
+  "task": "dead-code-cleanup-sprint",
+  "status": "completed",
+  "last_updated": "2026-06-11T09:15:00.000Z",
+  "current_state": "Post-Phase-08 architecture dead-code sprint complete. 273/273 tests passing. Project ready for Phase 09.",
   "completed_work": [
-    "Candidates 1+3 shipped in previous session (commit b6eacd8c): processAgentTurn, KnapsackGraph factories, knapsackSlice {kept,dropped}. 256 tests passing, tsc clean.",
-    "Architecture review run 2: roam health 5/100 diagnosed. 5 of 8 critical bottlenecks identified as intentional or already fixed.",
-    "HTML report written: architecture-review-20260610b.html. Three candidates surfaced."
+    "Deleted packages/shared/src/config/loader.ts + loader.test.ts (4 dead exports: loadMemexConfig, MemexConfigSchema, MemexConfig, DEFAULT_CONFIG_PATH)",
+    "Deleted packages/types/src/core.ts (5 dead exports: Entity, Snapshot, HyperEdge, Scope, Trail — Memex vocabulary, zero callers)",
+    "Deleted packages/types/src/shell.ts (TrailSseEvent — zero callers)",
+    "Removed dead re-exports from shared/index.ts and types/index.ts",
+    "Moved SUB_SCOPE_TOPIC to packages/shared/src/constants.ts; wired pulse-fetch.ts and sub-scope-result.worker.ts to import from shared",
+    "Unexported TriggerConfig in frontier.worker.ts (local type annotation only)",
+    "Unexported 6 sub-interfaces in memory-repository.ts: EpisodicRepository, SemanticRepository, ProceduralRepository, WorkingRepository, ProceduralTemplateParams, LessonRecord",
+    "Unexported occWriteIdempotent in occ-write.ts (never called anywhere)",
+    "Unexported isRehearsalActive and getShadow in pi-extension/src/index.ts (no production callers)"
   ],
   "remaining_work": [
-    "Candidate A (Strong): EventWriter seam — define EventWriter interface in @graph/shared, OccEventWriter adapter, replace pool in 9 worker constructors (episodic, semantic, procedural, crystallize, user-profile, sub-scope-result, conflict-resolver, mcp-client, frontier-scheduler), update index.ts wiring",
-    "Candidate B (Worth exploring): Bootstrap SQL extraction — move synthesizer cron handler SQL, user-profile agent query, and agent_registry seed out of index.ts into worker modules or dedicated bootstrap module",
-    "Candidate C (Quick win): PoolTrailReader.pool visibility — change 'protected' to 'private' in packages/workers/src/base/trail-reader.ts"
+    "Phase 09 (memory-layers): no PLAN.md yet — start with /gsd:discuss-phase 9 or /gsd:plan-phase 9",
+    "Roam report flagged god components and cycle files not addressed here (server.ts, gateway/src/index.ts)"
   ],
   "decisions_made": [
-    "EventWriter interface: write(event: GraphWriteEvent): Promise<WriteResult> — wraps occWrite(pool, event); placed in @graph/shared",
-    "OccEventWriter adapter: thin wrapper, no behaviour change; created once in index.ts and injected",
-    "Candidate order: A first (highest leverage, removes pool from 9 constructors), C in same commit (one-liner), B after (readability, not blocking)",
-    "graph prop betweenness 414 is NOT friction — intentional permission seam (ADR 35); no action",
-    "Candidates 4+5 from arch sprint remain deferred (PhaseGuardedHandle hierarchy, workers/index.ts hub plugin pattern)"
+    "SUB_SCOPE_TOPIC moved to @graph/shared/constants.ts — avoids workers→control-plane cross-peer dependency",
+    "FRONTIER_PRIORITY_SQL kept exported — src/__tests__/frontier.test.ts imports it for SQL structure assertions",
+    "types/core.ts Memex vocabulary types deleted now, re-introduce when Phase 11 (MemexShell) adds real consumers",
+    "StubMemoryRepository and PoolMemoryRepository kept exported — used across workers/memory/ tests"
   ],
   "blockers": [],
-  "context": "Two tracking systems: harness (.harness/) phase 07-architecture and GSD (.planning/) phase 6 (gateway-seam-extraction, added but not planned). Architecture review run 2 is the prerequisite gate before GSD Phase 6 execution begins.",
-  "next_action": "Implement Candidate A: define EventWriter interface in packages/shared/src/event-writer.ts, create OccEventWriter adapter, replace pool: Pool with writes: EventWriter in all 9 worker constructors, update index.ts, run tests."
+  "context": "Standalone dead-code sprint run between Phase 08 completion and Phase 09 start, triggered by roam debt report (13 dead exports in 6 hotspot files) plus the /improve-codebase-architecture review.",
+  "next_action": "Run /gsd:plan-phase 9 to create Phase 09 PLAN.md for memory layers implementation."
 }

@@ -21,11 +21,11 @@ import { InMemoryShadowAdapter } from '@graph/shared';
 
 let activeShadow: InMemoryShadowAdapter | null = null;
 
-export function isRehearsalActive(): boolean {
+function isRehearsalActive(): boolean {
   return activeShadow !== null;
 }
 
-export function getShadow(): InMemoryShadowAdapter | null {
+function getShadow(): InMemoryShadowAdapter | null {
   return activeShadow;
 }
 

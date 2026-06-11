@@ -9,6 +9,4 @@
  *   @graph/types/api   — HTTP/MCP wire types (EventLogNode, GraphWriteEvent, WriteResult)
  *   @graph/types/shell — MemexTerminal SSE types (TrailSseEvent)
  */
-export * from './core.js';
 export * from './api.js';
-export * from './shell.js';

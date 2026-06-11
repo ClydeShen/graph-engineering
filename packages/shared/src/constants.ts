@@ -53,3 +53,11 @@ export const MIN_CORPUS_THRESHOLD = 10;
  * @see .harness/phases/side-branch/DESIGN.md §3.2 — agent_registry schema
  */
 export const AGENT_HEARTBEAT_TTL_S = 60;
+
+/**
+ * iii topic for sub_scope_resolved events.
+ * Pulse-Fetch routes this event type to its own topic (not the frontier topic).
+ * SubScopeResultWorker registers a durable:subscriber on this topic.
+ * @see ADR 23 §4
+ */
+export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';
