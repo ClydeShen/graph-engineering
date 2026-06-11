@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-11T03:35:42.000Z",
+  "timestamp": "2026-06-11T04:09:25.151Z",
   "context": "phase",
   "phase": "09",
   "phase_name": "memory-layers",
@@ -8,7 +8,7 @@
   "plan": 4,
   "total_plans": 4,
   "task": 0,
-  "total_tasks": 3,
+  "total_tasks": 0,
   "status": "paused",
   "completed_tasks": [
     {
@@ -28,22 +28,31 @@
       "title": "SemanticMemoryWorker embedding + supersession logic",
       "commit": "3fca5981",
       "wave": 2
+    },
+    {
+      "plan": "09-04",
+      "title": "Reflection Track wiring: memReflect (RRF hybrid search), assemble.ts cold_start opts, index.ts rewiring (TPW registration, EpisodicMemoryWorker removal), process-agent-turn.ts production cold_start wiring, pulse-fetch.ts cleanup",
+      "commit": "2787c48e",
+      "wave": 3
     }
   ],
   "remaining_tasks": [
     {
-      "plan": "09-04",
-      "wave": 3,
-      "depends_on": ["09-01", "09-02", "09-03"],
-      "depends_on_satisfied": true,
-      "tasks": [
-        "Task 1: reflect.function.ts — memReflect pure function with RRF hybrid search (computeReflectBudget, hybridSearchEpisodic/Semantic/Procedural, sequential greedy truncation)",
-        "Task 2: assemble.ts cold_start opts (AssembledContext.reflectionContent/reflectionTokens, opts.memReflect) + index.ts wiring (remove EpisodicMemoryWorker, register TemplateProposalWorker, SemanticMemoryWorker 5th arg, register mem::reflect iii Function) + process-agent-turn.ts production cold_start wiring + pulse-fetch.ts episodic trigger removal + delete episodic.worker.ts/.test.ts",
-        "Task 3: reflect.function.test.ts — 5 unit tests (computeReflectBudget arithmetic x2, empty-result path, budget exhaustion, embed call count)"
-      ]
+      "id": "code-review-fix",
+      "description": "Fix CR-01 (Critical) + WR-01/WR-02/WR-03 (Warnings) from .planning/phases/09-memory-layers/09-REVIEW.md (committed as 070c7dfd) via gsd-code-fixer, then re-run npm run typecheck && npm test (baseline: 283/283 passing, 0 typecheck errors as of merge 2787c48e)."
+    },
+    {
+      "id": "execute-phase-resume",
+      "description": "Resume /gsd:execute-phase 9 from the regression_gate step (after code_review_gate). Remaining steps: regression_gate, schema_drift_gate, codebase_drift_gate, verify_phase_goal (spawn gsd-verifier), update_roadmap (mark Phase 9 complete 4/4), close_phase_todos, update_project_md, offer_next."
     }
   ],
-  "blockers": [],
+  "blockers": [
+    {
+      "description": "CR-01 (Critical, 09-REVIEW.md): packages/gateway/src/process-agent-turn.ts:78-93 cold_start gate is `SELECT COUNT(*) FROM episodic_memory WHERE scope_id=$1; if cnt==='0'`. This can never be true mid-scope because episodic_memory is ONLY written by TemplateProposalWorker.onScopeClosed (graph::scope::closed subscriber) — appendEpisodicTrace has zero production callers. Combined with the `!scopeClosed` guard, memReflect (1 embedding call + 3 hybrid SQL searches with vector+BM25 CTEs) fires on EVERY agent turn for EVERY scope, not just cold_start. Directly contradicts D-10 'cold_start Reflection Track injection' intent.",
+      "type": "technical",
+      "workaround": "none — requires a different cold_start signal. Before implementing, check 09-CONTEXT.md and docs/adr/0022-adr21-reflection-track-trigger-spec.md for the intended cold_start detection mechanism (likely: trail/scope event count from TrailReader.getScopeEvents(), or a scope-level 'first turn' flag, rather than episodic_memory row presence)."
+    }
+  ],
   "human_actions_pending": [],
   "decisions": [
     "GATE4-1 tests same-label isomorphic graphs (not different-label) because WL kernel hashes event_type labels; different labels produce cosine < 0.90 for small 3-node graphs; same labels yield cosine = 1.0",
@@ -51,9 +60,11 @@
     "D-08: No auto-supersede — caller (SemanticMemoryWorker) explicitly calls supersede() only when insertSemanticFact returns a non-null suggestedMerge",
     "occWriteIdempotent must remain exported from packages/shared/src/occ-write.ts — tests/integration/idempotency.test.ts imports it directly (dead-code sprint had wrongly unexported it; fixed in 092be4f4)",
     "CanonicalEventType has exactly 5 values: plan_created, task_spawned, memory_updated, conflict_detected, scope_closed (packages/types/src/api.ts) — test fixtures must use these, not graph::scope::* strings",
-    "After any worktree-merge (--no-ff), diff pre-merge-base..HEAD --stat against files OUTSIDE the plan's declared files_modified — especially .harness/ROADMAP.md, .harness/state.json, .planning/STATE.md, .planning/ROADMAP.md — to catch stale-base reverts before they land on master"
+    "After any worktree-merge (--no-ff), diff pre-merge-base..HEAD --stat against files OUTSIDE the plan's declared files_modified — especially .harness/ROADMAP.md, .harness/state.json, .planning/STATE.md, .planning/ROADMAP.md — to catch stale-base reverts before they land on master",
+    "Plan 09-04 complete and merged (2787c48e); typecheck clean, 283/283 tests pass at merge time. Tracking updated (ef24e3eb).",
+    "09-REVIEW.md (standard depth, 9 files) committed as 070c7dfd — 1 Critical (CR-01), 3 Warnings, 3 Info. User chose 'Fix now' over deferring or running verification with the bug present, since CR-01 contradicts the core D-10 deliverable and would surface as a verification gap anyway."
   ],
   "uncommitted_files": [],
-  "next_action": "Spawn gsd-executor (worktree-isolated) for Plan 09-04 (Wave 3, final plan of Phase 9). depends_on 09-01/09-02/09-03 all satisfied. After merge, run the post-merge anti-pattern check: git diff e12e50f1..HEAD --stat and verify .harness/* and .planning/STATE.md|ROADMAP.md are untouched unless intentionally part of 09-04. Then run npm run typecheck && npm test (expect 273+ tests, target ~293+ after 09-04's 5 new reflect tests minus 5 deleted episodic.worker.test.ts tests). On success, Phase 9 is complete — update .planning/STATE.md and .planning/ROADMAP.md to mark Phase 9 done and proceed to Phase 6 (Gateway Seam Extraction) planning per roadmap order, or follow current PHASE-SPEC sequencing.",
-  "context_notes": "Repo state is clean and fully committed through e12e50f1 (npm run typecheck clean, 288 tests passing). Untracked files present (.planning/phases/06-gateway-seam-extraction/, .planning/phases/08-context-assembly/08-REVIEW-FIX.md, .planning/phases/11-memex-shell/11-DESIGN-NOTES.md, .planning/tmp/, data/) are pre-existing and unrelated to Phase 9 — do not commit them as part of 09-04 unless instructed. Plan 09-04 is large (3 tasks, 8 files modified including 2 deletions) — consider running it as a single executor without further splitting since its tasks are sequential (Task 2 depends on Task 1's exports, Task 3 tests Task 1's implementation)."
+  "next_action": "1) Spawn gsd-code-fixer scoped to .planning/phases/09-memory-layers/09-REVIEW.md (default scope = Critical+Warning: CR-01, WR-01, WR-02, WR-03). For CR-01, read 09-CONTEXT.md and docs/adr/0022-adr21-reflection-track-trigger-spec.md first to determine the correct cold_start signal — this may need a small design clarification, not just a mechanical fix. 2) Re-run npm run typecheck && npm test, confirm clean. 3) Commit the fix(es) (e.g. fix(09): correct cold_start detection signal per CR-01). 4) Resume /gsd:execute-phase 9 — orchestrator should detect 09-04 has_summary:true and skip straight to regression_gate/schema_drift_gate/codebase_drift_gate/verify_phase_goal/update_roadmap to complete Phase 9 (4/4).",
+  "context_notes": "Phase 9 (memory-layers) plan execution is fully done and merged (4/4 plans: 092be4f4, 51d08868, 3fca5981, 2787c48e). Tracking files updated (ef24e3eb). Code review (070c7dfd) found CR-01: the production cold_start detection in process-agent-turn.ts is structurally broken — episodic_memory table is never populated mid-scope (only on scope close via TPW), so the count===0 check is always true, making memReflect fire on every turn (extra embedding call + 3 hybrid SQL searches per turn) instead of once per scope. WR-01 notes assemble.ts has a separate hasEpisodic-based cold_start check (in opts.memReflect, currently uncalled per IN-02) that has the same conceptual issue and risks drifting from the gateway fix — consider unifying both checks on whatever the corrected cold_start signal turns out to be. WR-03 (full event payload as query_text) compounds CR-01's frequency. WR-02 (formatProcedural can overrun its token budget share) is independent and lower-risk. Untracked files present (.planning/phases/06-gateway-seam-extraction/, .planning/phases/08-context-assembly/08-REVIEW-FIX.md, .planning/phases/11-memex-shell/11-DESIGN-NOTES.md, .planning/tmp/, data/) are pre-existing and unrelated to Phase 9 — do not commit as part of this fix unless instructed."
 }
