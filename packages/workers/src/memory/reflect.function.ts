@@ -214,7 +214,6 @@ function formatProcedural(rows: ProceduralRow[], budgetTokens: number): string {
       entry = fullEntry;
       entryTokens = fullTokens;
     }
-    if (entryTokens > remaining) break;
     parts.push(entry);
     remaining -= entryTokens;
   }
