@@ -220,10 +220,10 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 **Plans:** 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Foundation seams: migration 012, MemoryRepository extensions, TrailReader.getScopeEvents, Worker.shouldReflect
-- [ ] 09-02-PLAN.md — TemplateProposalWorker: replaces EpisodicMemoryWorker, full DAG read, episodic write with embedding + orphan anti-pattern writes
-- [ ] 09-03-PLAN.md — SemanticMemoryWorker supersession: embedding write path, suggestedMerge hint, supersede
-- [ ] 09-04-PLAN.md — reflect.function.ts hybrid search + cold_start wiring in assemble.ts + processAgentTurn.ts (production path) + index.ts boot wiring + EpisodicMemoryWorker deletion + pulse-fetch.ts episodic trigger cleanup
+- [x] 09-01-PLAN.md — Foundation seams: migration 012, MemoryRepository extensions, TrailReader.getScopeEvents, Worker.shouldReflect
+- [x] 09-02-PLAN.md — TemplateProposalWorker: replaces EpisodicMemoryWorker, full DAG read, episodic write with embedding + orphan anti-pattern writes
+- [x] 09-03-PLAN.md — SemanticMemoryWorker supersession: embedding write path, suggestedMerge hint, supersede
+- [x] 09-04-PLAN.md — reflect.function.ts hybrid search + cold_start wiring in assemble.ts + processAgentTurn.ts (production path) + index.ts boot wiring + EpisodicMemoryWorker deletion + pulse-fetch.ts episodic trigger cleanup
 
 ---
 

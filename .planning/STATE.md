@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-06-11T04:09:12.954Z"
+last_updated: "2026-06-11T17:15:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -14,13 +14,14 @@ progress:
 
 ## Current Position
 
-Phase: 09 (memory-layers) — EXECUTING
-Plan: 1 of 4
+Phase: 09 (memory-layers) — COMPLETE (4/4)
+Plan: 4 of 4
 
-- Plans 09-01, 09-02, 09-03 complete and merged to master (commits through 51d08868).
-- Wave 3 (09-04: mem::reflect + context assembly wiring + EpisodicWorker→TPW replacement) not yet started.
-- npm run typecheck clean; 288 tests passing.
-- Next: spawn 09-04 executor (depends_on 09-01, 09-02, 09-03 — all satisfied).
+- All 4 plans (09-01..09-04) complete, merged to master, code-review fixed (4122a4db),
+  and verified (09-VERIFICATION.md, status: passed, 7/8 gates VERIFIED + G6 PARTIAL/non-blocking).
+- npm run typecheck clean; 283/283 tests passing (35 skipped, DB-gated).
+- Next: plan Phase 10 (trail-discovery) — prerequisites satisfied (Episodic + Procedural
+  tables live, BM25+HNSW retrieval available).
 
 - Phase: 05-architecture-hardening
 - Current Plan: 6 / 6 (UAT complete — 9/9 passed)
@@ -28,11 +29,11 @@ Plan: 1 of 4
 
 ## Last Session
 
-- Timestamp: 2026-06-11T00:00:00.000Z
-- Stopped At: Phase 9 code-review fix (CR-01/WR-01/02/03) committed (4122a4db).
-  typecheck clean, 283/283 tests passing. Next: resume /gsd:execute-phase 9 from
-  regression_gate to close out Phase 9 (4/4).
-- Resume File: .planning/phases/09-memory-layers/.continue-here.md
+- Timestamp: 2026-06-11T17:15:00.000Z
+- Stopped At: Phase 9 (memory-layers) closed out — regression gate (283/283 tests,
+  tsc clean), schema/codebase drift gates skipped (no drift), gsd-verifier passed
+  (09-VERIFICATION.md). Phase marked Complete (4/4) in ROADMAP.
+- Resume File: .planning/phases/09-memory-layers/.continue-here.md (historical — phase closed)
 
 ## Roadmap Evolution
 
