@@ -112,7 +112,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | 3. Pattern Discovery + MCP Bridging | 7/7 | Complete | 2026-06-05 |
 | 4. External Integrations | 3/3 | Complete | 2026-06-08 |
 | 5. Architecture Hardening | 6/6 | Complete | 2026-06-10 |
-| 9. Memory Layers | 3/4 | In Progress | — |
+| 9. Memory Layers | 4/4 | Complete   | 2026-06-11 |
 
 ### Phase 5: Architecture Hardening
 

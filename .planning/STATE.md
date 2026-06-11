@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-06-11T03:25:25.194Z"
+last_updated: "2026-06-11T03:38:56.973Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -14,8 +14,8 @@ progress:
 
 ## Current Position
 
-Phase: 09 (memory-layers) — IN PROGRESS (4 plans, Wave 1+2 done, Wave 3 pending)
-Plan: 3 of 4
+Phase: 09 (memory-layers) — EXECUTING
+Plan: 1 of 4
 
 - Plans 09-01, 09-02, 09-03 complete and merged to master (commits through 51d08868).
 - Wave 3 (09-04: mem::reflect + context assembly wiring + EpisodicWorker→TPW replacement) not yet started.
