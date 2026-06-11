@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "active",
+    "status": "idle",
     "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-12T01:30:00.000Z",
-    "last_active": "2026-06-12T01:30:00.000Z"
+    "last_session": "2026-06-12T01:45:00.000Z",
+    "last_active": "2026-06-12T01:45:00.000Z"
   },
   "position": {
     "phase": "14-trust-isolation",
     "active": "Phase 14 implementation complete. ADR-47 + migration 016; erase(scope) workflow with cascade; approval state machine (silence=deny) + tighten-only aux-LLM; env two-stage filter + write denylist; redactPii; trust->toolset enforced at the MCP route; docker arg-builder + bypass rule; threat model draft.",
-    "resume_file": ".planning/phases/14-trust-isolation/14-PHASE-SPEC.md",
-    "stopped_at": "Phases 10-14 development complete per goal: 418 tests, tsc clean, red-line tests green. Carried-forward items per phase in implementation-notes (live E2E, docker wiring, Email binding, Pi-SDK mode, UI-SPEC console). Next milestones: Phase 15 (deploy-everywhere), Phase 16 (memexos-one)."
+    "resume_file": ".harness/phases/14-trust-isolation/.continue-here.json",
+    "stopped_at": "Diagnosed .planning/<->.harness drift (.planning/ROADMAP+STATE stuck at Phase 9/17%, .harness shows Phase 14/16 complete). Sync task queued, not yet started: rewrite .planning/ROADMAP.md (Phase Details 7-16 + Progress table) and .planning/STATE.md (frontmatter + Current Position) to match Phase 14 reality, then archive/reconcile .planning/phases/10-14 (PHASE-SPEC only, no PLAN/SUMMARY)."
   }
 }
