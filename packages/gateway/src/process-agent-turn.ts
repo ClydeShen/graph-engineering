@@ -26,6 +26,8 @@ import {
 } from './watchdog-sql.js';
 import { assembleContext, type AssembledContext } from '@graph/workers/context/assemble';
 import { makeKnapsackGraph } from './knapsack-graph.js';
+import type { EmbeddingProvider } from '@graph/shared';
+import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
 
 export type AgentEventInput = z.infer<typeof EventBodySchema>;
 
@@ -38,6 +40,7 @@ export async function processAgentTurn(
   scopeId: string,
   event: AgentEventInput,
   wMax: number,
+  embeddingProvider: EmbeddingProvider,
 ): Promise<AgentTurnOutcome> {
   // 1. Suspended lockout (ADR 39)
   if (await checkSuspended(pool, scopeId)) {
@@ -70,6 +73,25 @@ export async function processAgentTurn(
   try {
     const graph = await makeKnapsackGraph(pool, scopeId, { bypassView: true });
     const context = await assembleContext(graph, scopeId, version_hash, event.payload, wMax, scopeClosed);
+
+    // cold_start Reflection Track injection (D-10): production wiring.
+    if (context !== null && !scopeClosed) {
+      const { rows: epiRows } = await pool.query<{ cnt: string }>(
+        'SELECT COUNT(*)::text AS cnt FROM episodic_memory WHERE scope_id = $1',
+        [scopeId],
+      );
+      if (epiRows[0].cnt === '0') {
+        const reflection = await memReflect(pool, embeddingProvider, {
+          query_text: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload),
+          trigger_type: 'cold_start',
+          w_max: wMax,
+          scope_id: scopeId,
+        } satisfies MemReflectInput);
+        context.reflectionContent = reflection.content;
+        context.reflectionTokens = reflection.tokens;
+      }
+    }
+
     return { suspended: false, version_hash, occ_result, context };
   } catch (oomErr) {
     logger.child({ component: 'gateway', scope_id: scopeId }).error(

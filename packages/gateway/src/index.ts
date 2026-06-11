@@ -53,7 +53,7 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
 
   // Mount route modules
   app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));
-  app.route('/v1/scopes', buildEventsRoute(pool, wMax));
+  app.route('/v1/scopes', buildEventsRoute(pool, wMax, gatewayLlmProvider));
   app.route('/v1/scopes', buildScopeReadRoute(pool, wMax));
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildTopologyRoute(pool));

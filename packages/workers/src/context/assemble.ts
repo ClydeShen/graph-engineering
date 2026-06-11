@@ -46,6 +46,7 @@ import {
   type CcrStore,
 } from './ccr.js';
 import type { Worker, PipelineContext } from '../base/worker.abstract.js';
+import type { MemReflectInput, MemReflectOutput } from '../memory/reflect.function.js';
 
 /**
  * The 3-layer assembled context with Phase 08 CCR fields.
@@ -82,6 +83,10 @@ export interface AssembledContext {
    * Always present; 0 when nothing was dropped.
    */
   droppedCount: number;
+  /** Populated when cold_start mem::reflect fires (D-10). */
+  reflectionContent?: string;
+  /** Token count of reflectionContent. */
+  reflectionTokens?: number;
 }
 
 /**
@@ -262,7 +267,15 @@ export async function runContextAssemblyPipeline(
   rootHash: string,
   currentInput: unknown,
   wMax: number,
-  opts?: { scopeClosed?: boolean; knapsackConfig?: KnapsackConfig; ccrStore?: CcrStore }
+  opts?: {
+    scopeClosed?: boolean;
+    knapsackConfig?: KnapsackConfig;
+    ccrStore?: CcrStore;
+    memReflect?: {
+      fn: (input: MemReflectInput) => Promise<MemReflectOutput>;
+      hasEpisodic: (scopeId: string) => Promise<boolean>;
+    };
+  }
 ): Promise<AssembledContext> {
   const volatileTokens = countTokens(safeStringify(currentInput));
 
@@ -296,6 +309,21 @@ export async function runContextAssemblyPipeline(
   // Only call onContextCompressed when drops occurred (D-06).
   if (pipelineCtx.droppedCount > 0) {
     await (worker as unknown as HookCaller).onContextCompressed(pipelineCtx);
+  }
+
+  // cold_start Reflection Track injection (D-10): fires when the Worker opts in
+  // (shouldReflect()) and no episodic records exist yet for this scope.
+  if (opts?.memReflect && worker.shouldReflect() && result.context !== null) {
+    const hasEpisodic = await opts.memReflect.hasEpisodic(scopeId);
+    if (!hasEpisodic) {
+      const reflection = await opts.memReflect.fn({
+        query_text: safeStringify(currentInput),
+        trigger_type: 'cold_start',
+        w_max: wMax,
+        scope_id: scopeId,
+      });
+      return { ...result, reflectionContent: reflection.content, reflectionTokens: reflection.tokens };
+    }
   }
 
   return result;

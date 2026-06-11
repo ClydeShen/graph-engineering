@@ -4,7 +4,6 @@
  * Requires a real PostgreSQL database with migrations 001-006 applied.
  * Set DATABASE_URL env var to run. Tests skip automatically when DATABASE_URL is absent.
  *
- * G3-1: episodic_memory receives rows after EpisodicMemoryWorker.onEvent
  * G3-2: semantic_memory receives rows after SemanticMemoryWorker.onScopeClosed
  * G3-3: procedural_memory receives rows with non-NULL topology_embedding
  * G3-4: GET /v1/memory/search returns 200 with results array
@@ -35,31 +34,9 @@ afterAll(async () => {
   await pool.end();
 });
 
-// ── G3-1: EpisodicMemoryWorker inserts row ────────────────────────────────────
-
-it.skipIf(skip)('G3-1: episodic_memory receives a row after EpisodicMemoryWorker.onEvent', async () => {
-  const { EpisodicMemoryWorker } = await import('./episodic.worker.js');
-
-  const scopeId = randomUUID();
-  const entityId = randomUUID();
-  const predecessorHash = '0'.repeat(64);
-  const content = 'Test execution trace G3-1';
-
-  const worker = new EpisodicMemoryWorker(new PoolMemoryRepository(pool), new OccEventWriter(pool));
-  try {
-    await worker.onEvent(scopeId, entityId, content, predecessorHash);
-  } catch {
-    // C1 occWrite may fail if scope not bootstrapped in execution_event_log.
-    // INSERT committed before occWrite — row exists regardless.
-  }
-
-  const { rows } = await pool.query(
-    `SELECT id, scope_id, content FROM episodic_memory WHERE scope_id = $1`,
-    [scopeId],
-  );
-  expect(rows.length).toBeGreaterThanOrEqual(1);
-  expect(rows[0]).toMatchObject({ scope_id: scopeId });
-});
+// G3-1 (EpisodicMemoryWorker.onEvent) removed — EpisodicMemoryWorker was replaced by
+// TemplateProposalWorker (D-01, Phase 09). TPW's episodic write path is covered by
+// packages/workers/src/memory/template-proposal.worker.test.ts.
 
 // ── G3-2: SemanticMemoryWorker inserts row ────────────────────────────────────
 
