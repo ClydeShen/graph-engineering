@@ -28,7 +28,8 @@ export class SemanticMemoryWorker {
       { role: 'user', content: writeGuard(combined) },
     ]);
 
-    await this.memory.insertSemanticFact(scopeId, writeGuard(fact));
+    // TODO(Plan 03): pass real embedding — Plan 03 replaces this with EmbeddingProvider.embed()
+    await this.memory.insertSemanticFact(scopeId, writeGuard(fact), []);
 
     const contentHash = contentFingerprint(fact);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log

@@ -33,6 +33,7 @@ function makeMockGraphHandle(): GraphHandle {
     getVersionByHash: vi.fn().mockResolvedValue(null),
     getTailVersionHash: vi.fn().mockResolvedValue('0'.repeat(64)),
     getEpisodicRecords: vi.fn().mockResolvedValue([]),
+    getScopeEvents: vi.fn().mockResolvedValue([]),
   };
 }
 
