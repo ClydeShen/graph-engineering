@@ -74,7 +74,8 @@ it.skipIf(skip)('G3-2: semantic_memory receives a row after SemanticMemoryWorker
   );
 
   const mockLlm = { chat: async () => 'Distilled fact from G3-2 test' };
-  const worker = new SemanticMemoryWorker(new PoolTrailReader(pool), new PoolMemoryRepository(pool), new OccEventWriter(pool), mockLlm as never);
+  const mockEmbed = { embed: async () => ({ vector: Array(1536).fill(0.1), countedAgainstBudget: false as const }) };
+  const worker = new SemanticMemoryWorker(new PoolTrailReader(pool), new PoolMemoryRepository(pool), new OccEventWriter(pool), mockLlm as never, mockEmbed);
   try {
     await worker.onScopeClosed(scopeId, randomUUID(), '0'.repeat(64));
   } catch {

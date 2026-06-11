@@ -114,7 +114,7 @@ reg<{ scope_id: string; entity_id: string; content: string; predecessor_hash: st
 );
 
 // graph::memory::semantic — durable:subscriber on graph::scope::closed
-const semanticWorker = new SemanticMemoryWorker(trailReader, memory, eventWriter, llmProvider);
+const semanticWorker = new SemanticMemoryWorker(trailReader, memory, eventWriter, llmProvider, embeddingProvider);
 reg<{ scope_id: string; entity_id: string; predecessor_hash: string }>(
   SEMANTIC_TRIGGER_CONFIG,
   async (p) => {

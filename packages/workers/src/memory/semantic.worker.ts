@@ -1,5 +1,5 @@
 import { writeGuard, contentFingerprint } from '@graph/shared';
-import type { EventWriter, LLMProvider } from '@graph/shared';
+import type { EventWriter, LLMProvider, EmbeddingProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
 
@@ -15,6 +15,7 @@ export class SemanticMemoryWorker {
     private readonly memory: MemoryRepository,
     private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
+    private readonly embed: EmbeddingProvider,
   ) {}
 
   async onScopeClosed(scopeId: string, entityId: string, predecessorHash: string): Promise<void> {
@@ -28,8 +29,14 @@ export class SemanticMemoryWorker {
       { role: 'user', content: writeGuard(combined) },
     ]);
 
-    // TODO(Plan 03): pass real embedding — Plan 03 replaces this with EmbeddingProvider.embed()
-    await this.memory.insertSemanticFact(scopeId, writeGuard(fact), []);
+    // LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
+    const { vector } = await this.embed.embed(writeGuard(fact));
+    const { id, suggestedMerge } = await this.memory.insertSemanticFact(scopeId, writeGuard(fact), vector);
+
+    if (suggestedMerge !== null) {
+      await this.memory.supersede(suggestedMerge.id, id);
+    }
+    // No auto-supersede when suggestedMerge is null — per D-08 caller decides
 
     const contentHash = contentFingerprint(fact);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log
