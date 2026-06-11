@@ -212,6 +212,45 @@ T6 was originally "graph inspection TUI." Superseded: graph visualization belong
 Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
 a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
 
+## Phase 14 — Trust Isolation (2026-06-11)
+
+### ADR-43 D-2 implementation revision: live-DB blanking, crypto-shredding at the backup seam
+
+For the LIVE database, payload blanking (payload='', erased_at=NOW()) achieves identical
+erase semantics to DEK destruction — ADR-43 D-3's verification rules were designed for
+exactly this state. Encryption's unique value is BACKUP invalidation, and the KEK
+provisioning/rotation questions belong to the Phase 15 backup design. key_registry is
+created now (migration 016, destroyed_at marker honored by erase); the encryption
+increment lands with the backup key coupling. Recorded as ADR-47 D-1.
+
+### Trust enforcement wired at the MCP route, not the SDK handler
+
+The MCP SDK's tool handlers don't see HTTP headers; enforcement parses POST bodies for
+tools/call at the Hono route and reconstructs the Request for the transport. No
+X-Agent-ID = local single-tenant caller = trusted when pairing is off (pairing
+guarantees the header otherwise); unknown agent ids = untrusted.
+
+### Docker backend delivered as pure arg-builder + bypass rule
+
+buildDockerRunArgs (hermes _BASE_SECURITY_ARGS parity incl. --network none and
+--read-only) and approvalRequiredForBackend are pure and fully tested; the actual
+docker exec wiring + `docker inspect` containment verification needs a docker-equipped
+environment (live E2E item). Hardline blocks in EVERY backend; pattern approval is
+bypassed only in docker (host unreachable).
+
+### PII pattern ordering matters
+
+IPv4 redaction must precede the phone pattern — dotted digit runs would otherwise be
+consumed as phone numbers. Caught by the red-line test.
+
+### Phase 14 remaining items (carried forward)
+
+1. docker exec wiring + containment verification (docker inspect) — live environment
+2. approval-flow channel commands (/approve, /deny parsing in connectors) — the state
+   machine + push are done; the inbound command routing is connector glue
+3. always-allowlist config write (itself approval-gated) — config.json schema slot
+4. ledger-verifier erased_at skip rule — verifier tooling lives with Phase 15 doctor
+
 ## Phase 13 — Agent Federation (2026-06-11)
 
 ### Multi-candidate ranking is advisory, not assignment

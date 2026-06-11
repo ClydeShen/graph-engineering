@@ -3,13 +3,13 @@
   "session": {
     "status": "active",
     "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-12T00:30:00.000Z",
-    "last_active": "2026-06-12T00:30:00.000Z"
+    "last_session": "2026-06-12T01:30:00.000Z",
+    "last_active": "2026-06-12T01:30:00.000Z"
   },
   "position": {
-    "phase": "13-agent-federation",
-    "active": "Phase 13 implementation complete. ADR-46 (skill two-tier, ranking, visibility domains, conflict attribution, same_as, A2A deferral) + migration 015; TD-I/J/K cleared; reflect visibility red-line tests pass.",
-    "resume_file": ".planning/phases/13-agent-federation/13-PHASE-SPEC.md",
-    "stopped_at": "Phase 13 closeout: 401 tests, tsc clean. A2A minimal bridge deferred (external-dependency block, ADR-46 D-6). Next: Phase 14 (trust-isolation) — vault decision first per 14-PHASE-SPEC."
+    "phase": "14-trust-isolation",
+    "active": "Phase 14 implementation complete. ADR-47 + migration 016; erase(scope) workflow with cascade; approval state machine (silence=deny) + tighten-only aux-LLM; env two-stage filter + write denylist; redactPii; trust->toolset enforced at the MCP route; docker arg-builder + bypass rule; threat model draft.",
+    "resume_file": ".planning/phases/14-trust-isolation/14-PHASE-SPEC.md",
+    "stopped_at": "Phases 10-14 development complete per goal: 418 tests, tsc clean, red-line tests green. Carried-forward items per phase in implementation-notes (live E2E, docker wiring, Email binding, Pi-SDK mode, UI-SPEC console). Next milestones: Phase 15 (deploy-everywhere), Phase 16 (memexos-one)."
   }
 }

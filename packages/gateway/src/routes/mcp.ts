@@ -30,6 +30,8 @@ import type { Pool } from 'pg';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { buildMcpServer } from '../mcp/server.js';
 import { isPaired } from '../auth/pairing.js';
+import { isToolAllowed } from '@graph/shared';
+import type { TrustLevel } from '@graph/types/core';
 
 export function buildMcpRoute(pool: Pool): Hono {
   const app = new Hono();
@@ -73,6 +75,47 @@ export function buildMcpRoute(pool: Pool): Hono {
   // 404s on array-form `app.all([...], handler)` (verified — both paths return
   // 404 — while two single-path `app.all(path, handler)` calls work correctly).
   const handleMcpRequest: Handler = async (c) => {
+    // ── Trust → toolset enforcement (ADR-47 D-7) ────────────────────────────
+    // Defense-in-depth, not the boundary (containers are, D-4). POST bodies are
+    // inspected for tools/call; the agent's trust_level (agent_registry, keyed
+    // by X-Agent-ID) gates the tool. No header = local single-tenant caller:
+    // trusted when pairing is off (pairing guarantees the header otherwise).
+    let request = c.req.raw;
+    if (c.req.method === 'POST') {
+      const bodyText = await c.req.text();
+      try {
+        const rpc = JSON.parse(bodyText) as { method?: string; params?: { name?: string } };
+        if (rpc.method === 'tools/call' && typeof rpc.params?.name === 'string') {
+          const agentId = c.req.header('X-Agent-ID');
+          let trust: TrustLevel = 'trusted';
+          if (agentId !== undefined) {
+            const { rows } = await pool.query<{ trust_level: TrustLevel }>(
+              `SELECT trust_level FROM agent_registry WHERE agent_id = $1`,
+              [agentId],
+            );
+            trust = rows.length > 0 ? rows[0]!.trust_level : 'untrusted';
+          }
+          if (!isToolAllowed(trust, rpc.params.name)) {
+            return c.json(
+              {
+                jsonrpc: '2.0',
+                id: (rpc as { id?: unknown }).id ?? null,
+                error: { code: -32001, message: `tool '${rpc.params.name}' not permitted at trust level '${trust}'` },
+              },
+              200,
+            );
+          }
+        }
+      } catch {
+        /* non-JSON body — let the transport reject it */
+      }
+      request = new Request(c.req.raw.url, {
+        method: 'POST',
+        headers: c.req.raw.headers,
+        body: bodyText,
+      });
+    }
+
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -80,7 +123,7 @@ export function buildMcpRoute(pool: Pool): Hono {
     const mcpServer = buildMcpServer(pool);
     try {
       await mcpServer.connect(transport);
-      return await transport.handleRequest(c.req.raw);
+      return await transport.handleRequest(request);
     } catch (err) {
       return c.json(
         { jsonrpc: '2.0', id: null, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } },
