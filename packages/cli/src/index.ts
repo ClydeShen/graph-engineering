@@ -14,6 +14,8 @@ Commands:
   backup [dir]  pg_dump custom-format backup (default dir: ~/.memex/backups)
   restore <f>   pg_restore a backup, then re-verify the hash chain
   service       Generate system service files (systemd/launchd/schtasks)
+  skills        search <q> | install <registry> <id> [name] | inspect [name]
+  --version     Print the MemexOS version
 
 Options:
   --help, -h    Show this help message
@@ -28,7 +30,18 @@ Environment:
   process.exit(0);
 }
 
-const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service'] as const;
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  // Single version source: root package.json (ADR-48 / 16 G6).
+  const { readFileSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const rootPkg = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'package.json');
+  const { version } = JSON.parse(readFileSync(rootPkg, 'utf8')) as { version: string };
+  console.log(`memex ${version}`);
+  process.exit(0);
+}
+
+const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills'] as const;
 const subcommand = (KNOWN as readonly string[]).includes(process.argv[2] ?? '')
   ? (process.argv[2] as (typeof KNOWN)[number])
   : 'connect';
@@ -154,12 +167,54 @@ async function main() {
   outro('Done.');
 }
 
+async function runSkillsCommand(): Promise<void> {
+  const action = process.argv[3];
+  const [{ searchSkills, installSkill, inspectSkills, REGISTRIES }, { formatGuardReport }, { profileDir }, { join }] =
+    await Promise.all([import('./skills.js'), import('./skills-guard.js'), import('@graph/shared'), import('node:path')]);
+  const skillsRoot = join(profileDir(), 'skills');
+
+  if (action === 'search') {
+    const query = process.argv.slice(4).join(' ');
+    if (!query) throw new Error('usage: memex skills search <query>');
+    const results = await searchSkills(fetch, query);
+    if (results.length === 0) { console.log('no skills found'); return; }
+    for (const r of results) console.log(`  [${r.registry}] ${r.id} — ${r.name}: ${r.description}`);
+    return;
+  }
+  if (action === 'install') {
+    const [, , , , regName, id, maybeName] = process.argv;
+    const registry = REGISTRIES.find((r) => r.name === regName);
+    if (!registry || !id) throw new Error(`usage: memex skills install <${REGISTRIES.map((r) => r.name).join('|')}> <id> [name]`);
+    const name = maybeName ?? id;
+    const confirmed = process.argv.includes('--yes-despite-findings');
+    const outcome = await installSkill(fetch, registry, id, name, skillsRoot, confirmed);
+    console.log(formatGuardReport(outcome.findings));
+    if (!outcome.written) {
+      console.log('\ninstall withheld — review the findings, then re-run with --yes-despite-findings to proceed');
+      process.exit(1);
+    }
+    console.log(`installed: ${outcome.dir}`);
+    return;
+  }
+  if (action === 'inspect') {
+    const results = inspectSkills(skillsRoot, process.argv[4]);
+    if (results.length === 0) { console.log(`no installed skills under ${skillsRoot}`); return; }
+    for (const r of results) {
+      console.log(`\n${r.name}:`);
+      console.log(formatGuardReport(r.findings));
+    }
+    return;
+  }
+  throw new Error('usage: memex skills <search|install|inspect>');
+}
+
 const entry =
   subcommand === 'onboard' ? runOnboard()
   : subcommand === 'doctor' ? runDoctorCommand()
   : subcommand === 'backup' ? runBackupCommand()
   : subcommand === 'restore' ? runRestoreCommand()
   : subcommand === 'service' ? runServiceCommand()
+  : subcommand === 'skills' ? runSkillsCommand()
   : main();
 entry.catch((err: unknown) => {
   console.error('Error:', err instanceof Error ? err.message : err);
