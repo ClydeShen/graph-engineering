@@ -186,7 +186,7 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
    - Reciprocal Rank Fusion（RRF k=60）合并两路结果
    - Reflection Track 触发接口（`mem::reflect`，ADR-21 规格）
 
-**与现有 ADR 的关系：** ADR-20（混合检索）；ADR-21（Reflection Track 触发规格）；ADR-22（Embedding Provider）。
+**与现有 ADR 的关系：** ADR-20（混合检索）；ADR-21（Reflection Track 触发规格）；ADR-22（Embedding Provider）；**ADR-43（数据删除权，2026-06-11 新增）——三张记忆表建表即带 `source_scope_id` provenance 列 + `erased_at`，embedding 随行级联删除**。这是 ADR-43 唯一阻塞本阶段的约束，加密机制本身推迟到 Phase 14。
 
 **前置条件：** Phase 08-context-assembly 完成（Pipeline lifecycle hooks 中 Reflection Track 插槽已预留）。
 
@@ -226,3 +226,275 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 **与现有 ADR 的关系：** ADR-25（跨域拓扑算法）；ADR-39（Pattern Discovery 调度）；ADR-36（Knowledge Entity 写时机）。
 
 **前置条件：** Phase 09-memory-layers 完成（Episodic + Procedural 表已就位，BM25+HNSW 检索可用）。
+
+---
+
+## 11-memex-shell
+
+**目标：** 在 MemexCore 稳定基础上构建交互与集成层（MemexShell）。交付实时事件流 API、MemexTerminal TUI、Dashboard 前端、Onboarding TUI 及配套基础设施，使 MemexOS 具备完整的人机交互界面。
+
+**背景：** Phase 08–10 完成 MemexCore 全部核心能力（Knapsack+CCR、四层记忆、Trail Discovery + Ebbinghaus 强化）。MemexShell 在 MemexCore 之上构建，严格遵循已锁定的设计原则：Shell 不拥有状态，所有状态在 Core 的 Graph 里；Shell 是 Gateway REST/WS 的纯客户端；Shell 变，Core 不动。Phase 6 T6"graph inspection TUI"已明确延至本阶段，不再在 Core 阶段实现。
+
+**落地内容：** 本阶段同时落地 ROADMAP "未来架构改进方向" 中尚未执行的 #1–5 项（Provider 注册表、WSS/SSE、@graph/types、全局 config.json、SKILL.md progressive loading），这些项均是 MemexShell 的直接前置或内在组成部分。
+
+### 核心交付物
+
+1. **Gateway 实时事件流 API**（ROADMAP 未来改进方向 #2，新 ADR 待写）
+   - **双轨设计**：SSE（单向推送）供 Dashboard 订阅 Trail 写入通知；WebSocket（双向）供 MemexTerminal 的 agent turn 交互流
+   - SSE endpoint（`GET /events`）：scope 事件、Trail 新增、memory 更新通知；无状态、HTTP/2 兼容
+   - WebSocket endpoint（`/ws`）：MemexTerminal agent session stream（`tool_execution_start`、`text_delta`、`scope_closed` 等）；参考 nanobot `channels/websocket/` 模式
+   - Gateway package 新增 WS/SSE handler；现有 REST 路由不变（Shell 升级到 WS，不影响 Core API 消费方）
+
+2. **`@graph/types` 统一类型包**（ROADMAP 未来改进方向 #3，新架构决策待写）
+   - 新建 `packages/types`（`@graph/types`）：三层分工——`core`（Entity/HyperEdge/Scope/Lesson/Trail，无依赖）、`api`（Gateway REST + WS contract types）、`shell`（Dashboard state、MemexTerminal session）
+   - Pi SDK 对齐：MemexTerminal 的会话类型继承 Pi SDK 官方 `AgentSession`/`ToolResult`/`Message` interface，不重新定义等价类型
+   - 其他 package 迁移为只 import `@graph/types`，不保留内部重复定义
+
+3. **全局 `~/.memex/config.json`**（ROADMAP 未来改进方向 #4）
+   - 内容：Gateway 端口 / TLS、Channel tokens（Telegram/Discord）、LLM provider 注册表（apiKey 用 `${ENV_VAR}` 引用，不硬编码）、Dashboard 和 MemexTerminal 连接地址、WebSocket 开关
+   - 配置层分工最终落地：`iii-config.yaml` → MemexCore（Worker LLMProvider 注入、iii-engine 参数）；`~/.memex/config.json` → 全系统（Shell + Gateway + channel + provider 注册表）
+   - Startup 时展开环境变量引用，解析值不写回磁盘
+
+4. **MemexTerminal TUI**
+   - 技术：Pi SDK（`createAgentSession` + `subscribe`），连接 `/ws` WebSocket endpoint
+   - 纯 Gateway 客户端——零状态所有权；安装后自动启动
+   - SKILL.md 两阶段加载（ROADMAP 未来改进方向 #5）：列表显示仅加载 `name + description`，按需拉取全文；参考 nanobot `build_skills_summary()` / `load_skills_for_context()` 模式
+   - 不含图可视化（归属 Dashboard）；不含 Trail Discovery 结果展示（归属 Dashboard）
+
+5. **Onboarding TUI**（`@clack/prompts`）
+   - 首次安装引导：检测 LLM provider、配置 apiKey、选择 Gateway 端口，写入 `~/.memex/config.json`
+   - LLM Provider 注册表初始化（ROADMAP 未来改进方向 #1 落地）：引导配置多 provider（Anthropic / OpenAI compatible / Ollama）及 FallbackProvider 策略
+   - 无 graph 写入——纯 config 文件操作，与 ADR-22 Worker 侧 `LLMProvider` 通过 config 文件衔接
+
+6. **Dashboard 前端**
+   - **图可视化**（Phase 6 T6 延迟至此）：workflow 涌现图（Trail Mesh 拓扑）、节点详情（Entity / HyperEdge / Lesson inspect）
+   - SSE 订阅实时 Trail 写入通知（依赖交付物 #1）；历史快照视图保留 REST polling
+   - SKILL.md 两阶段加载（同 MemexTerminal，复用同一 loader 实现）
+   - Trail Discovery 结果展示：Phase 10 产出的 Procedural Memory 骨架模板可视化
+
+7. **`packages/cli` connect 工具 + `packages/pi-extension`**
+   - `packages/cli`：`memex connect` 命令，将外部 Pi Terminal 连接到本地 Gateway（认证、地址绑定）
+   - `packages/pi-extension`：发布到外部 Pi Terminal 客户端的集成 artifact；类型继承 `@graph/types/shell`
+
+### 与现有 ADR 的关系
+
+- 新 ADR 待写：WSS/SSE 实时 API 设计（endpoint 契约、事件类型枚举、背压策略、**本地客户端认证**——默认 bind localhost 为底线，Dashboard/MemexTerminal 连接 token 机制、**端点限速**）
+- 新架构决策待写：`@graph/types` 三层分工、迁移策略
+- ADR-22（LLM Provider 抽象）：Onboarding TUI 的 Provider 注册表是 ADR-22 的 config-layer 落地
+- ADR-24（Agent Entry Point Protocol）：MemexTerminal 的 `createAgentSession` 调用路径须符合 ADR-24 入口契约
+
+**前置条件：** Phase 10-trail-discovery 完成（Ebbinghaus 强化闭环建立，Procedural Memory 可视化有内容可展示）；Phase 08 Pipeline hooks 已就位（WS 事件流的 emit 点依赖 `onLLMCalled`/`onResultWritten` 钩子）。
+
+---
+
+# 产品化弧线（Phase 12–16，2026-06-11 规划）
+
+> 来源：hermes-agent 深度研究报告（`.harness/analysis/hermes-agent-deep-research-report.md`）+ Phase 11 设计笔记（`.planning/phases/11-memex-shell/11-DESIGN-NOTES.md`）中明确推迟的项 + 标本目录映射。
+> 北极星不变：基于 MemexCore 构建 Hermes-agent 级别的端到端系统（MemexOS）。Phase 08–11 完成"引擎 + 交互层"；Phase 12–16 完成"产品"。
+
+**用户目标 → 阶段映射：**
+
+| 产品目标 | 阶段 | 一句话 |
+|---|---|---|
+| 多终端集成 | **12-connector-matrix** | Connector 矩阵 + graph-native 定时任务 + 跨平台投递 |
+| 内外多 agent 协作 | **13-agent-federation** | 内部 delegation + 外部 agent 联邦，经共享 Trail Mesh 协作 |
+| 可对外开放的信任边界 | **14-trust-isolation** | 执行沙箱、跨渠道审批流、secrets 管理（开放部署的前置门） |
+| 一键部署、多环境 | **15-deploy-everywhere** | install 一行命令、Docker compose、doctor、profiles、远程 Gateway |
+| 完整产品 1.0 | **16-memexos-one** | Skill 生态双向、E2E 验收、文档与发布管道 |
+
+**排序原理：** 12–13 在自托管单租户前提下扩展能力面；14 在"任何人都能装"（15）之前完成安全硬化——这是 hermes 自身演进顺序的复刻（先功能后 SECURITY.md 信任模型成文）。16 是质量门收口。
+
+---
+
+## 12-connector-matrix
+
+**目标：** 把 MemexOS 从"两个聊天机器人"（Telegram/Discord，Phase 6）扩展为"任意终端皆可触达的常驻系统"：声明式 Connector 注册表、更多渠道、graph-native 定时任务、跨平台结果投递。
+
+**背景：** Phase 11 交付 ConnectorAdapter interface 与 MemexTerminal/Dashboard 两个一等客户端，但渠道矩阵和调度能力被明确推迟（11-DESIGN-NOTES "不采纳的点"：cron 需要 Phase 9/10 Trail Mesh 完全就位——届时已满足）。
+
+### 核心交付物
+
+1. **ConnectorRegistry 声明式注册表**（参考 hermes `gateway/platform_registry.py` 的 `PlatformEntry` 模式）
+   - 每个 Connector 注册元数据：`check_fn`（依赖检测）、`validate_config`、`required_env`、`standalone_sender_fn`（无 live gateway 时的投递路径）、`platform_hint`（注入 system prompt 的平台上下文）
+   - 现有 Telegram/Discord bot 迁移到注册表；Dashboard "已连接渠道"状态面板直接消费元数据
+   - **Memex 差异化**：Connector 配置变更写图（`connector::config_updated` Association），变更历史可被 Trail Discovery 分析（11-DESIGN-NOTES §1 预留项落地）
+
+2. **新增渠道**：Slack（Socket Mode，无入站端口）、Email（IMAP 轮询 + SMTP）、入站 Webhook（受限工具集，见 Phase 14 交叉引用；**入站签名校验必配**——HMAC secret，hermes Telegram webhook `secret_token` 模式）
+   - 入站消息统一归一化为 MessageEvent（参考 hermes `gateway/platforms/base.py`）
+   - `sender_id` 一律带渠道前缀（`telegram:12345678`），为 Phase 13 跨渠道身份归一化预留（11-DESIGN-NOTES §5）
+
+3. **Graph-native Cron**（参考 hermes `cron/scheduler.py`，但 job 存图不存 jobs.json）
+   - 定时任务 = 图上的 Entity（schedule、prompt、deliver、origin 字段）；每次触发创建新 Scope，运行即一条 Trail
+   - **Memex 差异化**：定时任务的历史运行可被 Trail Discovery 学习（"这个周报任务每次都在同一步骤偏离"是信号）
+   - tick 调度复用 iii-engine durable subscriber，不另起独立 scheduler 进程
+
+4. **DeliveryRouter**（参考 hermes `gateway/delivery.py` + `cron/scheduler.py` 投递目标解析）
+   - deliver 目标语法：`origin` / `<platform>`（home channel）/ `<platform>:<chat_id>` / `all` / 逗号组合
+   - home channel 配置入 `~/.memex/config.json`（Phase 11 已建立）；静默输出抑制（silence marker 不投递）
+
+5. **跨平台会话连续性**（相对 hermes 的结构性优势，本阶段验收亮点）
+   - hermes 的 session 是 platform-scoped，明确不支持跨平台合并；Memex 的状态在 Graph——同一用户从 Telegram 发起、在 MemexTerminal 继续、在 Dashboard 查看，天然是同一条 Trail 的延续
+   - 验收场景：Telegram 创建任务 → MemexTerminal 接续对话（上下文经 Knapsack 组装自同一 Scope）→ 结果按 origin 投递回 Telegram
+
+**与现有 ADR 的关系：** ADR-24（Agent Entry Point Protocol，所有渠道入口统一走此契约）；Phase 11 WS/SSE ADR（Connector 事件如何进事件流）；新 ADR 待写：Cron Entity schema 与触发语义。
+
+**前置条件：** Phase 11 完成（ConnectorAdapter interface、config.json、DeliveryRouter 的投递端依赖 Gateway 实时 API）。
+
+---
+
+## 13-agent-federation
+
+**目标：** 内部 sub-agent delegation + 外部 agent 联邦，全部经由共享 Trail Mesh 协作——agent 之间不直接对话，通过图协作。这是 Memex 对"multi-agent 框架"的范式回答：没有编排层，协作模式从共享 Trail 中涌现。
+
+**背景：** Phase 6 已交付 MCP peer 接入（AgentCard、pairing、FrontierScheduler skill 路由）。本阶段把"单 agent + 外挂工具"升级为"多 agent 共享一张图"。
+
+### 核心交付物
+
+1. **内部 delegation**（参考 hermes `delegation.*`：`max_concurrent_children`、子 agent 模型 override）
+   - Worker 可派生 sub-scope agent（`sub-scope-result.worker` 已有基础），并发上限可配，结果汇聚回父 Trail
+   - 子 agent 的完整执行是嵌套 Trail——父 Scope 可见子 Scope 的偏离与冲突，不只是最终结果
+
+2. **外部 agent 联邦**
+   - AgentCard 扩展：capability/skill 声明、信任级别（与 Phase 14 信任分级衔接）
+   - MCP peer（已有）保持；**A2A（Agent2Agent）协议适配评估 + 最小实现**——行业互操作方向，外部 agent 不装 Memex 也能以 A2A 语义参与协作
+   - FrontierScheduler 多候选竞争路由：同一 skill 多个 agent 声明时按 AgentCard 信任级别 + 历史成功率（图上可查）选择
+
+3. **Graph-mediated collaboration（核心差异化）**
+   - 多 agent 写同一 Scope 的 OCC 语义（`occ-write` 已有基础，扩展冲突归因到 agent 身份）
+   - conflict detection 跨 agent 生效：两个 agent 对同一 Entity 的矛盾写入是一等 Trail 数据，进入 Knapsack 高权重层
+   - Trail 引用：agent B 可引用 agent A 的历史 Trail 作为上下文（经 `memex_retrieve` 检索路径）
+
+4. **跨 agent 共享记忆**（headroom 学习方向 #5 落地）
+   - Lesson 可见性域：`agent-private` / `shared` / `global`；CrystallizeWorker 蒸馏时标注归属
+   - 外部 agent 命中 shared Lesson 同样触发 Ebbinghaus reinforcement——系统从所有参与者的使用中变聪明
+
+5. **跨渠道身份归一化**（11-DESIGN-NOTES §5 推迟项落地）
+   - 同一用户的多渠道身份 = 同一 Entity 的多个别名 Snapshot（`same_as` Association），不为每个渠道硬写归一化函数
+   - 人和 agent 共用同一身份模型：user、internal worker、external agent 都是图上的 principal Entity
+
+**与现有 ADR 的关系：** ADR-24（入口协议扩展到 A2A）；ADR-25（跨域拓扑——多 agent Trail 是最丰富的模式来源）；新 ADR 待写：Lesson 可见性域、A2A 适配层、多 agent OCC 冲突归因。
+
+**前置条件：** Phase 10（Lesson/reinforcement 闭环——共享记忆有内容可共享）；Phase 12（身份前缀 `sender_id` 约定已就位）。
+
+---
+
+## 14-trust-isolation
+
+**目标：** 把"个人自托管玩具"硬化为可对外开放的系统：执行隔离、跨渠道审批流、secrets 管理、外部 agent 信任分级。这是 Phase 15 一键部署的安全前置门——在"任何人都能装"之前完成。
+
+**背景：** Phase 5 CommandGate（54 pattern）和 Phase 6 pairing 是单点防线。hermes SECURITY.md 的核心原则直接采纳："no in-process mechanism is a security boundary —— 只有 OS 级隔离构成真正的遏制"。
+
+### 核心交付物
+
+1. **执行后端抽象**（参考 hermes `tools/environments/`）
+   - `execute_bash` 从 local-only 扩展为 local / docker 双后端；docker 后端：`--cap-drop ALL` + 最小 cap-add、`no-new-privileges`、`--pids-limit`、nosuid/noexec tmpfs（直接复刻 hermes `_BASE_SECURITY_ARGS`）
+   - 容器内命令绕过审批（hermes 同款 rationale：容器内破坏性命令触不到宿主机）；orphan container reaper
+   - 后端选择入 `~/.memex/config.json`；SSH/cloud 后端不做（YAGNI，记入 post-1.0 候选）
+
+2. **跨渠道审批流**（参考 hermes gateway approval："Silence is not consent"）
+   - 危险命令审批请求经 DeliveryRouter 推送到 home channel；用户 `/approve` `/deny`；超时即拒绝
+   - 审批范围：once / session / always（always 写入 config allowlist）
+   - CommandGate 三层结构对齐 hermes：硬线 blocklist（任何模式不可绕过）→ pattern 审批（YOLO 可绕过）→ 可选 aux-LLM smart approval
+
+3. **Secrets 管理**
+   - config.json env 引用展开已有（Phase 11）；补充：env denylist（`LD_PRELOAD`/`PYTHONPATH`/`PATH` 等永不可被写入，hermes `config.py:116` 模式）
+   - subprocess env 两段式过滤（11-DESIGN-NOTES §4 附带任务正式落地）：`_SECRET_SUBSTRINGS` 黑名单 + `_SAFE_ENV_PREFIXES` 白名单
+
+4. **外部 agent / 不可信来源信任分级**
+   - pairing（已有）之上的 per-principal 工具白名单；入站 Webhook（Phase 12）默认 webhook-safe 受限工具集（hermes `_HERMES_WEBHOOK_SAFE_TOOLS` 模式：不可信第三方内容不得触达文件/命令执行工具）
+   - AgentCard 信任级别 → 工具集映射，供 Phase 13 联邦消费
+
+5. **Audit trail：安全事件入图**
+   - 审批请求、批准、拒绝、blocklist 阻断都是 Association——安全历史可查询、可被 Trail Discovery 分析（"这个 agent 总在尝试越权"是涌现信号）
+
+6. **数据安全**（ADR-43 落地 + 静态防护，2026-06-11 补充）
+   - **Crypto-shredding 实现**（ADR-43 D-2 第二步）：payload 加密存储、per-Scope DEK + `key_registry`、`erase(scope)` 工作流（销毁 DEK + 派生数据级联删除 + `memex::payload::erase` 审计事件）
+   - **静态加密**：Postgres 数据目录加密部署指引（Docker 卷加密 / 文件系统层），密文 payload 是第一层，盘加密是第二层
+   - **PII 脱敏**（hermes `privacy.redact_pii` 模式）：发送给 LLM 前 + 写入账本前的已知 PII 模式脱敏；与 erasure 分工见 ADR-43 D-6（写入前防御 vs 事后救济）
+
+**与现有 ADR 的关系：** Phase 5 CommandGate 规格（扩展为三层）；**ADR-43（数据删除权——本阶段实现其加密与 erase 工作流）**；新 ADR 待写：执行后端抽象、审批流协议（跨渠道异步审批的状态机）、信任分级模型。
+
+**前置条件：** Phase 12（DeliveryRouter——审批流的推送通道）；Phase 13 可并行启动但其外部联邦开放依赖本阶段信任分级。
+
+---
+
+## 15-deploy-everywhere
+
+**目标：** 任何人在任何主流环境一条命令起 MemexOS。安装、诊断、多环境隔离、服务化、远程访问、备份——产品的"外壳工程"。
+
+**背景：** 当前部署 = 开发者手工：clone、pnpm install、Postgres 手配、env 手写。hermes 的安装矩阵（install.sh/install.ps1/Docker/Termux/Nix）是直接参照，但 Memex 多一个硬依赖：PostgreSQL（pgvector + pgcrypto）。
+
+### 核心交付物
+
+1. **一键安装脚本**（参考 hermes `scripts/install.sh` / `install.ps1`）
+   - Linux/macOS/WSL2：`curl | bash`；Windows 原生：`iex (irm ...)`
+   - 依赖检测与自动安置：Node 22、PostgreSQL（本机已有 → 复用；没有 → 引导 Docker 路径）；结束自动进入 Onboarding TUI（Phase 11 已建）
+   - 安装方式戳记（git/docker/npm），managed 模式下 onboarding 禁止改 config（hermes managed-install 模式）
+
+2. **Docker 一键部署**
+   - 单 `docker-compose.yml` = Postgres(pgvector) + MemexCore + Gateway + Dashboard；数据卷持久化 `~/.memex` + pgdata
+   - 可选 hardened compose override：`internal`/`egress` 双网络 + proxy allowlist（hermes `network-egress-isolation.md` 直接复用，与 Phase 14 衔接）
+   - Windows / macOS / Linux 三平台验证
+
+3. **`memex doctor`**（参考 hermes `hermes_cli/doctor.py`，纯诊断不改配置）
+   - 检查项：Postgres 连通 + pgvector/pgcrypto 扩展、hash chain 完整性抽查、LLM provider 连通性（逐 provider）、channel token 有效性、Gateway/服务存活、Node 版本一致性
+
+4. **Profiles 多环境**（参考 hermes `~/.hermes/profiles/<name>` 完整隔离）
+   - `~/.memex/profiles/<name>`：config 隔离 + 数据库维度隔离（per-profile database）；`MEMEX_PROFILE` env var；子进程显式传递避免写错 profile
+
+5. **系统服务安装**：systemd（Linux）/ launchd（macOS）/ Scheduled Task（Windows）；开机自启 Gateway + Workers
+
+6. **远程 Gateway / 跨机器连续性**
+   - Shell（MemexTerminal/Dashboard/cli）连接远程 Core：TLS + token 认证；`memex connect` 扩展为支持远程地址
+   - 一份 Graph 多机访问——办公室桌面与笔记本共享同一 Trail Mesh（落地长期存在的 cross-machine continuity 需求）
+
+7. **备份与恢复**：`memex backup` / `memex restore`（pg_dump 包装）+ 恢复后 hash chain 校验；ledger 不可变性使增量备份天然可行
+   - **备份加密约束（ADR-43 后果条款）**：备份加密密钥体系与 `key_registry` 同源，使"销毁 DEK"对备份同样生效；做不到则文档化"备份保留期 = 删除生效延迟"
+
+**与现有 ADR 的关系：** 新 ADR 待写：部署拓扑（单机 all-in-one vs Core 远程 + Shell 本地）、profile 隔离边界。
+
+**前置条件：** Phase 14 完成（对外开放安装的安全前置）；Phase 11 Onboarding TUI（安装脚本的收尾环节）。
+
+---
+
+## 16-memexos-one
+
+**目标：** MemexOS 1.0 收口：skill 生态双向打通、端到端验收与 eval、文档与发布管道。"完整产品"的定义在此兑现。
+
+### 核心交付物
+
+1. **Skill 生态双向**
+   - 导出已有（Phase 5 agentskills.io）；补充**安装侧**：`memex skills search/install/inspect`，安装前 skills-guard 注入模式扫描（hermes `skills_guard.py` 模式，明确定位"review aid 而非安全边界"）
+   - agentskills.io / ClawHub 双 registry 兼容（ROADMAP 改进方向 #5 收尾）
+
+2. **E2E 验收场景集 + eval harness**
+   - UAT journey 固化为可重复脚本（`.harness/analysis/uat-journey-2026-06-07.md` 是雏形）
+   - **Memex 特有质量指标**：Trail Discovery pattern 命中率、Lesson 留存率/强化率、Knapsack 压缩后任务成功率对比——"越用越聪明"必须可测量，不是口号
+   - 回归门：每次发布前跑全量 journey + 指标不退化
+
+3. **文档与发布管道**
+   - Quickstart（一键安装 → 第一条 Trail 五分钟内）；架构文档从 ADR 提炼为用户视角文档
+   - 版本化发布：changelog、git tag、Docker tag、install 脚本版本锁定
+   - **发布完整性**：install 脚本与发布物 SHA-256 校验和 + 签名（hermes 下载 tirith 时的 checksum + cosign 验证模式，用在我们自己的发布管道上）
+   - `memex --version` / doctor 集成更新检查（可选、不静默上报）
+
+3b. **SECURITY.md 信任模型成文 + 漏洞披露政策**（hermes SECURITY.md 模式）
+   - 明确"什么在范围内 / 什么不是安全边界"（in-process 机制不是边界、容器才是）；声明 ADR-43 的已知边界（多源 Lesson redistill 窗口期、备份保留期语义）
+   - 漏洞披露渠道与响应承诺
+
+4. **遥测（可选、本地优先）**：默认关闭；开启时仅聚合指标不含内容；自己的使用数据首先服务于自己的 Trail Discovery
+
+**前置条件：** Phase 12–15 全部完成。
+
+---
+
+## Post-1.0 方向（顺应 AI 发展，不排期、不写 ADR）
+
+> 记录于此防止丢失，每项启动前需独立 scoping。
+
+- **多模态 I/O**：voice channel（STT/TTS provider 抽象可仿 ADR-22 的 LLM provider 模式）、图像输入经 vision 辅助模型路由（hermes `image_routing` 模式）
+- **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）
+- **本地模型深化**：Ollama/vLLM 一等支持已在 provider 注册表；补充本地 embedding 路径使全栈可离线
+- **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展
+- **编辑器集成**（ACP 协议，hermes `hermes acp` 模式）：Memex 作为 IDE 内 agent 的记忆与 trail 后端
+- **SSH / cloud 执行后端**（Modal/Daytona 类）：Phase 14 明确 YAGNI 推迟的项
