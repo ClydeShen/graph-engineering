@@ -89,7 +89,8 @@ async function checkMigrations(p: DoctorProbes): Promise<DoctorResult> {
   }
 }
 
-async function checkHashChain(p: DoctorProbes): Promise<DoctorResult> {
+/** Exported for `memex restore` — post-restore integrity gate reuses this check. */
+export async function checkHashChain(p: DoctorProbes): Promise<DoctorResult> {
   if (!p.query) return { name: 'hash-chain', status: 'skip', detail: 'no database connection' };
   try {
     const { rows: scopes } = await p.query(
