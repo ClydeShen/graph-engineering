@@ -472,3 +472,42 @@ Backup encryption (D-4: retention = erase delay, printed by `memex backup`); aut
 Three-platform install script runs (only syntax-gated + logic-reviewed here); compose up
 on macOS/Linux hosts; iii version pinning decision; service-file registration on real
 systemd/launchd hosts.
+
+---
+
+## Phase 16 (memexos-one) — deviations & decisions
+
+### Lesson metrics home corrected by live run
+
+eval-metrics first targeted semantic_memory for retention; the live journey run failed with
+"column reinforcement_count does not exist" — Ebbinghaus columns (reinforcement_count,
+confidence) live in procedural_memory (migrations 006/011). Fixed; recorded in ADR-49 D-1.
+Lesson: run metric SQL against a migrated DB before trusting column placement from memory.
+
+### Journey ran live, twice
+
+7/7 steps green against Node-runtime gateway + migrated Postgres: scope create, OCC won,
+conflict demoted, projection sampling, memory search, erase (blank + chain intact),
+snapshot baseline; second run exercised the regression comparison path green.
+Steps that need LLM keys (crystallization/reflect content assertions) are not in the
+journey yet — carried forward with the live-E2E items.
+
+### Registry API shapes unverified (by design)
+
+agentskills.io / ClawHub descriptor objects follow public docs; first live call corrects
+them (16-PHASE-SPEC risk note). Injectable-fetch unit tests pin the client behavior either way.
+
+### Telemetry: zero implementation (ADR-49 D-3)
+
+Deliberate. All usage data is already in the graph; eval metrics consume the ledger directly.
+
+### Carried forward (live-environment items, full list for the goal report)
+
+- Phase 11: Pi-SDK interactive terminal mode; full UI-SPEC console (Next.js+G6)
+- Phase 12: Email transport production binding (imapflow/nodemailer); cross-platform journey
+- Phase 13: A2A minimal bridge (needs verifiable spec + counterpart)
+- Phase 14: docker exec live wiring + containment verification (docker inspect);
+  /approve //deny connector command routing; always-allowlist config write
+- Phase 15: three-platform install runs; compose up on macOS/Linux; iii version pinning
+  (0.19.2 image vs 0.11.2 dev — scheduled trigger provider gap); service registration on real hosts
+- Phase 16: real registry API verification; LLM-keyed journey extension (distill/reflect steps)
