@@ -123,4 +123,11 @@ export abstract class Worker {
    * No-op by default.
    */
   protected async onResultWritten(ctx: Readonly<PipelineContext>): Promise<void> {}
+
+  /**
+   * Returns true if this Worker participates in the Reflection Track (D-11, Phase 09).
+   * Override to return false to opt out of mem::reflect cold_start injection.
+   * Default: true — memory augmentation is on by default for all Workers.
+   */
+  shouldReflect(): boolean { return true; }
 }

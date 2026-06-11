@@ -48,6 +48,12 @@ export interface TrailReader {
    * Options control the result window; defaults to 100 records, no time filter.
    */
   getEpisodicRecords(scopeId: string, options?: TrailReaderOptions): Promise<string[]>;
+
+  /**
+   * Return all EventLogNode rows for a scope in insertion order (id ASC). Used by
+   * TemplateProposalWorker to read the full Scope DAG for LLM distillation (D-02).
+   */
+  getScopeEvents(scopeId: string): Promise<EventLogNode[]>;
 }
 
 /**
@@ -89,6 +95,14 @@ export class PoolTrailReader implements TrailReader {
     );
     return rows.map((r) => r.content);
   }
+
+  async getScopeEvents(scopeId: string): Promise<EventLogNode[]> {
+    const { rows } = await this.pool.query<EventLogNode>(
+      `SELECT * FROM execution_event_log WHERE scope_id = $1 ORDER BY id ASC`,
+      [scopeId],
+    );
+    return rows;
+  }
 }
 
 /**
@@ -105,4 +119,5 @@ export class StubTrailReader implements TrailReader {
   async getEpisodicRecords(_scopeId: string, _opts?: TrailReaderOptions): Promise<string[]> {
     return [];
   }
+  async getScopeEvents(_scopeId: string): Promise<EventLogNode[]> { return []; }
 }

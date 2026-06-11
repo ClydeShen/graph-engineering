@@ -114,6 +114,10 @@ export class PhaseGuardedHandle implements GraphHandle {
   getEpisodicRecords(scopeId: string, opts?: import('./trail-reader.js').TrailReaderOptions) {
     return this.inner.getEpisodicRecords(scopeId, opts);
   }
+
+  getScopeEvents(scopeId: string) {
+    return this.inner.getScopeEvents(scopeId);
+  }
 }
 
 /** Typed outcome of a Worker lifecycle run. */
