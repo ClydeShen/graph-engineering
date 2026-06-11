@@ -1,0 +1,103 @@
+# MemexOS one-command deployment (Phase 15 G3).
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# Hardened variant (network isolation + privilege drops):
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml up -d
+#
+# Topology (ADR-57): postgres -> migrate (one-shot) -> iii -> workers -> control-plane + gateway.
+# Startup order mirrors scripts/dev.mjs: workers must register their iii
+# functions before the control plane's pulse-fetch replays events.
+
+name: memexos
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: memex
+      POSTGRES_PASSWORD: ${MEMEX_DB_PASSWORD:-memex}
+      POSTGRES_DB: memex
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memex -d memex"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["npx", "tsx", "scripts/migrate.ts"]
+    environment:
+      DATABASE_URL: postgres://memex:${MEMEX_DB_PASSWORD:-memex}@postgres:5432/memex
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  iii:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["iii", "-c", "iii-config.yaml"]
+    restart: unless-stopped
+
+  workers:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["node", "--import", "tsx/esm", "packages/workers/src/index.ts"]
+    environment:
+      DATABASE_URL: postgres://memex:${MEMEX_DB_PASSWORD:-memex}@postgres:5432/memex
+      III_URL: ws://iii:4001
+    volumes:
+      - memex-home:/root/.memex
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      iii:
+        condition: service_started
+    restart: unless-stopped
+
+  control-plane:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["node", "--import", "tsx/esm", "packages/control-plane/src/index.ts"]
+    environment:
+      DATABASE_URL: postgres://memex:${MEMEX_DB_PASSWORD:-memex}@postgres:5432/memex
+      III_URL: ws://iii:4001
+    depends_on:
+      workers:
+        condition: service_started
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["node", "--import", "tsx/esm", "packages/gateway/src/index.ts"]
+    environment:
+      DATABASE_URL: postgres://memex:${MEMEX_DB_PASSWORD:-memex}@postgres:5432/memex
+      MEMEX_BIND: 0.0.0.0
+      PORT: "3000"
+    ports:
+      - "${MEMEX_GATEWAY_PORT:-3000}:3000"
+    volumes:
+      - memex-home:/root/.memex
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/v1/sys/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  memex-home:

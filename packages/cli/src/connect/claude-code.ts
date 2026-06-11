@@ -1,4 +1,5 @@
 import { readJsonSafe, writeJsonAtomic, backupIfExists } from './util.js';
+import { loadMemexConfig } from '@graph/shared';
 
 export type ClaudeCodeResult = {
   kind: 'installed' | 'already-wired';
@@ -26,7 +27,14 @@ export async function connectClaudeCode(opts: { force?: boolean } = {}): Promise
   const cfg: ClaudeConfig = existing ?? {};
   cfg.mcpServers = cfg.mcpServers ?? {};
 
-  const url = (process.env['GRAPH_RUNTIME_URL'] ?? 'http://localhost:4000') + '/mcp';
+  // Remote gateway support (Phase 15 G6/2f): env wins, then the active
+  // profile's shell.gateway_url (remote Core), then the local default.
+  // TLS for remote addresses is the reverse proxy's job (ADR-48 D-2).
+  const base =
+    process.env['GRAPH_RUNTIME_URL'] ??
+    loadMemexConfig()?.shell?.gateway_url ??
+    'http://localhost:4000';
+  const url = base + '/mcp';
   const entry: Record<string, unknown> = { type: 'http', url };
   if (process.env['GRAPH_RUNTIME_SECRET']) {
     entry['headers'] = { Authorization: `Bearer ${process.env['GRAPH_RUNTIME_SECRET']}` };

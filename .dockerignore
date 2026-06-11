@@ -1,0 +1,11 @@
+# Build context hygiene for deploy/Dockerfile — npm ci rebuilds node_modules
+# inside the image; host artifacts must not leak into layers.
+node_modules
+packages/*/node_modules
+.git
+data
+dist
+.harness
+.planning
+.iii-state
+*.log

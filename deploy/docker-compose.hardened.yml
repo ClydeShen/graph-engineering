@@ -1,0 +1,53 @@
+# Hardened override (Phase 15 G3, hermes network-egress-isolation pattern).
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml up -d
+#
+# Two networks:
+#   internal — no route to the outside world (internal: true). postgres, iii,
+#              and control-plane live ONLY here: they can never reach the
+#              internet, and nothing outside can reach them.
+#   egress   — outbound-capable. workers (LLM/channel APIs) and gateway
+#              (inbound port + outbound delivery) join both.
+#
+# To pin egress to an allowlist, run a filtering proxy (e.g. tinyproxy with an
+# allowlist) as the only egress-attached service and point HTTP(S)_PROXY at it —
+# extension point documented in ADR-57, not shipped by default.
+#
+# Privilege drops apply hermes _BASE_SECURITY_ARGS to every app service.
+
+x-hardening: &hardening
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+
+services:
+  postgres:
+    networks: [internal]
+    # postgres needs setuid/setgid at init; keep default caps but isolate its network.
+
+  migrate:
+    <<: *hardening
+    networks: [internal]
+
+  iii:
+    <<: *hardening
+    networks: [internal]
+
+  workers:
+    <<: *hardening
+    networks: [internal, egress]
+
+  control-plane:
+    <<: *hardening
+    networks: [internal]
+
+  gateway:
+    <<: *hardening
+    networks: [internal, egress]
+
+networks:
+  internal:
+    internal: true
+  egress:
