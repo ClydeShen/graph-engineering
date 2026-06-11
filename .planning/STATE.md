@@ -6,30 +6,32 @@ status: in_progress
 last_updated: "2026-06-12T02:30:00.000Z"
 progress:
   total_phases: 16
-  completed_phases: 14
+  completed_phases: 16
   total_plans: 6
   completed_plans: 6
-  percent: 88
+  percent: 100
 ---
 
 ## Current Position
 
-Phase: 14 (trust-isolation) — COMPLETE; Phases 15–16 in progress this session.
+Phase: 16 (memexos-one) — COMPLETE. All 16 roadmap phases done; 1.0 candidate.
 
-- Phases 10–14 (trail-discovery, memex-shell, connector-matrix, agent-federation,
-  trust-isolation) completed in a single autonomous session (commits 9bb5035d →
-  a709c9d8). 418 tests passing, tsc clean, red-line security tests green.
+- Phases 10–16 completed across two autonomous sessions (9bb5035d → b92f686b).
+  479 tests passing, tsc clean, red-line security tests green.
+- Live-verified this session: Node-runtime gateway (REST+WS), containerized
+  full-stack E2E (scope create + OCC write through 6 compose services),
+  backup→restore→chain-verify cycle, 7-step eval journey ×2 (baseline +
+  regression compare), SHA-256SUMS generate/verify.
 - Canonical roadmap from Phase 7 onward: `.harness/ROADMAP.md`. Per-phase specs:
-  `.planning/phases/NN-*/NN-PHASE-SPEC.md` (09–14 written; 15–16 this session).
-- Deviation log: `.harness/implementation-notes.md` (per-phase sections, including
-  carried-forward live-environment items).
-- Next: Phase 15 (deploy-everywhere), Phase 16 (memexos-one).
+  `.planning/phases/NN-*/NN-PHASE-SPEC.md` (09–16).
+- Remaining: live-environment items list in `.harness/implementation-notes.md`
+  (Phase 16 section has the consolidated list).
 
 ## Last Session
 
-- Timestamp: 2026-06-12T02:30:00.000Z
-- Stopped At: .planning ↔ .harness drift reconciled (this file + ROADMAP Progress
-  table now match .harness/state.json reality). Phase 15/16 PHASE-SPECs next.
+- Timestamp: 2026-06-12T10:15:00.000Z
+- Stopped At: Phase 15+16 complete (ADR-48/49); release gate defined and
+  exercised; 1.0 candidate ready pending live-environment verification items.
 - Resume File: .harness/state.json (single source of truth for position)
 
 ## Roadmap Evolution

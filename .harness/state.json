@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "active",
+    "status": "idle",
     "started_at": "2026-06-12T02:00:00.000Z",
-    "last_session": "2026-06-12T02:50:00.000Z",
-    "last_active": "2026-06-12T02:50:00.000Z"
+    "last_session": "2026-06-12T10:15:00.000Z",
+    "last_active": "2026-06-12T10:15:00.000Z"
   },
   "position": {
-    "phase": "15-deploy-everywhere",
-    "active": "Phase 15 complete: TD-M Node-22 convergence (live WS+REST verified), memex doctor/backup/restore/service, profiles, install scripts, deploy compose (full-stack containerized E2E passed: scope create + OCC write through 6 services), ADR-48. 449 tests, tsc clean.",
+    "phase": "16-memexos-one",
+    "active": "ALL 16 ROADMAP PHASES COMPLETE — 1.0 candidate. 479 tests, tsc clean. Phase 15: Node-22 convergence (TD-M), doctor/backup/restore/service/profiles, install scripts, deploy compose (containerized E2E passed), ADR-48. Phase 16: skills install+guard, eval journey (ran live 2x) + regression gate, SECURITY/QUICKSTART/CHANGELOG, SHA-256SUMS, ADR-49.",
     "resume_file": null,
-    "stopped_at": "Phase 15 closed (commits 61c7d01c..6d947a62). Next: Phase 16 (memexos-one) — skills install side + skills-guard, eval metrics layer, QUICKSTART/SECURITY/CHANGELOG, release checksums, closeout ADR."
+    "stopped_at": "1.0 candidate. Remaining work is the live-environment verification list (consolidated in implementation-notes Phase 16 section): three-platform installs, LLM-keyed journey extension, registry API verification, docker exec containment, Pi-SDK terminal mode, email production binding, iii version pinning. Release procedure: ADR-49 D-1 gate order."
   }
 }

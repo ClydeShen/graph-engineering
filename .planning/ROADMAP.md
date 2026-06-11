@@ -125,8 +125,8 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | 12. Connector Matrix | — | Complete (442d47e1, 392 tests) | 2026-06-12 |
 | 13. Agent Federation | — | Complete (ba442b72, 401 tests) | 2026-06-12 |
 | 14. Trust Isolation | — | Complete (a709c9d8, 418 tests) | 2026-06-12 |
-| 15. Deploy Everywhere | — | Not started | — |
-| 16. MemexOS 1.0 | — | Not started | — |
+| 15. Deploy Everywhere | — | Complete (7bf119b5, 449 tests) | 2026-06-12 |
+| 16. MemexOS 1.0 | — | Complete (b92f686b, 479 tests) | 2026-06-12 |
 
 ### Phase 5: Architecture Hardening
 
