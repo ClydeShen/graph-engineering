@@ -165,7 +165,8 @@ async function boot() {
   }));
   procs.push(start({
     tag: 'gateway', color: C.magenta,
-    cmd: 'bun', args: ['run', 'packages/gateway/src/index.ts'],
+    // TD-M (ADR-57): Node 22 single runtime — gateway no longer needs Bun.
+    cmd: 'node', args: ['--import', 'tsx/esm', 'packages/gateway/src/index.ts'],
     env: appEnv,
   }));
 }

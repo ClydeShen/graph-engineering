@@ -160,6 +160,46 @@ export function isPaired(agentId: string): boolean {
   return store.get(agentId)?.paired ?? false;
 }
 
+/**
+ * isPaired with DB fallback (TD-G closeout, Phase 15). A pairing established
+ * on another replica — or before this process booted, if warmPairingCache
+ * raced — exists only in agent_pairing. On a cache miss, read through and
+ * hydrate the hot cache so subsequent checks stay sync-fast.
+ */
+export async function isPairedAsync(agentId: string): Promise<boolean> {
+  const cached = store.get(agentId);
+  if (cached) return cached.paired;
+  if (!persistencePool) return false;
+  try {
+    const { rows } = await persistencePool.query<{
+      code_hash: string;
+      salt: string;
+      created_at: Date;
+      last_generated_at: Date;
+      failed_attempts: number;
+      paired: boolean;
+    }>(
+      `SELECT code_hash, salt, created_at, last_generated_at, failed_attempts, paired
+       FROM agent_pairing WHERE agent_id = $1`,
+      [agentId],
+    );
+    if (rows.length === 0) return false;
+    const row = rows[0]!;
+    store.set(agentId, {
+      hash: row.code_hash,
+      salt: row.salt,
+      agentId,
+      createdAt: row.created_at.getTime(),
+      lastGeneratedAt: row.last_generated_at.getTime(),
+      failedAttempts: row.failed_attempts,
+      paired: row.paired,
+    });
+    return row.paired;
+  } catch {
+    return false; // DB down: fail closed for unknown agents
+  }
+}
+
 export function _resetStoreForTest(): void {
   store.clear();
   persistencePool = null;

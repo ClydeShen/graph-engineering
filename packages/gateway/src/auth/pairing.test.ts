@@ -5,6 +5,7 @@ import {
   verifyPairingCode,
   markPaired,
   isPaired,
+  isPairedAsync,
   configurePairingPersistence,
   warmPairingCache,
   TTL_SECONDS,
@@ -127,5 +128,50 @@ describe('agent pairing', () => {
     const loaded = await warmPairingCache(pool);
     expect(loaded).toBe(1);
     expect(isPaired('agent-warm')).toBe(true);
+  });
+
+  // ── isPairedAsync — TD-G closeout (Phase 15): cross-replica DB read-through ──
+
+  it('isPairedAsync falls back to DB on cache miss and hydrates the cache (G7)', async () => {
+    const now = new Date();
+    const query = vi.fn().mockResolvedValue({
+      rows: [{
+        code_hash: 'h',
+        salt: 's',
+        created_at: now,
+        last_generated_at: now,
+        failed_attempts: 0,
+        paired: true,
+      }],
+    });
+    configurePairingPersistence({ query } as unknown as Pool);
+
+    expect(isPaired('agent-replica')).toBe(false); // memory miss
+    await expect(isPairedAsync('agent-replica')).resolves.toBe(true); // DB hit
+    expect(isPaired('agent-replica')).toBe(true); // cache hydrated
+    expect(query).toHaveBeenCalledTimes(1);
+
+    await expect(isPairedAsync('agent-replica')).resolves.toBe(true);
+    expect(query).toHaveBeenCalledTimes(1); // second check served from cache
+  });
+
+  it('isPairedAsync returns false for unknown agents and fails closed on DB error', async () => {
+    configurePairingPersistence({
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as Pool);
+    await expect(isPairedAsync('nobody')).resolves.toBe(false);
+
+    configurePairingPersistence({
+      query: vi.fn().mockRejectedValue(new Error('db down')),
+    } as unknown as Pool);
+    await expect(isPairedAsync('nobody')).resolves.toBe(false);
+  });
+
+  it('isPairedAsync without persistence pool uses memory only', async () => {
+    configurePairingPersistence(null);
+    await expect(isPairedAsync('ghost')).resolves.toBe(false);
+    mustGenerate('agent-mem');
+    markPaired('agent-mem');
+    await expect(isPairedAsync('agent-mem')).resolves.toBe(true);
   });
 });

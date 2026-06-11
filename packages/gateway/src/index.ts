@@ -27,7 +27,7 @@ import { buildMcpRoute } from './routes/mcp.js';
 import { buildAgentsRoute } from './routes/agents.js';
 import { buildStreamRoute } from './routes/stream.js';
 import { buildSkillsRoute } from './routes/skills.js';
-import { buildWsRoute } from './routes/ws-protocol.js';
+import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
 import { OpenAICompatibleProvider, loadMemexConfig } from '@graph/shared';
@@ -137,24 +137,36 @@ void warmPairingCache(pool).catch(() => {
 
 const app = buildApp(pool, ddlPool, wMax);
 
-// /ws mount — Bun runtime only ('hono/bun' references the Bun global; under
-// Node/vitest this block is skipped and the REST surface is unaffected).
-let websocket: unknown;
-if (typeof (globalThis as Record<string, unknown>)['Bun'] !== 'undefined') {
-  const ws = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
-  app.route('/', ws.app);
-  websocket = ws.websocket;
-}
-
 const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? 3000);
 // ADR-44 D-2: bind localhost by default — exposing the gateway is an explicit choice.
 const gatewayHost = process.env.MEMEX_BIND ?? '127.0.0.1';
 
+// ── Runtime split (TD-M, ADR-57): Node 22 is the primary supported runtime. ──
+// Bun remains a compatibility branch — the same app + WS protocol behind a
+// different upgrade adapter. Under vitest neither branch starts a server.
+const isBun = typeof (globalThis as Record<string, unknown>)['Bun'] !== 'undefined';
+let websocket: unknown;
+
+if (isBun) {
+  const ws = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
+  app.route('/', ws.app);
+  websocket = ws.websocket;
+} else if (!process.env['VITEST']) {
+  // '@hono/node-ws' needs the same Hono instance that serve() runs — /ws is
+  // registered on the main app, then the upgrade is injected into the server.
+  const { serve } = await import('@hono/node-server');
+  const { injectWebSocket } = await buildWsRouteNode(app, pool, wMax, gatewayEmbeddingProvider);
+  const server = serve({ fetch: app.fetch, port: gatewayPort, hostname: gatewayHost });
+  injectWebSocket(server);
+}
+
 logger.child({ component: 'gateway' }).info(
-  { port: gatewayPort, host: gatewayHost, url: `http://${gatewayHost}:${gatewayPort}` },
+  { port: gatewayPort, host: gatewayHost, runtime: isBun ? 'bun' : 'node', url: `http://${gatewayHost}:${gatewayPort}` },
   'gateway.ready',
 );
 
+// Bun.serve consumes this default export (`bun run src/index.ts`); under Node
+// the server is already started above and this export is inert.
 export default {
   port: gatewayPort,
   hostname: gatewayHost,

@@ -20,6 +20,7 @@ import {
   admitMessage,
   WsBroadcaster,
   WS_MESSAGE_LIMIT_PER_SEC,
+  makeWsConnectionHandlers,
 } from './ws-protocol.js';
 
 const pool = {} as Pool;
@@ -135,5 +136,56 @@ describe('WsBroadcaster', () => {
     const evt = { type: 'trail_event' as const, event_type: 'x', payload: {}, scope_id: 's', timestamp: 't' };
     b.deliver(evt); // throws internally → dropped
     expect(() => b.deliver(evt)).not.toThrow();
+  });
+});
+
+// ── makeWsConnectionHandlers — runtime-agnostic lifecycle (TD-M, ADR-57) ──────
+
+describe('makeWsConnectionHandlers', () => {
+  function fakeSocket() {
+    const sent: string[] = [];
+    let closed: { code?: number; reason?: string } | null = null;
+    return {
+      sent,
+      get closed() { return closed; },
+      send: (d: string) => { sent.push(d); },
+      close: (code?: number, reason?: string) => { closed = { code, reason }; },
+    };
+  }
+
+  it('open → subscribe → broadcast → close detaches (full lifecycle, G1)', async () => {
+    const broadcaster = new WsBroadcaster();
+    const handlers = makeWsConnectionHandlers(deps, broadcaster)();
+    const ws = fakeSocket();
+
+    handlers.onOpen(undefined, ws);
+    await handlers.onMessage({ data: JSON.stringify({ type: 'subscribe' }) }, ws);
+    broadcaster.deliver({ type: 'trail_event', event_type: 'memory_updated', payload: {}, scope_id: 'any', timestamp: 't' });
+    expect(ws.sent).toHaveLength(1);
+    expect(JSON.parse(ws.sent[0]!)).toMatchObject({ type: 'trail_event', scope_id: 'any' });
+
+    handlers.onClose();
+    broadcaster.deliver({ type: 'trail_event', event_type: 'memory_updated', payload: {}, scope_id: 'any', timestamp: 't' });
+    expect(ws.sent).toHaveLength(1); // detached — no further delivery
+  });
+
+  it('closes the socket with 1008 when the message rate budget is exceeded', async () => {
+    const handlers = makeWsConnectionHandlers(deps, new WsBroadcaster())();
+    const ws = fakeSocket();
+    handlers.onOpen(undefined, ws);
+    for (let i = 0; i < WS_MESSAGE_LIMIT_PER_SEC; i++) {
+      await handlers.onMessage({ data: '{"type":"subscribe"}' }, ws);
+    }
+    expect(ws.closed).toBeNull();
+    await handlers.onMessage({ data: '{"type":"subscribe"}' }, ws);
+    expect(ws.closed).toMatchObject({ code: 1008 });
+  });
+
+  it('replies with protocol errors through the same socket (invalid JSON)', async () => {
+    const handlers = makeWsConnectionHandlers(deps, new WsBroadcaster())();
+    const ws = fakeSocket();
+    handlers.onOpen(undefined, ws);
+    await handlers.onMessage({ data: 'not-json' }, ws);
+    expect(JSON.parse(ws.sent[0]!)).toMatchObject({ type: 'error', message: 'invalid JSON' });
   });
 });

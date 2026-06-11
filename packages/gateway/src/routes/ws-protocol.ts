@@ -170,13 +170,57 @@ export class WsBroadcaster {
   }
 }
 
-// ── Route assembly (Bun runtime) ─────────────────────────────────────────────
+// ── Route assembly ────────────────────────────────────────────────────────────
+
+/** Minimal socket surface shared by Bun ('hono/bun') and Node ('@hono/node-ws'). */
+export interface WsLikeSocket {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+}
 
 /**
- * Build the /ws route. Async because 'hono/bun' references the Bun global at
- * import time — the dynamic import keeps this module loadable under Node
- * (vitest) where only the protocol logic above is exercised. Called from the
- * production entry point (index.ts, Bun runtime) only.
+ * Per-connection lifecycle handlers — runtime-agnostic core shared by the Bun
+ * and Node upgrade adapters (TD-M, ADR-57). Both runtimes' upgradeWebSocket
+ * call this factory once per connection.
+ */
+export function makeWsConnectionHandlers(
+  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider },
+  broadcaster: WsBroadcaster,
+): () => {
+  onOpen(evt: unknown, ws: WsLikeSocket): void;
+  onMessage(evt: { data?: unknown }, ws: WsLikeSocket): Promise<void>;
+  onClose(): void;
+} {
+  return () => {
+    const state = newConnectionState();
+    let attached: BroadcastClient | null = null;
+    return {
+      onOpen(_evt: unknown, ws: WsLikeSocket) {
+        attached = { send: (d: string) => ws.send(d), state };
+        broadcaster.attach(attached);
+        void broadcaster.start(deps.pool).catch(() => {
+          /* LISTEN unavailable (e.g. mock pool) — request/response path still works */
+        });
+      },
+      async onMessage(evt: { data?: unknown }, ws: WsLikeSocket) {
+        if (!admitMessage(state)) {
+          ws.close(1008, 'message rate exceeded');
+          return;
+        }
+        const reply = await handleWsMessage(deps, String(evt.data), state);
+        if (reply !== null) ws.send(JSON.stringify(reply));
+      },
+      onClose() {
+        if (attached) broadcaster.detach(attached);
+      },
+    };
+  };
+}
+
+/**
+ * Build the /ws route for the Bun runtime. Async because 'hono/bun' references
+ * the Bun global at import time — the dynamic import keeps this module loadable
+ * under Node (vitest) where only the protocol logic above is exercised.
  */
 export async function buildWsRoute(
   pool: Pool,
@@ -187,35 +231,28 @@ export async function buildWsRoute(
   const { upgradeWebSocket, websocket } = createBunWebSocket();
   const app = new Hono();
   const broadcaster = new WsBroadcaster();
-  const deps = { pool, wMax, embed };
-
-  app.get(
-    '/ws',
-    upgradeWebSocket(() => {
-      const state = newConnectionState();
-      let attached: BroadcastClient | null = null;
-      return {
-        onOpen(_evt, ws) {
-          attached = { send: (d: string) => ws.send(d), state };
-          broadcaster.attach(attached);
-          void broadcaster.start(pool).catch(() => {
-            /* LISTEN unavailable (e.g. mock pool) — request/response path still works */
-          });
-        },
-        async onMessage(evt, ws) {
-          if (!admitMessage(state)) {
-            ws.close(1008, 'message rate exceeded');
-            return;
-          }
-          const reply = await handleWsMessage(deps, String(evt.data), state);
-          if (reply !== null) ws.send(JSON.stringify(reply));
-        },
-        onClose() {
-          if (attached) broadcaster.detach(attached);
-        },
-      };
-    }),
-  );
-
+  // `as never`: Bun's handler generics are narrower than the shared shape; the
+  // runtime contract (onOpen/onMessage/onClose) is identical.
+  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed }, broadcaster) as never));
   return { app, websocket, broadcaster };
+}
+
+/**
+ * Mount /ws on the MAIN app for the Node runtime (TD-M, ADR-57 — Node 22 is the
+ * primary supported runtime). '@hono/node-ws' requires the same Hono instance
+ * that serve() runs, because injectWebSocket(server) routes the HTTP upgrade
+ * back through that app's matched route — a sub-app mounted via app.route()
+ * would not receive the upgrade.
+ */
+export async function buildWsRouteNode(
+  app: Hono,
+  pool: Pool,
+  wMax: number,
+  embed: EmbeddingProvider,
+): Promise<{ injectWebSocket: (server: unknown) => void; broadcaster: WsBroadcaster }> {
+  const { createNodeWebSocket } = await import('@hono/node-ws');
+  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  const broadcaster = new WsBroadcaster();
+  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed }, broadcaster) as never));
+  return { injectWebSocket: injectWebSocket as (server: unknown) => void, broadcaster };
 }

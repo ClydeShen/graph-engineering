@@ -29,7 +29,7 @@ import { Hono, type Handler } from 'hono';
 import type { Pool } from 'pg';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { buildMcpServer } from '../mcp/server.js';
-import { isPaired } from '../auth/pairing.js';
+import { isPairedAsync } from '../auth/pairing.js';
 import { isToolAllowed } from '@graph/shared';
 import type { TrustLevel } from '@graph/types/core';
 
@@ -43,7 +43,8 @@ export function buildMcpRoute(pool: Pool): Hono {
   const pairingGuard: Handler = async (c, next) => {
     if (process.env['REQUIRE_AGENT_PAIRING'] !== 'true') return next();
     const agentId = c.req.header('X-Agent-ID');
-    if (!agentId || !isPaired(agentId)) {
+    // isPairedAsync (TD-G): DB read-through so pairings from other replicas hold.
+    if (!agentId || !(await isPairedAsync(agentId))) {
       return c.json({ error: 'Agent not paired. POST /pair with your pairing code.' }, 401);
     }
     return next();
