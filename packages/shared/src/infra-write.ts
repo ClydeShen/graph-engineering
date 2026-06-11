@@ -48,8 +48,12 @@ export async function writeInfraEvent(
     [scopeId, entityId, eventType, canonicalPayload, scopeStatus],
   );
 
-  await pool.query(
-    `UPDATE scope_lineage SET status = $2 WHERE scope_id = $1`,
-    [scopeId, scopeStatus === 'terminated' ? 'closed' : scopeStatus],
-  );
+  // 'archived' events are bookkeeping records (e.g. connector::config_updated)
+  // — they must not move the scope's lifecycle status.
+  if (scopeStatus !== 'archived') {
+    await pool.query(
+      `UPDATE scope_lineage SET status = $2 WHERE scope_id = $1`,
+      [scopeId, scopeStatus === 'terminated' ? 'closed' : scopeStatus],
+    );
+  }
 }
