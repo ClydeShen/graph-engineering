@@ -19,3 +19,4 @@ export * from './command-gate.js';
 export * from './notify.js';
 export * from './event-writer.js';
 export * from './knapsack.js';
+export * from './cold-start.js';

@@ -273,7 +273,9 @@ export async function runContextAssemblyPipeline(
     ccrStore?: CcrStore;
     memReflect?: {
       fn: (input: MemReflectInput) => Promise<MemReflectOutput>;
-      hasEpisodic: (scopeId: string) => Promise<boolean>;
+      /** Implement with isScopeColdStart from @graph/shared (CR-01/WR-01, 09-REVIEW.md)
+       *  so this and the Gateway's cold_start check cannot drift. */
+      isColdStart: (scopeId: string) => Promise<boolean>;
     };
   }
 ): Promise<AssembledContext> {
@@ -312,10 +314,10 @@ export async function runContextAssemblyPipeline(
   }
 
   // cold_start Reflection Track injection (D-10): fires when the Worker opts in
-  // (shouldReflect()) and no episodic records exist yet for this scope.
+  // (shouldReflect()) and this is the first turn of the scope.
   if (opts?.memReflect && worker.shouldReflect() && result.context !== null) {
-    const hasEpisodic = await opts.memReflect.hasEpisodic(scopeId);
-    if (!hasEpisodic) {
+    const isColdStart = await opts.memReflect.isColdStart(scopeId);
+    if (isColdStart) {
       const reflection = await opts.memReflect.fn({
         query_text: safeStringify(currentInput),
         trigger_type: 'cold_start',

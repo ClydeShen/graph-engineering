@@ -26,8 +26,27 @@ import {
 } from './watchdog-sql.js';
 import { assembleContext, type AssembledContext } from '@graph/workers/context/assemble';
 import { makeKnapsackGraph } from './knapsack-graph.js';
-import type { EmbeddingProvider } from '@graph/shared';
+import { isScopeColdStart, type EmbeddingProvider } from '@graph/shared';
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
+
+/**
+ * Extract a short, retrieval-relevant string from an event payload for mem::reflect's
+ * query_text (WR-01/WR-03, 09-REVIEW.md). Prefers known descriptive fields over
+ * serializing the entire payload, which can be large/arbitrary nested JSON and
+ * degrades BM25 (plainto_tsquery) and embedding relevance.
+ */
+function extractQueryText(payload: unknown): string {
+  if (typeof payload === 'string') return payload;
+  if (payload !== null && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    for (const key of ['description', 'intent', 'summary', 'output', 'content', 'message', 'text']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.length > 0) return value;
+    }
+  }
+  const json = JSON.stringify(payload);
+  return json.length > 500 ? json.slice(0, 500) : json;
+}
 
 export type AgentEventInput = z.infer<typeof EventBodySchema>;
 
@@ -76,13 +95,9 @@ export async function processAgentTurn(
 
     // cold_start Reflection Track injection (D-10): production wiring.
     if (context !== null && !scopeClosed) {
-      const { rows: epiRows } = await pool.query<{ cnt: string }>(
-        'SELECT COUNT(*)::text AS cnt FROM episodic_memory WHERE scope_id = $1',
-        [scopeId],
-      );
-      if (epiRows[0].cnt === '0') {
+      if (await isScopeColdStart(pool, scopeId)) {
         const reflection = await memReflect(pool, embeddingProvider, {
-          query_text: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload),
+          query_text: extractQueryText(event.payload),
           trigger_type: 'cold_start',
           w_max: wMax,
           scope_id: scopeId,
