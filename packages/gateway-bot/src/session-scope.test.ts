@@ -19,7 +19,7 @@ vi.mock('@graph/control-plane/nesting', () => ({
   nestScope: (...a: unknown[]) => mockNestScope(...a),
 }));
 
-import { resolveSessionScope, sessionIntent } from './session-scope.js';
+import { resolveSessionScope, resolveScopeTip, sessionIntent } from './session-scope.js';
 
 /** Pool whose client.query dispatches on SQL shape. */
 function makePool(opts: {
@@ -103,5 +103,30 @@ describe('resolveSessionScope (TD-E)', () => {
     // 5s age with a 1s timeout → expired → fresh scope
     const result = await resolveSessionScope(pool, 'k', 1000);
     expect(result.resumed).toBe(false);
+  });
+});
+
+describe('resolveScopeTip (Phase 12 cross-platform continuation)', () => {
+  function tipPool(opts: { status?: string; tipHash?: string }): Pool {
+    const query = vi.fn((sql: string) => {
+      if (sql.includes('SELECT status FROM scope_lineage')) {
+        return Promise.resolve({ rows: opts.status ? [{ status: opts.status }] : [] });
+      }
+      if (sql.includes('FROM execution_event_log')) {
+        return Promise.resolve({ rows: opts.tipHash ? [{ version_hash: opts.tipHash }] : [] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    return { query } as unknown as Pool;
+  }
+
+  it('returns the live scope tip so any channel can continue the same Trail', async () => {
+    const result = await resolveScopeTip(tipPool({ status: 'active', tipHash: 'z'.repeat(64) }), 'scope-x');
+    expect(result).toEqual({ scopeId: 'scope-x', predecessorHash: 'z'.repeat(64) });
+  });
+
+  it('returns null for closed or unknown scopes', async () => {
+    expect(await resolveScopeTip(tipPool({ status: 'closed', tipHash: 'z'.repeat(64) }), 's')).toBeNull();
+    expect(await resolveScopeTip(tipPool({}), 's')).toBeNull();
   });
 });

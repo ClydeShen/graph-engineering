@@ -212,6 +212,40 @@ T6 was originally "graph inspection TUI." Superseded: graph visualization belong
 Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
 a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
 
+## Phase 12 — Connector Matrix (2026-06-11)
+
+### Slack implemented without the Slack SDK
+
+Socket Mode is just apps.connections.open (fetch) + a WSS consumer (global WebSocket) +
+chat.postMessage. Envelope ack-before-dispatch is the critical protocol detail (Slack
+redelivers unacked envelopes). Zero new dependencies; transports injectable for tests.
+
+### Email transport is a seam, not a binding
+
+imapflow/nodemailer (or any IMAP/SMTP lib) binds to the EmailTransport interface at
+install time — could not be network-installed in this run, and the connector logic is
+fully tested against fakes. Production binding is a Phase 15 install-script step.
+
+### Cron registry writes ride writeInfraEvent with 'archived'
+
+ADR-45's registry-scope auto-close hazard is avoided by never routing registry writes
+through the Gateway events path, and 'archived' infra events no longer touch
+scope_lineage status (infra-write.ts change). Job identity = payload.name, latest
+Snapshot wins; no per-fire writeback (a fired-marker Snapshot per minute would be noise) —
+dedup is the run-scope intent existence check.
+
+### Cron delivery is a polling sweep, not a scope_closed subscriber
+
+Connectors live in the gateway-bot process, which is not an iii worker — a durable
+subscriber on scope_closed can't call DeliveryRouter from there. The minute loop sweeps
+closed cron:* scopes lacking a cron::delivered marker. At most one minute of delivery
+latency; acceptable for scheduled jobs.
+
+### Cross-platform continuation = explicit scope reference (Phase 12 level)
+
+resolveScopeTip(scopeId) lets any channel continue a live Trail. Automatic continuation
+by unified identity (same_as) is Phase 13 as planned.
+
 ## Phase 11 — MemexShell (2026-06-11)
 
 ### TD-H resolution differs from the ledger's framing

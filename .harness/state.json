@@ -3,13 +3,13 @@
   "session": {
     "status": "active",
     "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-11T22:10:00.000Z",
-    "last_active": "2026-06-11T22:10:00.000Z"
+    "last_session": "2026-06-11T23:30:00.000Z",
+    "last_active": "2026-06-11T23:30:00.000Z"
   },
   "position": {
-    "phase": "11-memex-shell",
-    "active": "Phase 11 core implementation complete (commits b2d13f45, 393fdcae, e2f74878, 3b5a82b8 + closeout). TD-E/F/G/H cleared; ConnectorAdapter frozen; realtime API live; onboard/terminal/dashboard-v0 shipped.",
-    "resume_file": ".planning/phases/11-memex-shell/11-PHASE-SPEC.md",
-    "stopped_at": "Phase 11 closeout: 356 tests, tsc clean. Carried-forward items in implementation-notes (Pi-SDK interactive mode, UI-SPEC console, live E2E gates). Next: Phase 12 (connector-matrix) per 12-PHASE-SPEC DoR — ConnectorAdapter + config slots + TD-E prerequisites all satisfied."
+    "phase": "12-connector-matrix",
+    "active": "Phase 12 implementation complete (commits ada4f79d, 9af60ff0, f5f48a0e + closeout). Five connectors against the frozen contract; ADR-45 cron live; DeliveryRouter with expects_reply slot; cross-platform continuation helper.",
+    "resume_file": ".planning/phases/12-connector-matrix/12-PHASE-SPEC.md",
+    "stopped_at": "Phase 12 closeout: 392 tests, tsc clean. Email transport binding + live E2E (G5 cross-platform journey, G7 mail container) deferred to install/live environment. Next: Phase 13 (agent-federation) — TD-I skill granularity decision first per 13-PHASE-SPEC."
   }
 }

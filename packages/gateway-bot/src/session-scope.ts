@@ -38,6 +38,33 @@ export interface SessionScope {
   resumed: boolean;
 }
 
+/**
+ * Cross-platform continuation (Phase 12 deliverable #5): continue an EXPLICIT
+ * scope from any channel. The state lives in the graph — same Trail, new
+ * platform; Knapsack assembles the context from the shared scope. Identity-
+ * based automatic continuation (same_as) is Phase 13.
+ *
+ * Returns null when the scope does not exist or is already closed.
+ */
+export async function resolveScopeTip(
+  pool: Pool,
+  scopeId: string,
+): Promise<{ scopeId: string; predecessorHash: string } | null> {
+  const { rows: lineage } = await pool.query<{ status: string }>(
+    `SELECT status FROM scope_lineage WHERE scope_id = $1`,
+    [scopeId],
+  );
+  if (lineage.length === 0 || lineage[0]!.status !== 'active') return null;
+
+  const { rows: tip } = await pool.query<{ version_hash: string }>(
+    `SELECT version_hash FROM execution_event_log
+     WHERE scope_id = $1 ORDER BY id DESC LIMIT 1`,
+    [scopeId],
+  );
+  if (tip.length === 0) return null;
+  return { scopeId, predecessorHash: tip[0]!.version_hash };
+}
+
 export async function resolveSessionScope(
   pool: Pool,
   sessionKey: string,
