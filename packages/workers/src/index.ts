@@ -23,8 +23,9 @@ import { bootstrapAgentRegistry } from './boot/bootstrap.js';
 import { FrontierSchedulerWorker, FRONTIER_TRIGGER_CONFIG } from './scheduler/frontier.worker.js';
 import { PatternDiscoveryWorker, PATTERN_DISCOVERY_CRON_TRIGGER } from './patterns/discover.worker.js';
 import { ConflictResolverWorker, FUNCTION_ID as CONFLICT_RESOLVER_FUNCTION_ID } from './concrete/conflict-resolver.worker.js';
-import { EpisodicMemoryWorker, EPISODIC_TRIGGER_CONFIG } from './memory/episodic.worker.js';
 import { SemanticMemoryWorker, SEMANTIC_TRIGGER_CONFIG } from './memory/semantic.worker.js';
+import { TemplateProposalWorker, TEMPLATE_PROPOSAL_TRIGGER_CONFIG } from './memory/template-proposal.worker.js';
+import { memReflect, type MemReflectInput } from './memory/reflect.function.js';
 import {
   MemorySynthesizerWorker,
   SYNTHESIZER_CRON_TRIGGER,
@@ -103,22 +104,22 @@ reg<{ scope_id?: string }>(FRONTIER_TRIGGER_CONFIG, async (p) => {
   return { dispatched: true };
 });
 
-// graph::memory::episodic — durable:subscriber on graph::memory::episodic::ingest
-const episodicWorker = new EpisodicMemoryWorker(memory, eventWriter);
-reg<{ scope_id: string; entity_id: string; content: string; predecessor_hash: string }>(
-  EPISODIC_TRIGGER_CONFIG,
-  async (p) => {
-    await episodicWorker.onEvent(p.scope_id, p.entity_id, p.content, p.predecessor_hash);
-    return { written: true };
-  },
-);
-
 // graph::memory::semantic — durable:subscriber on graph::scope::closed
 const semanticWorker = new SemanticMemoryWorker(trailReader, memory, eventWriter, llmProvider, embeddingProvider);
 reg<{ scope_id: string; entity_id: string; predecessor_hash: string }>(
   SEMANTIC_TRIGGER_CONFIG,
   async (p) => {
     await semanticWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);
+    return { written: true };
+  },
+);
+
+// graph::memory::template-proposal — durable:subscriber on graph::scope::closed (D-01 Phase 09)
+const templateProposalWorker = new TemplateProposalWorker(trailReader, memory, eventWriter, llmProvider, embeddingProvider);
+reg<{ scope_id: string; entity_id: string; predecessor_hash: string }>(
+  TEMPLATE_PROPOSAL_TRIGGER_CONFIG,
+  async (p) => {
+    await templateProposalWorker.onScopeClosed(p.scope_id, p.entity_id, p.predecessor_hash);
     return { written: true };
   },
 );
@@ -227,6 +228,13 @@ reg(USER_PROFILE_TRIGGER_CONFIG, () => userProfileWorker.scanAllUsers());
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();
 reg(PATTERN_DISCOVERY_CRON_TRIGGER, () => patternDiscovery.runDiscovery(pool));
+
+// mem::reflect — Reflection Track hybrid retrieval (ADR-21, D-12 Phase 09)
+// No registerTrigger — invoked directly via worker.trigger() or
+// runContextAssemblyPipeline opts.memReflect.fn, not by a topic subscription.
+worker.registerFunction('mem::reflect', async (raw: unknown) => {
+  return memReflect(pool, embeddingProvider, raw as MemReflectInput);
+});
 
 // ---------------------------------------------------------------------------
 // Re-exports for library consumers (HTTP Gateway uses context assembly utils)

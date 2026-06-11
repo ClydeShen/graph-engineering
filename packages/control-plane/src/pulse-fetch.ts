@@ -148,29 +148,6 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
           function_id: 'graph::scheduler::frontier',
           payload: { scope_id: event.scope_id },
         });
-
-        // Also feed episodic memory for task_spawned and agent-originated memory_updated events.
-        // Skip events that EpisodicMemoryWorker itself wrote (memory_type:'episodic') to break
-        // the self-write loop: Episodic writes memory_updated → pg_notify fires → skip here.
-        if (event.event_type === 'task_spawned' || event.event_type === 'memory_updated') {
-          let isEpisodicSelf = false;
-          try {
-            const parsed = JSON.parse(event.payload as string) as Record<string, unknown>;
-            isEpisodicSelf = parsed['memory_type'] === 'episodic';
-          } catch { /* non-JSON payload — treat as agent-originated */ }
-
-          if (!isEpisodicSelf) {
-            await iiiWorker.trigger({
-              function_id: 'graph::memory::episodic',
-              payload: {
-                scope_id: event.scope_id,
-                entity_id: event.entity_id,
-                content: event.payload,
-                predecessor_hash: event.predecessor_hash,
-              },
-            });
-          }
-        }
       }
     } catch (err) {
       log.warn({ event_id: event.id, event_type: event.event_type, err }, LOG_EVENTS.PULSE_ERROR + ' trigger failed — subscriber may not be registered');
