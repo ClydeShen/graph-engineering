@@ -27,6 +27,8 @@ import { buildMcpRoute } from './routes/mcp.js';
 import { buildAgentsRoute } from './routes/agents.js';
 import { buildStreamRoute } from './routes/stream.js';
 import { buildSkillsRoute } from './routes/skills.js';
+import { buildWsRoute } from './routes/ws-protocol.js';
+import { realtimeAuth } from './middleware/realtime-auth.js';
 import { OpenAICompatibleProvider, loadMemexConfig } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
@@ -65,6 +67,13 @@ const gatewayEmbeddingProvider = new OpenAICompatibleProvider({
 export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   const app = new Hono();
 
+  // Realtime auth + connection rate limit (ADR-44 D-2/D-3): token from config
+  // or MEMEX_GATEWAY_TOKEN; no-token mode only while bound to localhost.
+  const realtimeToken = (): string | undefined =>
+    process.env['MEMEX_GATEWAY_TOKEN'] ?? loadMemexConfig()?.gateway?.token;
+  app.use('/v1/stream', realtimeAuth(realtimeToken));
+  app.use('/ws', realtimeAuth(realtimeToken));
+
   // Mount route modules
   app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));
   app.route('/v1/scopes', buildEventsRoute(pool, wMax, gatewayEmbeddingProvider));
@@ -74,6 +83,8 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildMemoryRoute(pool, gatewayEmbeddingProvider));
   app.route('/v1', buildStreamRoute(pool));
   app.route('/v1', buildSkillsRoute());
+  // /ws is mounted by the production entry below — buildWsRoute is async
+  // (dynamic 'hono/bun' import) and Bun-only; buildApp stays sync for tests.
   app.route('/', buildMcpRoute(pool));
   app.route('/', buildAgentsRoute(pool));
 
@@ -124,6 +135,10 @@ void warmPairingCache(pool).catch(() => {
 
 const app = buildApp(pool, ddlPool, wMax);
 
+// /ws mount (Bun runtime only — dynamic 'hono/bun' import inside buildWsRoute).
+const { app: wsApp, websocket } = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
+app.route('/', wsApp);
+
 const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? 3000);
 // ADR-44 D-2: bind localhost by default — exposing the gateway is an explicit choice.
 const gatewayHost = process.env.MEMEX_BIND ?? '127.0.0.1';
@@ -137,6 +152,8 @@ export default {
   port: gatewayPort,
   hostname: gatewayHost,
   fetch: app.fetch,
+  // Bun WS upgrade handler — same object upgradeWebSocket registered (ADR-44 D-1).
+  websocket,
 };
 
 export { app };

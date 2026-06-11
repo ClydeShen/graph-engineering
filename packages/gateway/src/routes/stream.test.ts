@@ -66,7 +66,7 @@ describe('GET /v1/stream', () => {
     expect(mockStreamSSE).toHaveBeenCalledOnce();
   });
 
-  it('forwards pg_notify notification payload to SSE writeSSE', async () => {
+  it('forwards pg_notify pulses as structured TrailSseEvent (point-query enriched)', async () => {
     let capturedNotificationHandler: ((msg: { payload?: string }) => void) | null = null;
     const mockWriteSSE = vi.fn().mockResolvedValue(undefined);
 
@@ -75,7 +75,13 @@ describe('GET /v1/stream', () => {
         capturedNotificationHandler = handler;
       }
     });
-    const pool = makePool(mockClient);
+    // Pool-level query is the point-query enrichment path (ADR-44 D-1).
+    const pool = {
+      connect: vi.fn().mockResolvedValue(mockClient),
+      query: vi.fn().mockResolvedValue({
+        rows: [{ scope_id: 'scope-9', event_type: 'memory_updated' }],
+      }),
+    } as unknown as Pool;
 
     let resolveCallback!: () => void;
     const callbackDone = new Promise<void>((res) => { resolveCallback = res; });
@@ -96,8 +102,20 @@ describe('GET /v1/stream', () => {
     await callbackDone;
 
     expect(capturedNotificationHandler).not.toBeNull();
-    capturedNotificationHandler!({ payload: '{"type":"trail_event"}' });
-    expect(mockWriteSSE).toHaveBeenCalledWith({ data: '{"type":"trail_event"}' });
+    capturedNotificationHandler!({ payload: 'event-id-42' });
+    // The notification handler point-queries asynchronously — flush microtasks.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockWriteSSE).toHaveBeenCalledWith({
+      event: 'trail_event',
+      data: expect.stringContaining('"scope_id":"scope-9"'),
+    });
+    const sent = JSON.parse(
+      (mockWriteSSE.mock.calls[0]![0] as { data: string }).data,
+    ) as { type: string; event_type: string; payload: { event_id: string } };
+    expect(sent.type).toBe('trail_event');
+    expect(sent.event_type).toBe('memory_updated');
+    expect(sent.payload.event_id).toBe('event-id-42');
   });
 
   it('returns 500 when pool.connect() throws (pre-SSE error path)', async () => {
