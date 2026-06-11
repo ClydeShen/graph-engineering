@@ -31,12 +31,35 @@ export class SemanticMemoryWorker {
 
     // LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
     const { vector } = await this.embed.embed(writeGuard(fact));
-    const { id, suggestedMerge } = await this.memory.insertSemanticFact(scopeId, writeGuard(fact), vector);
+    const guardedFact = writeGuard(fact);
+    const { id, suggestedMerge } = await this.memory.insertSemanticFact(scopeId, guardedFact, vector);
 
     if (suggestedMerge !== null) {
+      // Refinement path: >0.89 similarity — same fact restated, supersede (D-08).
       await this.memory.supersede(suggestedMerge.id, id);
+    } else {
+      // Contradiction path (Phase 10): 0.70–0.89 band — about the same thing but
+      // not a restatement. An LLM binary judgement decides whether the old fact
+      // is factually contradicted; only then does supersession fire. The LLM call
+      // is gated on a band hit, so it costs nothing on the common no-candidate path.
+      const candidate = await this.memory.findContradictionCandidate(vector, id);
+      if (candidate !== null) {
+        // LLM CALL — ADR 22 (contradiction judgement; gated on 0.70–0.89 band hit)
+        const verdict = await this.llm.chat([
+          {
+            role: 'system',
+            content:
+              'Two knowledge-base statements follow. Decide if they factually contradict ' +
+              'each other (cannot both be true). Answer with exactly one word: ' +
+              'CONTRADICT or COMPATIBLE.',
+          },
+          { role: 'user', content: `A:\n${candidate.content}\n\nB:\n${guardedFact}` },
+        ]);
+        if (verdict.trim().toUpperCase().startsWith('CONTRADICT')) {
+          await this.memory.supersede(candidate.id, id);
+        }
+      }
     }
-    // No auto-supersede when suggestedMerge is null — per D-08 caller decides
 
     const contentHash = contentFingerprint(fact);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log

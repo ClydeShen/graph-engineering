@@ -119,4 +119,48 @@ describe('SemanticMemoryWorker', () => {
 
     expect(memory.calls.insertSemanticFact[0].embedding).toEqual(Array(1536).fill(0.1));
   });
+
+  // ── Phase 10: contradiction-driven supersession ────────────────────────────
+
+  it('supersedes the candidate when the LLM judges CONTRADICT (0.70–0.89 band)', async () => {
+    memory.setContradictionCandidate({ id: 'old-fact-id', content: 'the sky is green' });
+    mockChat
+      .mockResolvedValueOnce('distilled fact')   // distillation call
+      .mockResolvedValueOnce('CONTRADICT');       // judgement call
+    const worker = new SemanticMemoryWorker(reader, memory, writer, { chat: mockChat }, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(memory.calls.findContradictionCandidate).toEqual(['stub-id']);
+    expect(memory.calls.supersede).toEqual([{ oldId: 'old-fact-id', newId: 'stub-id' }]);
+  });
+
+  it('does NOT supersede when the LLM judges COMPATIBLE', async () => {
+    memory.setContradictionCandidate({ id: 'old-fact-id', content: 'related but true' });
+    mockChat
+      .mockResolvedValueOnce('distilled fact')
+      .mockResolvedValueOnce('COMPATIBLE');
+    const worker = new SemanticMemoryWorker(reader, memory, writer, { chat: mockChat }, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(memory.calls.supersede).toHaveLength(0);
+  });
+
+  it('makes no judgement LLM call when no contradiction candidate exists (cost gate)', async () => {
+    // Default stub: no candidate
+    const worker = new SemanticMemoryWorker(reader, memory, writer, { chat: mockChat }, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(mockChat).toHaveBeenCalledTimes(1); // distillation only
+    expect(memory.calls.supersede).toHaveLength(0);
+  });
+
+  it('skips contradiction check entirely when suggestedMerge fired (refinement wins)', async () => {
+    memory.setSuggestedMergeResult({ id: 'existing-id', content: 'existing fact' });
+    memory.setContradictionCandidate({ id: 'never-checked', content: 'x' });
+    const worker = new SemanticMemoryWorker(reader, memory, writer, { chat: mockChat }, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(memory.calls.findContradictionCandidate).toHaveLength(0);
+    expect(memory.calls.supersede).toEqual([{ oldId: 'existing-id', newId: 'stub-id' }]);
+  });
 });

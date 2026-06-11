@@ -30,6 +30,12 @@ interface EpisodicRepository {
 interface SemanticRepository {
   insertSemanticFact(scopeId: string, content: string, embedding: number[]): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }>;
   supersede(oldId: string, newId: string): Promise<void>;
+  /**
+   * Contradiction-candidate band (Phase 10): similarity 0.70–0.89 — close enough
+   * to be about the same thing, not close enough to be a refinement. The caller
+   * runs an LLM binary judgement; >0.89 is the suggestedMerge path, <0.70 is unrelated.
+   */
+  findContradictionCandidate(embedding: number[], excludeId: string): Promise<{ id: string; content: string } | null>;
 }
 
 /** Procedural memory tier — positive/negative workflow templates and lessons. */
@@ -125,6 +131,25 @@ export class PoolMemoryRepository implements MemoryRepository {
       `UPDATE semantic_memory SET superseded_by = $2 WHERE id = $1`,
       [oldId, newId],
     );
+  }
+
+  async findContradictionCandidate(
+    embedding: number[],
+    excludeId: string,
+  ): Promise<{ id: string; content: string } | null> {
+    const embeddingLiteral = '[' + embedding.join(',') + ']';
+    const { rows } = await this.pool.query<{ id: string; content: string }>(
+      `SELECT id, content
+       FROM semantic_memory
+       WHERE superseded_by IS NULL
+         AND id != $2
+         AND embedding IS NOT NULL
+         AND 1.0 - (embedding <=> $1::vector) BETWEEN 0.70 AND 0.89
+       ORDER BY embedding <=> $1::vector ASC
+       LIMIT 1`,
+      [embeddingLiteral, excludeId],
+    );
+    return rows.length > 0 ? { id: rows[0]!.id, content: rows[0]!.content } : null;
   }
 
   async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void> {
@@ -233,6 +258,7 @@ export class StubMemoryRepository implements MemoryRepository {
     }>,
     insertSemanticFact: [] as Array<{ scopeId: string; content: string; embedding: number[] }>,
     supersede: [] as Array<{ oldId: string; newId: string }>,
+    findContradictionCandidate: [] as string[],
     insertProceduralTemplate: [] as ProceduralTemplateParams[],
     reinforceTemplate: [] as string[],
     getInjectedTemplateIds: [] as string[],
@@ -292,6 +318,21 @@ export class StubMemoryRepository implements MemoryRepository {
 
   async supersede(oldId: string, newId: string): Promise<void> {
     this.calls.supersede.push({ oldId, newId });
+  }
+
+  private _contradictionCandidate: { id: string; content: string } | null = null;
+
+  setContradictionCandidate(result: { id: string; content: string } | null): void {
+    this._contradictionCandidate = result;
+  }
+
+  async findContradictionCandidate(
+    _embedding: number[],
+    excludeId: string,
+  ): Promise<{ id: string; content: string } | null> {
+    this.maybeThrow('findContradictionCandidate');
+    this.calls.findContradictionCandidate.push(excludeId);
+    return this._contradictionCandidate;
   }
 
   async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void> {
