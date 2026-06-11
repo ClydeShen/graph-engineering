@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-11T03:35:42.000Z",
+  "context": "phase",
+  "phase": "09",
+  "phase_name": "memory-layers",
+  "phase_dir": ".planning/phases/09-memory-layers",
+  "plan": 4,
+  "total_plans": 4,
+  "task": 0,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "plan": "09-01",
+      "title": "Migration 012 + MemoryRepository seam extensions + TrailReader.getScopeEvents + Worker.shouldReflect",
+      "commit": "092be4f4",
+      "wave": 1
+    },
+    {
+      "plan": "09-02",
+      "title": "TemplateProposalWorker (onScopeClosed, orphan detection)",
+      "commit": "51d08868",
+      "wave": 2
+    },
+    {
+      "plan": "09-03",
+      "title": "SemanticMemoryWorker embedding + supersession logic",
+      "commit": "3fca5981",
+      "wave": 2
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "plan": "09-04",
+      "wave": 3,
+      "depends_on": ["09-01", "09-02", "09-03"],
+      "depends_on_satisfied": true,
+      "tasks": [
+        "Task 1: reflect.function.ts — memReflect pure function with RRF hybrid search (computeReflectBudget, hybridSearchEpisodic/Semantic/Procedural, sequential greedy truncation)",
+        "Task 2: assemble.ts cold_start opts (AssembledContext.reflectionContent/reflectionTokens, opts.memReflect) + index.ts wiring (remove EpisodicMemoryWorker, register TemplateProposalWorker, SemanticMemoryWorker 5th arg, register mem::reflect iii Function) + process-agent-turn.ts production cold_start wiring + pulse-fetch.ts episodic trigger removal + delete episodic.worker.ts/.test.ts",
+        "Task 3: reflect.function.test.ts — 5 unit tests (computeReflectBudget arithmetic x2, empty-result path, budget exhaustion, embed call count)"
+      ]
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    "GATE4-1 tests same-label isomorphic graphs (not different-label) because WL kernel hashes event_type labels; different labels produce cosine < 0.90 for small 3-node graphs; same labels yield cosine = 1.0",
+    "GATE4-2 uses pgvector unit-vector literals to guarantee threshold conditions without a real embedding provider",
+    "D-08: No auto-supersede — caller (SemanticMemoryWorker) explicitly calls supersede() only when insertSemanticFact returns a non-null suggestedMerge",
+    "occWriteIdempotent must remain exported from packages/shared/src/occ-write.ts — tests/integration/idempotency.test.ts imports it directly (dead-code sprint had wrongly unexported it; fixed in 092be4f4)",
+    "CanonicalEventType has exactly 5 values: plan_created, task_spawned, memory_updated, conflict_detected, scope_closed (packages/types/src/api.ts) — test fixtures must use these, not graph::scope::* strings",
+    "After any worktree-merge (--no-ff), diff pre-merge-base..HEAD --stat against files OUTSIDE the plan's declared files_modified — especially .harness/ROADMAP.md, .harness/state.json, .planning/STATE.md, .planning/ROADMAP.md — to catch stale-base reverts before they land on master"
+  ],
+  "uncommitted_files": [],
+  "next_action": "Spawn gsd-executor (worktree-isolated) for Plan 09-04 (Wave 3, final plan of Phase 9). depends_on 09-01/09-02/09-03 all satisfied. After merge, run the post-merge anti-pattern check: git diff e12e50f1..HEAD --stat and verify .harness/* and .planning/STATE.md|ROADMAP.md are untouched unless intentionally part of 09-04. Then run npm run typecheck && npm test (expect 273+ tests, target ~293+ after 09-04's 5 new reflect tests minus 5 deleted episodic.worker.test.ts tests). On success, Phase 9 is complete — update .planning/STATE.md and .planning/ROADMAP.md to mark Phase 9 done and proceed to Phase 6 (Gateway Seam Extraction) planning per roadmap order, or follow current PHASE-SPEC sequencing.",
+  "context_notes": "Repo state is clean and fully committed through e12e50f1 (npm run typecheck clean, 288 tests passing). Untracked files present (.planning/phases/06-gateway-seam-extraction/, .planning/phases/08-context-assembly/08-REVIEW-FIX.md, .planning/phases/11-memex-shell/11-DESIGN-NOTES.md, .planning/tmp/, data/) are pre-existing and unrelated to Phase 9 — do not commit them as part of 09-04 unless instructed. Plan 09-04 is large (3 tasks, 8 files modified including 2 deletions) — consider running it as a single executor without further splitting since its tasks are sequential (Task 2 depends on Task 1's exports, Task 3 tests Task 1's implementation)."
+}
