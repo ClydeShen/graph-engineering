@@ -18,8 +18,7 @@
  */
 
 import type { Pool } from 'pg';
-import { randomUUID } from 'crypto';
-import { canonicalJson } from '@graph/shared';
+import { canonicalJson, writeInfraEvent } from '@graph/shared';
 
 /**
  * Check whether a Scope is currently suspended (ADR 39 lockout).
@@ -88,52 +87,8 @@ export async function checkConvergence(
   };
 }
 
-/**
- * Append an infrastructure event to the scope's Association chain and update scope_lineage.
- *
- * Shared implementation for all Gateway infra-write rights (ADR 24). The version_hash
- * computation follows the standard formula: scope_id|entity_id|predecessor_hash|event_type|payload.
- * Public functions are thin wrappers that name their intent; the SQL invariant lives here once.
- */
-async function writeInfraEvent(
-  pool: Pool,
-  scopeId: string,
-  eventType: string,
-  canonicalPayload: string,
-  scopeStatus: string,
-): Promise<void> {
-  const entityId = randomUUID();
-
-  await pool.query(
-    `INSERT INTO execution_event_log
-       (scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, status)
-     SELECT
-       $1::uuid,
-       $2::uuid,
-       $3,
-       version_hash,
-       encode(
-         digest(
-           $1::text || '|' || $2::text || '|' || version_hash
-             || '|' || $3 || '|' || $4,
-           'sha256'
-         ),
-         'hex'
-       ),
-       $4,
-       $5
-     FROM execution_event_log
-     WHERE scope_id = $1
-     ORDER BY id DESC
-     LIMIT 1`,
-    [scopeId, entityId, eventType, canonicalPayload, scopeStatus],
-  );
-
-  await pool.query(
-    `UPDATE scope_lineage SET status = $2 WHERE scope_id = $1`,
-    [scopeId, scopeStatus === 'terminated' ? 'closed' : scopeStatus],
-  );
-}
+// writeInfraEvent promoted to @graph/shared (Phase 11) — gateway and gateway-bot
+// share one implementation. Public functions below remain thin intent-naming wrappers.
 
 /**
  * Write a scope_closed event directly to execution_event_log.

@@ -9,6 +9,15 @@ const mockOccWrite = vi.fn().mockResolvedValue({
 
 vi.mock('@graph/shared', () => ({ occWrite: mockOccWrite }));
 
+const mockResolveSessionScope = vi.fn().mockResolvedValue({
+  scopeId: 'session-scope-id',
+  predecessorHash: 's'.repeat(64),
+  resumed: true,
+});
+vi.mock('./session-scope.js', () => ({
+  resolveSessionScope: (...a: unknown[]) => mockResolveSessionScope(...a),
+}));
+
 describe('dispatchMessage router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,5 +53,16 @@ describe('dispatchMessage router', () => {
     const { dispatchMessage } = await import('./router.js');
     const taskId = await dispatchMessage('discord::ch1', 'test', pool, 'int-1');
     expect(typeof taskId).toBe('string');
+  });
+
+  it('TD-E: writes into the resolved session scope with its tip as predecessor', async () => {
+    const pool = {} as Pool;
+    const { dispatchMessage } = await import('./router.js');
+    await dispatchMessage('telegram::123456', 'hello again', pool, 'update-2');
+
+    expect(mockResolveSessionScope).toHaveBeenCalledWith(pool, 'telegram::123456');
+    const [, args] = mockOccWrite.mock.calls[0] as [unknown, { scopeId: string; predecessorHash: string }];
+    expect(args.scopeId).toBe('session-scope-id');
+    expect(args.predecessorHash).toBe('s'.repeat(64));
   });
 });

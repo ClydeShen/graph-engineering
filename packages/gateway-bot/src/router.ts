@@ -1,8 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Pool } from 'pg';
 import { occWrite } from '@graph/shared';
-
-const ZERO_HASH = '0'.repeat(64);
+import { resolveSessionScope } from './session-scope.js';
 
 export async function dispatchMessage(
   sessionKey: string,
@@ -11,13 +10,14 @@ export async function dispatchMessage(
   sourceMessageId: string,
 ): Promise<string> {
   const taskId = randomUUID();
-  // Each gateway message creates its own scope. Production deployments should
-  // pre-create per-session scopes via nestScope() and pass the stable scope ID here.
-  const scopeId = randomUUID();
+  // TD-E (Phase 11): stable session→scope mapping stored in the graph.
+  // Same sessionKey → same scope while live; context accumulates in the Trail
+  // and Knapsack assembles it. Idle timeout rolls to a fresh scope.
+  const { scopeId, predecessorHash } = await resolveSessionScope(pool, sessionKey);
   await occWrite(pool, {
     scopeId,
     entityId: randomUUID(),
-    predecessorHash: ZERO_HASH,
+    predecessorHash,
     eventType: 'task_spawned',
     payload: {
       task_id: taskId,
