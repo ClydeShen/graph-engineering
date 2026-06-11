@@ -125,6 +125,31 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 
 ---
 
+## 技术债清偿轨道（2026-06-11 盘点，编入 Phase 09–15）
+
+> 来源：`.harness/implementation-notes.md`、`docs/未决问题追踪.md`、`09/11-DESIGN-NOTES.md`、代码内 TODO。
+> 原则：每项债务编入"它自然属于的阶段"——该阶段的交付物本来就要触碰这块代码，顺势清偿，不另设独立的"还债阶段"。各项已同步写入对应阶段的核心交付物。
+
+| # | 债务 | 来源 | 清偿阶段 | 理由 |
+|---|---|---|---|---|
+| TD-A | 记忆表缺 ADR-43 provenance 列 | ADR-43 D-4 | **09** ✅ 已编入 plan（migration 012 含 `source_scope_id`+`erased_at`） | 建表时机唯一 |
+| TD-B | Working Memory 无时间窗口去重（P1-F，原"Phase 2 补入"未做）——高频工具调用语义重复，污染 Knapsack token 预算 | 追踪表 P1-F / ADR-11 | **10** | Phase 10 调 Knapsack 权重反馈，去重是同一条 token 效率线 |
+| TD-C | `template_graph` 为非结构化 LLM JSON，模式涌现不可机器比对（G2） | 追踪表 G2 | **10** | TemplateProposalWorker 完整版定稿前必须锁定 edge-list 格式，否则 Trail Discovery 命中率不可测 |
+| TD-D | ADR-20 文档欠账：强化 SQL（P1-D）、归纳触发频率（P2-D）、衰减调度（P2-E） | 追踪表 | **10** | 三项全是 Phase 10 强化闭环的实现内容，实现即归档 |
+| TD-E | `dispatchMessage` 每条消息新建 Scope——会话上下文不在图中累积（Phase 6 MVP 限制） | implementation-notes | **11** | MemexTerminal 持久会话直接踩此坑；Phase 12 跨平台会话连续性以此为前置 |
+| TD-F | `pi-extension` fetch 仍是 stub（返回 mode/args） | 代码 TODO | **11** | Phase 11 交付物 #7 本来就要发布 pi-extension |
+| TD-G | Pairing：明文 in-memory Map、无 rate limit/lockout、重启即失效 | implementation-notes / 11-NOTES §3 | **11**（hermes 六项加固 + DB 持久化）；跨副本同步 → **15** | Phase 11 WS/SSE ADR 已含本地认证，pairing 是同一个 ADR 的范围 |
+| TD-H | Gateway 独立 `gatewayLlmProvider` 绕过 `createLLMProvider()` 路由 | implementation-notes | **11** | Provider 注册表落地时统一收编 |
+| TD-I | AgentCard skill 粒度未定（P1-G，Phase 3 占位的粗粒度词表） | 追踪表 P1-G | **13** | 多候选竞争路由必须先定粒度标准 |
+| TD-J | FrontierScheduler 无循环依赖检测（P1-H，仅靠 TTL+watchdog 兜底） | 追踪表 P1-H | **13** | 内部 delegation 嵌套 Trail 使循环风险实质化 |
+| TD-K | `wait_all_tasks` 2 秒轮询而非 LISTEN/NOTIFY | implementation-notes | **13** | 多 agent 并发等待时轮询延迟与 DB 压力放大 |
+| TD-L | Pi 沙箱预演（P1-B，OCC 预检，原"Phase 4 优化"未做） | 追踪表 P1-B | **13**（可选项） | 多 agent OCC 冲突率上升后才有收益，先观测再决定 |
+| TD-M | Gateway 依赖 Bun 运行时（与 Workers 的 Node 22 双运行时） | TECH_STACK §6 | **15** | 安装脚本/Docker 镜像必须显式处理双运行时 |
+
+未编入项：CommandGate tier-3 LLM 审批（已在 Phase 14 #2）、env 两段式过滤（已在 Phase 14 #3）、G1 遍历代数（post-1.0 候选，无阻塞证据）。
+
+---
+
 ## 08-context-assembly
 
 **目标：** 将 Knapsack Slicing（ADR-13）从规格落地为可运行代码，并补充 CCR 可逆压缩路径，替代 ADR-13 补充中 Level-3 的"熔断挂起"硬截断。
@@ -231,7 +256,12 @@ Plans:
    - 同一 `fingerprint_id` 多次强化时，prompt 注入 `existing_lesson_content`
    - LLM 输出 delta 而非全量重写，避免每次强化覆盖已有要点
 
-**与现有 ADR 的关系：** ADR-25（跨域拓扑算法）；ADR-39（Pattern Discovery 调度）；ADR-36（Knowledge Entity 写时机）。
+6. **技术债清偿（TD-B / TD-C / TD-D）**
+   - **TD-C（本阶段质量门）**：`template_graph` 锁定为结构化 edge-list 格式（节点 = event_type 标签，边 = 抽象接口边），TemplateProposalWorker 的 LLM prompt 输出受 schema 约束——两次对同构 DAG 的提取必须机器可比对，否则 Phase 16 的"Trail Discovery 命中率"指标无法成立。写入 ADR-25 补充。
+   - **TD-B**：Working Memory 时间窗口去重（`SHA256(scope_id|entity_id|event_type|payload_hash)` + 5 分钟窗口，不含 predecessor_hash），拦截不同前驱下的语义重复工具调用——直接减少 Knapsack 装包的无效 token。写入 ADR-11 补充。
+   - **TD-D**：ADR-20 文档欠账随实现归档——强化 SQL（P1-D）、Memory Synthesizer 双触发策略（P2-D：每日 02:00 cron + ≥20 条 episodic 事件触发）、Ebbinghaus 衰减扫描调度（P2-E：每日 03:00，`reinforcement_count=0 AND last_used_at < NOW()-'90 days'` → 逻辑删除）。
+
+**与现有 ADR 的关系：** ADR-25（跨域拓扑算法 + template_graph 格式补充）；ADR-39（Pattern Discovery 调度）；ADR-36（Knowledge Entity 写时机）；ADR-11（去重窗口补充）；ADR-20（强化/归纳/衰减操作规范归档）。
 
 **前置条件：** Phase 09-memory-layers 完成（Episodic + Procedural 表已就位，BM25+HNSW 检索可用）。
 
@@ -282,7 +312,12 @@ Plans:
 
 7. **`packages/cli` connect 工具 + `packages/pi-extension`**
    - `packages/cli`：`memex connect` 命令，将外部 Pi Terminal 连接到本地 Gateway（认证、地址绑定）
-   - `packages/pi-extension`：发布到外部 Pi Terminal 客户端的集成 artifact；类型继承 `@graph/types/shell`
+   - `packages/pi-extension`：发布到外部 Pi Terminal 客户端的集成 artifact；类型继承 `@graph/types/shell`；**清偿 TD-F**——补齐 stub fetch（`src/index.ts` 现仍返回 mode/args，未接真实 Gateway 调用）
+
+8. **技术债清偿（Phase 6 遗留：TD-E / TD-G / TD-H）**
+   - **TD-E（本阶段关键路径）**：修复 `dispatchMessage` 每条消息 `randomUUID()` 新建 Scope 的 MVP 限制——同一 `sessionKey` 映射到稳定 Scope（经 `nestScope()`），会话上下文在图中累积。MemexTerminal 持久会话依赖此项；**Phase 12 跨平台会话连续性以此为硬前置**。
+   - **TD-G**：Pairing 加固到 hermes 六项标准（code 加盐哈希存储、无歧义字母表、rate limit、失败 lockout、constant-time 比较、文件权限）+ 从 in-memory Map 迁移 DB 持久化（重启不失效）。归入本阶段 WS/SSE ADR 的本地认证章节，同一个 ADR 写完。跨副本同步推迟到 Phase 15。
+   - **TD-H**：Gateway 的独立 `gatewayLlmProvider`（直接 new `OpenAICompatibleProvider`）收编进 `createLLMProvider()` / provider 注册表路由——注册表落地后系统内不允许第二条 provider 构造路径。
 
 ### 与现有 ADR 的关系
 
@@ -341,6 +376,7 @@ Plans:
    - home channel 配置入 `~/.memex/config.json`（Phase 11 已建立）；静默输出抑制（silence marker 不投递）
 
 5. **跨平台会话连续性**（相对 hermes 的结构性优势，本阶段验收亮点）
+   - **硬前置：Phase 11 TD-E 已修复**（`dispatchMessage` 稳定 session→Scope 映射）——否则"同一条 Trail 的延续"无从谈起
    - hermes 的 session 是 platform-scoped，明确不支持跨平台合并；Memex 的状态在 Graph——同一用户从 Telegram 发起、在 MemexTerminal 继续、在 Dashboard 查看，天然是同一条 Trail 的延续
    - 验收场景：Telegram 创建任务 → MemexTerminal 接续对话（上下文经 Knapsack 组装自同一 Scope）→ 结果按 origin 投递回 Telegram
 
@@ -380,7 +416,13 @@ Plans:
    - 同一用户的多渠道身份 = 同一 Entity 的多个别名 Snapshot（`same_as` Association），不为每个渠道硬写归一化函数
    - 人和 agent 共用同一身份模型：user、internal worker、external agent 都是图上的 principal Entity
 
-**与现有 ADR 的关系：** ADR-24（入口协议扩展到 A2A）；ADR-25（跨域拓扑——多 agent Trail 是最丰富的模式来源）；新 ADR 待写：Lesson 可见性域、A2A 适配层、多 agent OCC 冲突归因。
+6. **技术债清偿（ADR-42 悬决项：TD-I / TD-J / TD-K；可选 TD-L）**
+   - **TD-I（本阶段前置决策）**：AgentCard skill 粒度标准拍板（P1-G，Phase 3 起悬决）——多候选竞争路由（交付物 #2）无法在"粗粒度词表 + 未定标准"上构建。倾向：两级词表（粗类目 + 可选细标签），spawner 只需声明粗类目，细标签用于同类多候选间重排。随交付物 #2 的新 ADR 一并写入。
+   - **TD-J**：FrontierScheduler 循环依赖检测落地（P1-H，ADR-42 D-6 的 `ERR_CYCLE_DETECTED`）——内部 delegation 的嵌套 Trail 使 `spawned_by` 环成为现实风险，TTL+watchdog 兜底产生的等待延迟在多 agent 场景不可接受。
+   - **TD-K**：`wait_all_tasks` 从 2 秒轮询升级为 LISTEN/NOTIFY 聚合——Phase 3 因 stateless MCP transport 选了轮询；多 agent 并发汇聚（交付物 #1 的结果汇聚回父 Trail）使轮询的延迟与 DB 压力随 agent 数线性放大。
+   - **TD-L（可选，先观测再决定）**：Pi 沙箱预演作 OCC 预检（P1-B）——仅当多 agent OCC 冲突率实测显著时启动，否则维持 YAGNI。
+
+**与现有 ADR 的关系：** ADR-24（入口协议扩展到 A2A）；ADR-25（跨域拓扑——多 agent Trail 是最丰富的模式来源）；ADR-42（skill 粒度 + D-6 循环检测落地）；新 ADR 待写：Lesson 可见性域、A2A 适配层、多 agent OCC 冲突归因。
 
 **前置条件：** Phase 10（Lesson/reinforcement 闭环——共享记忆有内容可共享）；Phase 12（身份前缀 `sender_id` 约定已就位）。
 
@@ -437,6 +479,7 @@ Plans:
 1. **一键安装脚本**（参考 hermes `scripts/install.sh` / `install.ps1`）
    - Linux/macOS/WSL2：`curl | bash`；Windows 原生：`iex (irm ...)`
    - 依赖检测与自动安置：Node 22、PostgreSQL（本机已有 → 复用；没有 → 引导 Docker 路径）；结束自动进入 Onboarding TUI（Phase 11 已建）
+   - **TD-M**：Gateway 依赖 Bun、Workers 依赖 Node 22（TECH_STACK §6 双运行时）——安装脚本与 Docker 镜像必须显式安置两者，或在本阶段评估 Gateway 收敛到单运行时的成本（值变更 vs 类型变更：Hono 本身跨运行时，收敛可能比维护双依赖便宜，届时实测定）
    - 安装方式戳记（git/docker/npm），managed 模式下 onboarding 禁止改 config（hermes managed-install 模式）
 
 2. **Docker 一键部署**
@@ -454,6 +497,7 @@ Plans:
 
 6. **远程 Gateway / 跨机器连续性**
    - Shell（MemexTerminal/Dashboard/cli）连接远程 Core：TLS + token 认证；`memex connect` 扩展为支持远程地址
+   - **TD-G 收尾**：pairing 跨副本同步（Phase 11 已做 DB 持久化，多副本部署场景在此补齐共享存储语义）
    - 一份 Graph 多机访问——办公室桌面与笔记本共享同一 Trail Mesh（落地长期存在的 cross-machine continuity 需求）
 
 7. **备份与恢复**：`memex backup` / `memex restore`（pg_dump 包装）+ 恢复后 hash chain 校验；ledger 不可变性使增量备份天然可行
