@@ -32,7 +32,7 @@ function makeScopeEvents(): EventLogNode[] {
       id: 'ev-1',
       scope_id: 'scope-1',
       entity_id: 'entity-1',
-      event_type: 'graph::scope::opened',
+      event_type: 'task_spawned',
       predecessor_hash: '0'.repeat(64),
       version_hash: 'hash-of-ev1',
       payload: '{}',
@@ -47,7 +47,7 @@ function makeScopeEvents(): EventLogNode[] {
       id: 'ev-2',
       scope_id: 'scope-1',
       entity_id: 'entity-2',
-      event_type: 'graph::scope::closed',
+      event_type: 'scope_closed',
       predecessor_hash: 'hash-of-ev1', // consumes ev-1 → entity-1 NOT orphan
       version_hash: 'hash-of-ev2',     // nothing consumes this → entity-2 IS orphan
       payload: '{}',
@@ -118,8 +118,10 @@ describe('TemplateProposalWorker', () => {
     await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
 
     const episodicWrite = (writer.write as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([args]: [{ eventType: string; payload: { memory_type: string } }]) =>
-        args.eventType === 'memory_updated' && args.payload.memory_type === 'episodic',
+      (call) => {
+        const args = call[0] as { eventType: string; payload: { memory_type: string } };
+        return args.eventType === 'memory_updated' && args.payload.memory_type === 'episodic';
+      },
     );
     expect(episodicWrite).toBeDefined();
     expect(episodicWrite![0]).toMatchObject({
