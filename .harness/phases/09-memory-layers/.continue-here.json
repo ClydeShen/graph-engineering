@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "phase": "09-memory-layers",
+  "task": 4,
+  "total_tasks": 4,
+  "status": "complete",
+  "last_updated": "2026-06-11T17:30:00.000Z",
+  "current_state": "Phase 09 (memory-layers) fully complete and verified. All 4 plans (09-01..09-04) merged to master. Code review CR-01 (Critical) + WR-01/02/03 (Warnings) fixed in 4122a4db. gsd-verifier produced .planning/phases/09-memory-layers/09-VERIFICATION.md with status: passed (7/8 gates VERIFIED, G6 PARTIAL/non-blocking). .harness/ROADMAP.md 09-01..09-04 marked [x]. .planning/STATE.md and .planning/ROADMAP.md updated to reflect 4/4 Complete. Closeout commit: cb6a0269.",
+  "completed_work": [
+    "Migration 012: episodic/semantic/procedural tables with HNSW indexes + ADR-43 source_scope_id/erased_at provenance columns",
+    "TemplateProposalWorker (TPW) replaces EpisodicMemoryWorker as sole episodic writer; full DAG read on scope_closed",
+    "SemanticMemoryWorker supersession: insertSemanticFact returns suggestedMerge when similarity > 0.89; supersede() + valid_until trigger",
+    "mem::reflect hybrid RRF retrieval (BM25 + HNSW, k=60) with cold_start trigger wired into processAgentTurn",
+    "CR-01 fix: packages/shared/src/cold-start.ts isScopeColdStart() — counts execution_event_log==1 to detect first turn (replaces broken episodic_memory count check)",
+    "WR-01/02/03 fixes: shared isScopeColdStart helper, formatProcedural budget overrun fix, extractQueryText short-field extraction",
+    "Regression gate: npm run typecheck (0 errors), npm test (283 passed, 35 skipped, 0 failed)",
+    "gsd-verifier: 09-VERIFICATION.md status=passed",
+    "Tracking updated: .harness/ROADMAP.md plan checkboxes, .planning/STATE.md Current Position/Last Session, .planning/ROADMAP.md already showed 4/4 Complete"
+  ],
+  "remaining_work": [],
+  "decisions_made": [
+    "isScopeColdStart (packages/shared/src/cold-start.ts) is the canonical cold_start signal (D-10) — episodic_memory count is never usable for this purpose since it's only populated on scope_closed",
+    "IN-02 (assemble.ts opts.memReflect.isColdStart/shouldReflect worker-pipeline path has zero production callers) remains an accepted, documented deferral — not a Phase 9 gap, revisit only if/when worker-side reflection is wired up",
+    "G6 marked PARTIAL but non-blocking in verification: gateway production wiring is fully correct and CR-01-fixed; only the dormant worker-pipeline shouldReflect()=false test path is uncovered"
+  ],
+  "blockers": [],
+  "context": "Phase 9 (memory-layers) is the corpus production line for Phase 10 (trail-discovery) — Episodic + Procedural tables and BM25+HNSW retrieval are now live prerequisites per .harness/ROADMAP.md §10-trail-discovery 'Phase 09-memory-layers 完成（Episodic + Procedural 表已就位，BM25+HNSW 检索可用）'.",
+  "next_action": "Run /gsd:discuss-phase 10 (or /gsd:plan-phase 10) to begin Phase 10 (trail-discovery): TemplateProposalWorker full version (positive/negative samples), Skeleton Graph cold-start injection, PatternDiscoveryWorker, Ebbinghaus reinforcement loop, CrystallizeWorker surgical distillation, and tech-debt items TD-B/TD-C/TD-D."
+}
