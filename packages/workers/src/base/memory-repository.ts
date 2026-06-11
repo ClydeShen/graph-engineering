@@ -9,6 +9,8 @@ interface ProceduralTemplateParams {
   embeddingLiteral: string;
   /** pgvector bracketed literal or null when embedding provider failed */
   intentEmbeddingLiteral: string | null;
+  /** When true, this row is a negative sample (anti-pattern). Default: false. */
+  isAntiPattern?: boolean;
 }
 
 interface LessonRecord {
@@ -20,11 +22,14 @@ interface LessonRecord {
 /** Episodic memory tier — records what happened within a Scope. */
 interface EpisodicRepository {
   appendEpisodicTrace(scopeId: string, entityId: string, content: string): Promise<void>;
+  /** Write an LLM-distilled episodic summary for a completed Scope (D-04). */
+  appendEpisodicSummary(scopeId: string, entityId: string, intentSummary: string, outcomeSummary: string, embeddingLiteral: string): Promise<void>;
 }
 
 /** Semantic memory tier — cross-Scope generalised facts. */
 interface SemanticRepository {
-  insertSemanticFact(scopeId: string, content: string): Promise<void>;
+  insertSemanticFact(scopeId: string, content: string, embedding: number[]): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }>;
+  supersede(oldId: string, newId: string): Promise<void>;
 }
 
 /** Procedural memory tier — positive/negative workflow templates and lessons. */
@@ -61,11 +66,62 @@ export class PoolMemoryRepository implements MemoryRepository {
     );
   }
 
-  async insertSemanticFact(scopeId: string, content: string): Promise<void> {
+  async appendEpisodicSummary(
+    scopeId: string,
+    entityId: string,
+    intentSummary: string,
+    outcomeSummary: string,
+    embeddingLiteral: string,
+  ): Promise<void> {
     await this.pool.query(
-      `INSERT INTO semantic_memory (scope_id, content, valid_from, created_at)
-       VALUES ($1, $2, NOW(), NOW())`,
-      [scopeId, content],
+      `INSERT INTO episodic_memory
+         (scope_id, entity_id, content, intent_summary, outcome_summary, embedding, source_scope_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6::vector, $1, NOW())`,
+      [scopeId, entityId, intentSummary + '\n' + outcomeSummary, intentSummary, outcomeSummary, embeddingLiteral],
+    );
+  }
+
+  async insertSemanticFact(
+    scopeId: string,
+    content: string,
+    embedding: number[],
+  ): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }> {
+    const embeddingLiteral = '[' + embedding.join(',') + ']';
+    const { rows } = await this.pool.query<{
+      inserted_id: string;
+      similar_id: string | null;
+      similar_content: string | null;
+    }>(
+      `WITH inserted AS (
+         INSERT INTO semantic_memory (scope_id, content, embedding, source_scope_id, valid_from, created_at)
+         VALUES ($1, $2, $3::vector, $1, NOW(), NOW())
+         RETURNING id
+       ),
+       similar AS (
+         SELECT sm.id, sm.content
+         FROM semantic_memory sm
+         WHERE sm.superseded_by IS NULL
+           AND sm.embedding IS NOT NULL
+           AND 1.0 - (sm.embedding <=> $3::vector) > 0.89
+         ORDER BY sm.embedding <=> $3::vector ASC
+         LIMIT 1
+       )
+       SELECT i.id AS inserted_id, s.id AS similar_id, s.content AS similar_content
+       FROM inserted i LEFT JOIN similar s ON true`,
+      [scopeId, content, embeddingLiteral],
+    );
+    return {
+      id: rows[0].inserted_id,
+      suggestedMerge: rows[0].similar_id
+        ? { id: rows[0].similar_id, content: rows[0].similar_content! }
+        : null,
+    };
+  }
+
+  async supersede(oldId: string, newId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE semantic_memory SET superseded_by = $2 WHERE id = $1`,
+      [oldId, newId],
     );
   }
 
@@ -73,8 +129,9 @@ export class PoolMemoryRepository implements MemoryRepository {
     await this.pool.query(
       `INSERT INTO procedural_memory
          (scope_id, content, intent_description, template_graph, topology_embedding,
-          intent_embedding, success_count, reinforcement_count, last_used_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW())`,
+          intent_embedding, success_count, reinforcement_count, last_used_at,
+          created_at, is_anti_pattern, source_scope_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW(), $7, $1)`,
       [
         params.scopeId,
         params.content,
@@ -82,6 +139,7 @@ export class PoolMemoryRepository implements MemoryRepository {
         JSON.stringify(params.templateGraph),
         params.embeddingLiteral,
         params.intentEmbeddingLiteral,
+        params.isAntiPattern ?? false,
       ],
     );
   }
@@ -156,7 +214,15 @@ export class PoolMemoryRepository implements MemoryRepository {
 export class StubMemoryRepository implements MemoryRepository {
   readonly calls = {
     appendEpisodicTrace: [] as Array<{ scopeId: string; entityId: string; content: string }>,
-    insertSemanticFact: [] as Array<{ scopeId: string; content: string }>,
+    appendEpisodicSummary: [] as Array<{
+      scopeId: string;
+      entityId: string;
+      intentSummary: string;
+      outcomeSummary: string;
+      embeddingLiteral: string;
+    }>,
+    insertSemanticFact: [] as Array<{ scopeId: string; content: string; embedding: number[] }>,
+    supersede: [] as Array<{ oldId: string; newId: string }>,
     insertProceduralTemplate: [] as ProceduralTemplateParams[],
     reinforceTemplate: [] as string[],
     lookupLesson: [] as string[],
@@ -167,10 +233,15 @@ export class StubMemoryRepository implements MemoryRepository {
   };
 
   private _lookupResult: LessonRecord | null = null;
+  private _suggestedMergeResult: { id: string; content: string } | null = null;
   private _throwOn: string | null = null;
 
   setLookupLesson(result: LessonRecord | null): void {
     this._lookupResult = result;
+  }
+
+  setSuggestedMergeResult(result: { id: string; content: string } | null): void {
+    this._suggestedMergeResult = result;
   }
 
   throwOn(method: string): void {
@@ -189,8 +260,27 @@ export class StubMemoryRepository implements MemoryRepository {
     this.calls.appendEpisodicTrace.push({ scopeId, entityId, content });
   }
 
-  async insertSemanticFact(scopeId: string, content: string): Promise<void> {
-    this.calls.insertSemanticFact.push({ scopeId, content });
+  async appendEpisodicSummary(
+    scopeId: string,
+    entityId: string,
+    intentSummary: string,
+    outcomeSummary: string,
+    embeddingLiteral: string,
+  ): Promise<void> {
+    this.calls.appendEpisodicSummary.push({ scopeId, entityId, intentSummary, outcomeSummary, embeddingLiteral });
+  }
+
+  async insertSemanticFact(
+    scopeId: string,
+    content: string,
+    embedding: number[],
+  ): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }> {
+    this.calls.insertSemanticFact.push({ scopeId, content, embedding });
+    return { id: 'stub-id', suggestedMerge: this._suggestedMergeResult };
+  }
+
+  async supersede(oldId: string, newId: string): Promise<void> {
+    this.calls.supersede.push({ oldId, newId });
   }
 
   async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void> {
