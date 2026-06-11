@@ -28,9 +28,11 @@ Plan: 1 of 4
 
 ## Last Session
 
-- Timestamp: 2026-06-09T23:30:00.000Z
-- Stopped At: Wave 1 merged, launching Wave 2 (05-05 SKILL.md route, 05-06 CrystallizeWorker delta)
-- Resume File: .harness/phases/07-architecture/.continue-here.json
+- Timestamp: 2026-06-11T00:00:00.000Z
+- Stopped At: Phase 9 code-review fix (CR-01/WR-01/02/03) committed (4122a4db).
+  typecheck clean, 283/283 tests passing. Next: resume /gsd:execute-phase 9 from
+  regression_gate to close out Phase 9 (4/4).
+- Resume File: .planning/phases/09-memory-layers/.continue-here.md
 
 ## Roadmap Evolution
 
