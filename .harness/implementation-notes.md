@@ -430,3 +430,45 @@ contradiction supersession, TD-B production wiring, injection metrics.
 class field type annotation, but the entrypoint also does `await import('pg')` (dynamic ESM import).
 TypeScript raised TS2440 (duplicate identifier) when destructuring `const { Pool }`. Fixed by renaming
 the dynamic import binding: `const { Pool: PgPool } = await import('pg')`. Commit 589d3ef.
+
+---
+
+## Phase 15 (deploy-everywhere) — deviations & decisions
+
+### TD-M resolved by convergence, with one docs trap
+
+Gateway now runs on Node 22 (`node --import tsx/esm`); Bun kept as a compatibility branch.
+Trap recorded in ADR-48 D-1: hono.dev currently documents `upgradeWebSocket` exported from
+'@hono/node-server' — that export does NOT exist in the released 1.19.x. The stable path is
+`@hono/node-ws` createNodeWebSocket({app}) + injectWebSocket(server), which requires
+registering /ws on the SAME Hono instance that serve() runs (a sub-app mounted via
+app.route() does not receive the upgrade).
+
+### iii engine in Docker: jq hard dep + version skew
+
+install.iii.dev/iii/main/install.sh fails without jq (found in image build, not documented).
+Image gets iii 0.19.2 while dev machine has 0.11.2 — full-stack compose smoke showed
+`Trigger registration failed ... (scheduled): Trigger type "scheduled" not found` under
+0.19.2. Core function unaffected (workers registered, OCC writes flow); scheduled crons
+inside the container would not fire until the trigger provider question is resolved
+(pin engine version or `iii worker add` the cron provider). Carried forward.
+Also observed: the iii container logs a persistent internal `failed to connect; retrying`
+loop (os error 111) that does not affect worker registration — not diagnosed.
+
+### Full-stack compose smoke PASSED (the long-standing live-E2E gap, partially closed)
+
+deploy/docker-compose.yml up → all 6 services healthy → POST /v1/scopes (3-phase DDL
+nesting) → POST events (OCC won, pgcrypto hash, Knapsack context) all through containers.
+Backup/restore cycle also live-verified (pg_dump -Fc in pgvector container → restore to
+fresh DB → doctor hash-chain intact). Node-runtime gateway live-verified (REST + WS).
+
+### Deliberately not implemented (ADR-48)
+
+Backup encryption (D-4: retention = erase delay, printed by `memex backup`); automatic TLS
+(reverse proxy's job); egress proxy allowlist (documented extension point); multi-replica HA.
+
+### Carried forward (live-environment items)
+
+Three-platform install script runs (only syntax-gated + logic-reviewed here); compose up
+on macOS/Linux hosts; iii version pinning decision; service-file registration on real
+systemd/launchd hosts.
