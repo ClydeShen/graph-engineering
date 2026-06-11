@@ -148,6 +148,8 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 
 未编入项：CommandGate tier-3 LLM 审批（已在 Phase 14 #2）、env 两段式过滤（已在 Phase 14 #3）、G1 遍历代数（post-1.0 候选，无阻塞证据）。
 
+**Phase Spec（2026-06-11）：** Phase 09–14 各有一份 `​.planning/phases/<NN-name>/<NN>-PHASE-SPEC.md`——含设计要点、范围、DoR、DoD、前向铺路契约。**各阶段 discuss/planning 启动时必读**；DoR/DoD 跨阶段互锁（每阶段 DoR 引用上一阶段 DoD 门），前向契约条款是下一阶段 DoR 的核查清单。
+
 ---
 
 ## 08-context-assembly
