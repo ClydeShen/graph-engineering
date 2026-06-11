@@ -6,6 +6,7 @@
   "dependencies": {
     "@graph/control-plane": "*",
     "@graph/shared": "*",
+    "@graph/types": "*",
     "hono": "^4",
     "pg": "8.21.0"
   }

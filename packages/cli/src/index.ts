@@ -2,21 +2,26 @@
 import { intro, outro, multiselect, spinner, log } from '@clack/prompts';
 import { connectClaudeCode } from './connect/claude-code.js';
 import { connectPi } from './connect/pi.js';
+import { runOnboard } from './onboard.js';
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log(`graph-runtime connect
+  console.log(`memex <command>
 
-Connect coding agents to the Graph Runtime.
+Commands:
+  onboard       First-run setup — writes ~/.memex/config.json (providers, gateway)
+  connect       Connect coding agents to the Graph Runtime (default)
 
 Options:
   --help, -h    Show this help message
 
-Agents:
+Agents (connect):
   claude-code   Claude Code (MCP) — patches ~/.claude.json
   pi            Pi Terminal (extension) — installs into ~/.pi/agent/extensions/
 `);
   process.exit(0);
 }
+
+const subcommand = process.argv[2] === 'onboard' ? 'onboard' : 'connect';
 
 async function main() {
   intro('graph-runtime connect');
@@ -57,7 +62,8 @@ async function main() {
   outro('Done.');
 }
 
-main().catch((err: unknown) => {
+const entry = subcommand === 'onboard' ? runOnboard() : main();
+entry.catch((err: unknown) => {
   console.error('Error:', err instanceof Error ? err.message : err);
   process.exit(1);
 });

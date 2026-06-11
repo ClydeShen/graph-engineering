@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./core": "./src/core.ts",
     "./api": "./src/api.ts",
-    "./shell": "./src/shell.ts"
+    "./shell": "./src/shell.ts",
+    "./connector": "./src/connector.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "*"

@@ -20,6 +20,7 @@
       "@graph/types/core": ["packages/types/src/core.ts"],
       "@graph/types/api": ["packages/types/src/api.ts"],
       "@graph/types/shell": ["packages/types/src/shell.ts"],
+      "@graph/types/connector": ["packages/types/src/connector.ts"],
       "@graph/workers/*": ["packages/workers/src/*"],
       "@graph/control-plane/*": ["packages/control-plane/src/*"],
       "@graph/gateway/*": ["packages/gateway/src/*"]

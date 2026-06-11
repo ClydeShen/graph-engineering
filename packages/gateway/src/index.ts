@@ -28,6 +28,7 @@ import { buildAgentsRoute } from './routes/agents.js';
 import { buildStreamRoute } from './routes/stream.js';
 import { buildSkillsRoute } from './routes/skills.js';
 import { buildWsRoute } from './routes/ws-protocol.js';
+import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
 import { OpenAICompatibleProvider, loadMemexConfig } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
@@ -87,6 +88,7 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   // (dynamic 'hono/bun' import) and Bun-only; buildApp stays sync for tests.
   app.route('/', buildMcpRoute(pool));
   app.route('/', buildAgentsRoute(pool));
+  app.route('/', buildDashboardRoute());
 
   // POST /pair/generate — admin-only; gated by GRAPH_RUNTIME_SECRET Bearer token
   app.post('/pair/generate', async (c) => {
@@ -135,9 +137,14 @@ void warmPairingCache(pool).catch(() => {
 
 const app = buildApp(pool, ddlPool, wMax);
 
-// /ws mount (Bun runtime only — dynamic 'hono/bun' import inside buildWsRoute).
-const { app: wsApp, websocket } = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
-app.route('/', wsApp);
+// /ws mount — Bun runtime only ('hono/bun' references the Bun global; under
+// Node/vitest this block is skipped and the REST surface is unaffected).
+let websocket: unknown;
+if (typeof (globalThis as Record<string, unknown>)['Bun'] !== 'undefined') {
+  const ws = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
+  app.route('/', ws.app);
+  websocket = ws.websocket;
+}
 
 const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? 3000);
 // ADR-44 D-2: bind localhost by default — exposing the gateway is an explicit choice.

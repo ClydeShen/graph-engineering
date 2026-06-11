@@ -12,3 +12,4 @@
 export * from './api.js';
 export * from './core.js';
 export * from './shell.js';
+export * from './connector.js';
