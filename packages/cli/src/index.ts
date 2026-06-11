@@ -10,6 +10,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 Commands:
   onboard       First-run setup — writes ~/.memex/config.json (providers, gateway)
   connect       Connect coding agents to the Graph Runtime (default)
+  doctor        Diagnose the installation (config, postgres, hash chain, providers)
 
 Options:
   --help, -h    Show this help message
@@ -17,11 +18,25 @@ Options:
 Agents (connect):
   claude-code   Claude Code (MCP) — patches ~/.claude.json
   pi            Pi Terminal (extension) — installs into ~/.pi/agent/extensions/
+
+Environment:
+  MEMEX_PROFILE   Select ~/.memex/profiles/<name>/config.json instead of the default
 `);
   process.exit(0);
 }
 
-const subcommand = process.argv[2] === 'onboard' ? 'onboard' : 'connect';
+const subcommand =
+  process.argv[2] === 'onboard' ? 'onboard'
+  : process.argv[2] === 'doctor' ? 'doctor'
+  : 'connect';
+
+async function runDoctorCommand(): Promise<void> {
+  const { runDoctor, buildRealProbes, formatDoctorReport } = await import('./doctor.js');
+  const results = await runDoctor(await buildRealProbes());
+  console.log('memex doctor\n');
+  console.log(formatDoctorReport(results));
+  process.exit(results.some((r) => r.status === 'fail') ? 1 : 0);
+}
 
 async function main() {
   intro('graph-runtime connect');
@@ -62,7 +77,10 @@ async function main() {
   outro('Done.');
 }
 
-const entry = subcommand === 'onboard' ? runOnboard() : main();
+const entry =
+  subcommand === 'onboard' ? runOnboard()
+  : subcommand === 'doctor' ? runDoctorCommand()
+  : main();
 entry.catch((err: unknown) => {
   console.error('Error:', err instanceof Error ? err.message : err);
   process.exit(1);

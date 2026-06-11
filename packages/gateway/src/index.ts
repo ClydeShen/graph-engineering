@@ -124,7 +124,9 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
 // Config layering: ~/.memex/config.json (system-wide) overrides defaults;
 // env vars override config (env is the operational escape hatch).
 const memexConfig = loadMemexConfig();
-const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://localhost:5432/graph';
+// Phase 15 G5: per-profile database isolation — env stays the operational override.
+const DATABASE_URL =
+  process.env.DATABASE_URL ?? memexConfig?.database?.url ?? 'postgres://localhost:5432/graph';
 const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
 const ddlPool = createDdlPool(DATABASE_URL);
 const wMax = Number(process.env.CONTEXT_W_MAX ?? DEFAULT_W_MAX);

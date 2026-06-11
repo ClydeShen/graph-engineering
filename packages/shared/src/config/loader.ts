@@ -28,6 +28,36 @@ import { z } from 'zod';
 /** Default path to the Memex config file. */
 export const DEFAULT_CONFIG_PATH = join(homedir(), '.memex', 'config.json');
 
+/** Root of all Memex state on this machine. */
+export function memexHome(): string {
+  return join(homedir(), '.memex');
+}
+
+/**
+ * Profile resolution (Phase 15 G5). `MEMEX_PROFILE=<name>` selects
+ * `~/.memex/profiles/<name>/config.json`; unset/empty selects the top-level
+ * `~/.memex/config.json` (zero-migration backward compatibility). Profile
+ * names with path separators or dots are rejected (traversal guard) and fall
+ * back to the default profile.
+ */
+export function activeProfile(): string | null {
+  const name = process.env['MEMEX_PROFILE'];
+  if (!name) return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(name)) return null;
+  return name;
+}
+
+/** Directory holding the active profile's config (and profile-scoped state). */
+export function profileDir(): string {
+  const name = activeProfile();
+  return name ? join(memexHome(), 'profiles', name) : memexHome();
+}
+
+/** Config path for the active profile — call-time resolution so env changes apply. */
+export function resolveConfigPath(): string {
+  return join(profileDir(), 'config.json');
+}
+
 const ProviderEntrySchema = z.object({
   name: z.string(),
   type: z.string(),
@@ -63,6 +93,8 @@ export const MemexConfigSchema = z.object({
   webhook: z.object({ hmac_secret: z.string().optional() }).optional(),
   /** Shell connection addresses (MemexTerminal / Dashboard → Gateway). */
   shell: z.object({ gateway_url: z.string().optional() }).optional(),
+  /** Phase 15: per-profile database isolation — full connection string. */
+  database: z.object({ url: z.string().optional() }).optional(),
 });
 
 /** Inferred type for the parsed Memex config. */
@@ -85,9 +117,10 @@ function resolveEnvVars(raw: string): string {
  * Returns null on any failure — missing file, bad JSON, or Zod validation error.
  * The system MUST be able to boot with this returning null (env vars fallback).
  *
- * @param configPath - Path to the config file. Defaults to ~/.memex/config.json.
+ * @param configPath - Path to the config file. Defaults to the active profile's
+ *   config (resolveConfigPath() — honours MEMEX_PROFILE at call time).
  */
-export function loadMemexConfig(configPath: string = DEFAULT_CONFIG_PATH): MemexConfig | null {
+export function loadMemexConfig(configPath: string = resolveConfigPath()): MemexConfig | null {
   if (!existsSync(configPath)) {
     return null;
   }

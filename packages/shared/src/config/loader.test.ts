@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadMemexConfig } from './loader.js';
+import { loadMemexConfig, resolveConfigPath, activeProfile, profileDir, memexHome } from './loader.js';
 
 const testDir = join(tmpdir(), `loader-test-${process.pid}`);
 
@@ -90,5 +90,43 @@ describe('loadMemexConfig', () => {
       'utf8',
     );
     expect(loadMemexConfig(filePath)).toBeNull();
+  });
+
+  // ── Profiles (Phase 15 G5) ─────────────────────────────────────────────────
+
+  describe('profile resolution', () => {
+    afterEach(() => {
+      delete process.env['MEMEX_PROFILE'];
+    });
+
+    it('MEMEX_PROFILE=x resolves profiles/x/config.json; unset resolves top-level', () => {
+      delete process.env['MEMEX_PROFILE'];
+      expect(resolveConfigPath()).toBe(join(memexHome(), 'config.json'));
+      expect(activeProfile()).toBeNull();
+
+      process.env['MEMEX_PROFILE'] = 'staging';
+      expect(activeProfile()).toBe('staging');
+      expect(profileDir()).toBe(join(memexHome(), 'profiles', 'staging'));
+      expect(resolveConfigPath()).toBe(join(memexHome(), 'profiles', 'staging', 'config.json'));
+    });
+
+    it('rejects traversal-shaped profile names and falls back to default', () => {
+      for (const bad of ['../evil', 'a/b', 'a\\b', '.hidden', '']) {
+        process.env['MEMEX_PROFILE'] = bad;
+        expect(activeProfile()).toBeNull();
+        expect(resolveConfigPath()).toBe(join(memexHome(), 'config.json'));
+      }
+    });
+
+    it('accepts the Phase 15 database isolation slot', () => {
+      const filePath = join(testDir, 'config.json');
+      writeFileSync(
+        filePath,
+        JSON.stringify({ database: { url: 'postgres://localhost:5432/memex_staging' } }),
+        'utf8',
+      );
+      const result = loadMemexConfig(filePath);
+      expect(result!.database!.url).toBe('postgres://localhost:5432/memex_staging');
+    });
   });
 });

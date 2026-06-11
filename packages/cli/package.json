@@ -10,6 +10,10 @@
   "dependencies": {
     "@clack/prompts": "^0.9.0",
     "@graph/pi-extension": "*",
-    "@graph/shared": "*"
+    "@graph/shared": "*",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
   }
 }
