@@ -14,8 +14,13 @@ progress:
 
 ## Current Position
 
-Phase: 09 (memory-layers) — IN PROGRESS (4 plans, executing Wave 1)
-Plan: 0 of 4
+Phase: 09 (memory-layers) — IN PROGRESS (4 plans, Wave 1+2 done, Wave 3 pending)
+Plan: 3 of 4
+
+- Plans 09-01, 09-02, 09-03 complete and merged to master (commits through 51d08868).
+- Wave 3 (09-04: mem::reflect + context assembly wiring + EpisodicWorker→TPW replacement) not yet started.
+- npm run typecheck clean; 288 tests passing.
+- Next: spawn 09-04 executor (depends_on 09-01, 09-02, 09-03 — all satisfied).
 
 - Phase: 05-architecture-hardening
 - Current Plan: 6 / 6 (UAT complete — 9/9 passed)
