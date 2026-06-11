@@ -10,3 +10,5 @@
  *   @graph/types/shell — MemexTerminal SSE types (TrailSseEvent)
  */
 export * from './api.js';
+export * from './core.js';
+export * from './shell.js';
