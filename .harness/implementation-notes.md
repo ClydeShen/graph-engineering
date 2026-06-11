@@ -212,6 +212,58 @@ T6 was originally "graph inspection TUI." Superseded: graph visualization belong
 Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
 a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
 
+## Phase 11 — MemexShell (2026-06-11)
+
+### TD-H resolution differs from the ledger's framing
+
+The "gateway bypasses createLLMProvider()" debt assumed a chat path. Reality: the gateway's
+provider was only ever consumed as an EmbeddingProvider (memReflect + memory route) — no chat
+exists in the gateway. Resolution: renamed to gatewayEmbeddingProvider, EMBEDDING_MODEL env
+aligned with workers. The single-construction-path rule applies to chat providers.
+
+### macro session semantics simplification (TD-E)
+
+Idle-expired sessions roll to a NEW top-level scope under the same `session:<key>` intent
+(not a child scope) — nestScope creates top-level scopes; createSubScope is a worker-side
+path with depth limits. Session history = all scopes sharing the intent key; Phase 12
+cross-platform continuation queries by intent. Parent-linkage refinement is possible later
+without migration (scope_lineage.parent_scope_id exists).
+
+### writeInfraEvent promoted to @graph/shared
+
+session-scope.ts needed the scope_closed infra write; occWrite's type surface only allows
+agent event types (correct). Promoted the gateway's writeInfraEvent (tip-lookup + pgcrypto
+hash INSERT...SELECT + lineage update) to shared — one implementation for gateway watchdog
+and gateway-bot session lifecycle.
+
+### 'hono/bun' is Bun-global at import time
+
+createBunWebSocket cannot be imported under Node/vitest. ws-protocol.ts keeps all protocol
+logic Bun-free (testable); buildWsRoute dynamic-imports hono/bun and the production entry
+mounts /ws only when globalThis.Bun exists. The websocket handler must be the same object
+in Bun.serve's export — returned by buildWsRoute.
+
+### Dashboard delivered as live-view v0, not the UI-SPEC console
+
+UI-SPEC locks Next.js 15 + React 19 + @antv/g6 v5 — a frontend project that cannot be
+built/visually verified headless in this run. Per 11-PHASE-SPEC §7 the cut falls on
+dashboard richness: GET /dashboard ships a self-contained read-only HTML live view (SSE
+feed + topology lookup) proving the realtime data path. The full console remains open.
+
+### MemexTerminal v1 = WS protocol client + readline REPL
+
+Pi-SDK interactive agent mode (createAgentSession driving a local coding agent) is the
+recorded next increment — it requires a live gateway + provider keys to verify. The
+protocol client (tip-hash chaining, request correlation, trail fan-out) is fully tested.
+
+### Phase 11 remaining items (carried forward)
+
+1. Pi-SDK interactive mode for MemexTerminal (needs live verification environment)
+2. Full UI-SPEC console (Next.js + G6) — frontend project
+3. DoD G1/G2/G3 live E2E (session continuity, WS turn, SSE dashboard) — skipIf-style
+   integration tests pending a running Postgres + gateway
+4. memex connect remote-address extension is Phase 15 scope (TLS + token), not Phase 11
+
 ## Phase 10 — Trail Discovery (2026-06-11)
 
 ### Metrics as columns + join table, NOT ledger events (PHASE-SPEC deviation)

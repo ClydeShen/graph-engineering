@@ -3,13 +3,13 @@
   "session": {
     "status": "active",
     "started_at": "2026-06-11T18:00:00.000Z",
-    "last_session": "2026-06-11T20:10:00.000Z",
-    "last_active": "2026-06-11T20:10:00.000Z"
+    "last_session": "2026-06-11T22:10:00.000Z",
+    "last_active": "2026-06-11T22:10:00.000Z"
   },
   "position": {
-    "phase": "10-trail-discovery",
-    "active": "Phase 10 implementation complete (commits b5f3ab90, 22f33b8d, da04696a, ab805ffa + closeout). DoD G1-G8 verified at unit/contract level; DB-dependent E2E gates covered by skipIf integration tests pending a live Postgres run.",
-    "resume_file": ".planning/phases/10-trail-discovery/10-PHASE-SPEC.md",
-    "stopped_at": "Phase 10 closeout: 313 tests pass, tsc clean. ADR-50/51/52 archived; TD-B/C/D cleared; tracking table P1-D/P1-F/P2-D/P2-E/G2 closed. Next: Phase 11 (memex-shell) per 11-PHASE-SPEC DoR."
+    "phase": "11-memex-shell",
+    "active": "Phase 11 core implementation complete (commits b2d13f45, 393fdcae, e2f74878, 3b5a82b8 + closeout). TD-E/F/G/H cleared; ConnectorAdapter frozen; realtime API live; onboard/terminal/dashboard-v0 shipped.",
+    "resume_file": ".planning/phases/11-memex-shell/11-PHASE-SPEC.md",
+    "stopped_at": "Phase 11 closeout: 356 tests, tsc clean. Carried-forward items in implementation-notes (Pi-SDK interactive mode, UI-SPEC console, live E2E gates). Next: Phase 12 (connector-matrix) per 12-PHASE-SPEC DoR — ConnectorAdapter + config slots + TD-E prerequisites all satisfied."
   }
 }

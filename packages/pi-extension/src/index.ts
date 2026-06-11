@@ -44,16 +44,49 @@ function activateShadow(entryId: string, ctx: ExtensionContext): void {
 // ---------------------------------------------------------------------------
 
 const GRAPH_URL = process.env['GRAPH_RUNTIME_URL'] ?? 'http://localhost:4000';
+const AGENT_ID = process.env['GRAPH_AGENT_ID'] ?? 'pi-extension';
 
-// TODO Phase 5: wire real fetch — currently returns mode/args for Phase 4 validation
-async function callMcp(tool: string, args: Record<string, unknown>) {
-  return {
-    mode: activeShadow ? 'rehearsal' : 'interactive',
-    tool,
-    args,
-    endpoint: `${GRAPH_URL}/mcp`,
-    shadow_entries: activeShadow?.getEntries().length ?? 0,
-  };
+let mcpRequestSeq = 0;
+
+/**
+ * Call a Graph Runtime MCP tool (TD-F: real fetch, Phase 11).
+ *
+ * Rehearsal mode never touches the wire — write intent stays in the shadow
+ * (阅后即焚 semantics). Interactive mode POSTs a JSON-RPC tools/call to the
+ * gateway's stateless MCP endpoint (enableJsonResponse mode).
+ */
+async function callMcp(tool: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (activeShadow) {
+    return {
+      mode: 'rehearsal',
+      tool,
+      args,
+      shadow_entries: activeShadow.getEntries().length,
+    };
+  }
+
+  const res = await fetch(`${GRAPH_URL}/mcp/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'X-Agent-ID': AGENT_ID,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: ++mcpRequestSeq,
+      method: 'tools/call',
+      params: { name: tool, arguments: args },
+    }),
+  });
+
+  if (!res.ok) {
+    return { mode: 'interactive', tool, error: `gateway ${res.status}: ${await res.text()}` };
+  }
+  const body = (await res.json()) as { result?: unknown; error?: unknown };
+  return body.error !== undefined
+    ? { mode: 'interactive', tool, error: body.error }
+    : { mode: 'interactive', tool, result: body.result };
 }
 
 // ---------------------------------------------------------------------------
