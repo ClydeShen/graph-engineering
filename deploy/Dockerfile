@@ -1,4 +1,4 @@
-# MemexOS all-components image — Node 22 single base (TD-M, ADR-57).
+# MemexOS all-components image — Node 22 single base (TD-M, ADR-48).
 # One image, four commands: gateway / workers / control-plane / iii engine.
 # Build context is the repo root: docker build -f deploy/Dockerfile .
 

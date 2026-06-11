@@ -11,7 +11,7 @@
 #
 # To pin egress to an allowlist, run a filtering proxy (e.g. tinyproxy with an
 # allowlist) as the only egress-attached service and point HTTP(S)_PROXY at it —
-# extension point documented in ADR-57, not shipped by default.
+# extension point documented in ADR-48, not shipped by default.
 #
 # Privilege drops apply hermes _BASE_SECURITY_ARGS to every app service.
 

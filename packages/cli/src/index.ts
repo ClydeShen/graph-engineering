@@ -75,7 +75,7 @@ async function runBackupCommand(): Promise<void> {
   const { file } = await runBackup(runner, await resolveDbUrl(), outDir);
   console.log(`backup written: ${file}`);
   console.log('note: backups taken before an erase still contain the erased content');
-  console.log('      (backup retention period = erase effectiveness delay, ADR-57)');
+  console.log('      (backup retention period = erase effectiveness delay, ADR-48)');
 }
 
 async function runRestoreCommand(): Promise<void> {

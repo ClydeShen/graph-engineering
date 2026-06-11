@@ -143,7 +143,7 @@ const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? 300
 // ADR-44 D-2: bind localhost by default — exposing the gateway is an explicit choice.
 const gatewayHost = process.env.MEMEX_BIND ?? '127.0.0.1';
 
-// ── Runtime split (TD-M, ADR-57): Node 22 is the primary supported runtime. ──
+// ── Runtime split (TD-M, ADR-48): Node 22 is the primary supported runtime. ──
 // Bun remains a compatibility branch — the same app + WS protocol behind a
 // different upgrade adapter. Under vitest neither branch starts a server.
 const isBun = typeof (globalThis as Record<string, unknown>)['Bun'] !== 'undefined';

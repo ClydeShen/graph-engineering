@@ -5,7 +5,7 @@
 # Hardened variant (network isolation + privilege drops):
 #   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml up -d
 #
-# Topology (ADR-57): postgres -> migrate (one-shot) -> iii -> workers -> control-plane + gateway.
+# Topology (ADR-48): postgres -> migrate (one-shot) -> iii -> workers -> control-plane + gateway.
 # Startup order mirrors scripts/dev.mjs: workers must register their iii
 # functions before the control plane's pulse-fetch replays events.
 

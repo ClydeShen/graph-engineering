@@ -139,7 +139,7 @@ describe('WsBroadcaster', () => {
   });
 });
 
-// ── makeWsConnectionHandlers — runtime-agnostic lifecycle (TD-M, ADR-57) ──────
+// ── makeWsConnectionHandlers — runtime-agnostic lifecycle (TD-M, ADR-48) ──────
 
 describe('makeWsConnectionHandlers', () => {
   function fakeSocket() {

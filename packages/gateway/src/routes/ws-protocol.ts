@@ -180,7 +180,7 @@ export interface WsLikeSocket {
 
 /**
  * Per-connection lifecycle handlers — runtime-agnostic core shared by the Bun
- * and Node upgrade adapters (TD-M, ADR-57). Both runtimes' upgradeWebSocket
+ * and Node upgrade adapters (TD-M, ADR-48). Both runtimes' upgradeWebSocket
  * call this factory once per connection.
  */
 export function makeWsConnectionHandlers(
@@ -238,7 +238,7 @@ export async function buildWsRoute(
 }
 
 /**
- * Mount /ws on the MAIN app for the Node runtime (TD-M, ADR-57 — Node 22 is the
+ * Mount /ws on the MAIN app for the Node runtime (TD-M, ADR-48 — Node 22 is the
  * primary supported runtime). '@hono/node-ws' requires the same Hono instance
  * that serve() runs, because injectWebSocket(server) routes the HTTP upgrade
  * back through that app's matched route — a sub-app mounted via app.route()

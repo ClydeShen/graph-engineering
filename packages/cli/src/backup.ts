@@ -5,7 +5,7 @@
  * Restore runs --clean --if-exists, then re-verifies the hash chain via the
  * doctor check — a restore that breaks the ledger chain is reported loudly.
  *
- * Backup encryption is deliberately NOT implemented (ADR-57): with live-DB
+ * Backup encryption is deliberately NOT implemented (ADR-48): with live-DB
  * erase implemented as payload blanking (ADR-47 D-1), backups taken BEFORE an
  * erase still contain the erased content until they age out. Documented
  * semantics: backup retention period = erase effectiveness delay.
