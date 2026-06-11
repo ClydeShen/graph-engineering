@@ -95,7 +95,7 @@ export async function occWrite(
  *
  * Returns null if the insert was a no-op (duplicate). Returns WriteResult if inserted.
  */
-async function occWriteIdempotent(
+export async function occWriteIdempotent(
   pool: Pool,
   args: Omit<OccWriteArgs, 'eventType'>
 ): Promise<WriteResult | null> {
