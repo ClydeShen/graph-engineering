@@ -50,6 +50,9 @@ describe('memReflect', () => {
 
   it('budget exhaustion: large procedural section consumes full budget, episodic/semantic get nothing', async () => {
     const pool = makePool((sql) => {
+      if (sql.includes('is_anti_pattern = TRUE')) {
+        return Promise.resolve({ rows: [] });
+      }
       if (sql.includes('procedural_memory')) {
         return Promise.resolve({
           rows: [
@@ -100,5 +103,90 @@ describe('memReflect', () => {
 
     expect(embed.embed).toHaveBeenCalledTimes(1);
     expect(embed.embed).toHaveBeenCalledWith('unique-query-text');
+  });
+
+  // ── Phase 10: anti-pattern injection + proceduralIds ───────────────────────
+
+  it('includes an Anti-Patterns section and returns proceduralIds of injected templates', async () => {
+    const pool = makePool((sql) => {
+      if (sql.includes('is_anti_pattern = TRUE')) {
+        return Promise.resolve({
+          rows: [{ id: 'neg-1', intent_description: 'Orphan node — entity X dead-ended' }],
+        });
+      }
+      if (sql.includes('procedural_memory')) {
+        return Promise.resolve({
+          rows: [{ id: 'pos-1', intent_description: 'golden path', template_graph: { version: 1 }, rrf_score: 0.9 }],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const embed = makeEmbed();
+
+    const result = await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    expect(result.proceduralIds).toEqual(['pos-1']);
+    expect(result.sections.antiPatterns).toContain('dead-ended');
+    expect(result.content).toContain('## Anti-Patterns (do not repeat)');
+    expect(result.content).toContain('## Procedural Memory');
+  });
+
+  it('anti-pattern query filters correlation_confidence=low and uses BM25 only', async () => {
+    const captured: string[] = [];
+    const pool = makePool((sql) => {
+      captured.push(sql);
+      return Promise.resolve({ rows: [] });
+    });
+    const embed = makeEmbed();
+
+    await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    const antiSql = captured.find((s) => s.includes('is_anti_pattern = TRUE'));
+    expect(antiSql).toBeDefined();
+    expect(antiSql).toContain(`correlation_confidence', 'high') <> 'low'`);
+    expect(antiSql).not.toContain('intent_embedding'); // BM25-only route
+  });
+
+  it('positive procedural query applies the three-signal rerank (P0-B)', async () => {
+    const captured: string[] = [];
+    const pool = makePool((sql) => {
+      captured.push(sql);
+      return Promise.resolve({ rows: [] });
+    });
+    const embed = makeEmbed();
+
+    await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    const posSql = captured.find((s) => s.includes('is_anti_pattern = FALSE') && s.includes('final_score'));
+    expect(posSql).toBeDefined();
+    expect(posSql).toContain('* 0.6');
+    expect(posSql).toContain('quality_score * 0.3');
+    expect(posSql).toContain('recency_score * 0.1');
+  });
+
+  it('empty result has empty proceduralIds and no anti-pattern section', async () => {
+    const result = await memReflect(makePool(), makeEmbed(), {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+    expect(result.proceduralIds).toEqual([]);
+    expect(result.sections.antiPatterns).toBe('');
   });
 });

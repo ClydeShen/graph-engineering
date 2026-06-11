@@ -30,6 +30,12 @@ export function buildEventsRoute(pool: Pool, wMax: number, embeddingProvider: Em
       return c.json({ error: 'scope suspended', scope_status: 'suspended' }, 409);
     }
 
+    // TD-B dedup window: identical memory_updated payload within 5 minutes.
+    // 200 (not 4xx) — the write is acknowledged-as-already-recorded, not rejected.
+    if (result.deduplicated) {
+      return c.json({ occ_result: 'deduplicated', deduplicated: true });
+    }
+
     const { version_hash, occ_result, context } = result;
     return c.json({
       version_hash,

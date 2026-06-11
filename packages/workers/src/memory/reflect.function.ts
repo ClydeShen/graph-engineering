@@ -23,7 +23,13 @@ export interface MemReflectInput {
 export interface MemReflectOutput {
   content: string;
   tokens: number;
-  sections: { procedural: string; episodic: string; semantic: string };
+  sections: { procedural: string; antiPatterns: string; episodic: string; semantic: string };
+  /**
+   * Ids of positive procedural templates whose content made it into the formatted
+   * output. The caller records these via recordTemplateInjection (migration 013)
+   * so converged scope closure can reinforce them (Phase 10 reinforcement loop).
+   */
+  proceduralIds: string[];
 }
 
 /**
@@ -159,6 +165,9 @@ async function hybridSearchProcedural(
   queryText: string,
   limit: number,
 ): Promise<ProceduralRow[]> {
+  // Three-signal rerank per P0-B decision: rrf_norm×0.6 + quality×0.3 + recency×0.1.
+  // rrf_score is normalized against the pool max — raw RRF (~0.01 scale) would be
+  // drowned by quality/recency (0..1 scale). See ADR-25 supplement 2 D-5.
   const { rows } = await pool.query<ProceduralRow>(
     `WITH
        vector_candidates AS (
@@ -187,20 +196,66 @@ async function hybridSearchProcedural(
          FROM all_candidates ac
          LEFT JOIN vector_candidates vc ON ac.id = vc.id
          LEFT JOIN bm25_candidates   bc ON ac.id = bc.id
+       ),
+       scored AS (
+         SELECT
+           p.id, p.intent_description, p.template_graph, r.rrf_score,
+           r.rrf_score / NULLIF(MAX(r.rrf_score) OVER (), 0)              AS rrf_norm,
+           ((p.success_count::FLOAT + 1.0) /
+            (p.success_count + p.failure_count + 1.0))                    AS quality_score,
+           GREATEST(0.0, 1.0 - (
+             EXTRACT(EPOCH FROM (NOW() - COALESCE(p.last_used_at, NOW()))) / (86400.0 * 30)
+           ))                                                             AS recency_score
+         FROM rrf_scored r
+         JOIN procedural_memory p ON r.id = p.id
        )
-     SELECT p.id, p.intent_description, p.template_graph, r.rrf_score
-     FROM rrf_scored r
-     JOIN procedural_memory p ON r.id = p.id
-     ORDER BY r.rrf_score DESC
+     SELECT id, intent_description, template_graph, rrf_score,
+            (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) AS final_score
+     FROM scored
+     ORDER BY final_score DESC
      LIMIT $3`,
     [queryEmbeddingLiteral, queryText, limit],
   );
   return rows;
 }
 
-function formatProcedural(rows: ProceduralRow[], budgetTokens: number): string {
+interface AntiPatternRow {
+  id: string;
+  intent_description: string | null;
+}
+
+/**
+ * Anti-pattern retrieval for negative injection ("禁止重蹈的坑").
+ * BM25-only: anti-pattern rows have no intent_embedding (TPW writes them
+ * embedding-less on the intent axis), so the text route is the relevance signal.
+ * Rows with correlation_confidence='low' are excluded — weak failure→fix
+ * pairings must not steer the agent (ADR-25 supplement 2 D-1).
+ */
+async function searchAntiPatterns(
+  pool: Pool,
+  queryText: string,
+  limit: number,
+): Promise<AntiPatternRow[]> {
+  const { rows } = await pool.query<AntiPatternRow>(
+    `SELECT id, intent_description
+     FROM procedural_memory, plainto_tsquery('english', $1) AS query
+     WHERE is_anti_pattern = TRUE
+       AND ts_doc @@ query
+       AND COALESCE(template_graph->>'correlation_confidence', 'high') <> 'low'
+     ORDER BY ts_rank_cd(ts_doc, query) DESC
+     LIMIT $2`,
+    [queryText, limit],
+  );
+  return rows;
+}
+
+function formatProcedural(
+  rows: ProceduralRow[],
+  budgetTokens: number,
+): { text: string; ids: string[] } {
   let remaining = budgetTokens;
   const parts: string[] = [];
+  const ids: string[] = [];
   for (const row of rows) {
     if (remaining <= 0) break;
     const fullEntry = `## Procedural Pattern\nIntent: ${row.intent_description ?? ''}\n${JSON.stringify(row.template_graph)}`;
@@ -216,9 +271,23 @@ function formatProcedural(rows: ProceduralRow[], budgetTokens: number): string {
     }
     if (entryTokens > remaining && parts.length > 0) break;
     parts.push(entry);
+    ids.push(row.id);
     remaining -= entryTokens;
   }
-  return parts.join('');
+  return { text: parts.join(''), ids };
+}
+
+function formatAntiPatterns(rows: AntiPatternRow[], budgetTokens: number): string {
+  let remaining = budgetTokens;
+  const parts: string[] = [];
+  for (const row of rows) {
+    const line = `- ${row.intent_description ?? ''}`;
+    const lineTokens = countTokens(line);
+    if (lineTokens > remaining) break;
+    parts.push(line);
+    remaining -= lineTokens;
+  }
+  return parts.join('\n');
 }
 
 function formatEpisodic(rows: EpisodicRow[], budgetTokens: number): string {
@@ -263,30 +332,38 @@ export async function memReflect(
   const { vector } = await embed.embed(input.query_text);
   const queryEmbeddingLiteral = '[' + vector.join(',') + ']';
 
-  // Step 1 — Procedural
+  // Step 1 — Procedural (positive templates, three-signal rerank)
   const procRows = await hybridSearchProcedural(pool, queryEmbeddingLiteral, input.query_text, limit);
-  const procText = formatProcedural(procRows, budget);
+  const { text: procText, ids: proceduralIds } = formatProcedural(procRows, budget);
   const pTokens = countTokens(procText);
+
+  // Step 1b — Anti-patterns (negative injection, Phase 10): slotted directly after
+  // positive procedural in the truncation order — both are procedural-tier content.
+  const antiRows = await searchAntiPatterns(pool, input.query_text, 2);
+  const antiText = formatAntiPatterns(antiRows, Math.max(0, budget - pTokens));
+  const aTokens = countTokens(antiText);
 
   // Step 2 — Episodic
   const epiRows = await hybridSearchEpisodic(pool, queryEmbeddingLiteral, input.query_text, 5);
-  const epiText = formatEpisodic(epiRows, Math.max(0, budget - pTokens));
+  const epiText = formatEpisodic(epiRows, Math.max(0, budget - pTokens - aTokens));
   const eTokens = countTokens(epiText);
 
   // Step 3 — Semantic
   const semRows = await hybridSearchSemantic(pool, queryEmbeddingLiteral, input.query_text, 5);
-  const semText = formatSemantic(semRows, Math.max(0, budget - pTokens - eTokens));
+  const semText = formatSemantic(semRows, Math.max(0, budget - pTokens - aTokens - eTokens));
   const sTokens = countTokens(semText);
 
   const sections: string[] = [];
   if (procText !== '') sections.push(`## Procedural Memory\n${procText}`);
+  if (antiText !== '') sections.push(`## Anti-Patterns (do not repeat)\n${antiText}`);
   if (epiText !== '') sections.push(`## Episodic Memory\n${epiText}`);
   if (semText !== '') sections.push(`## Semantic Memory\n${semText}`);
   const content = sections.join('\n\n');
 
   return {
     content,
-    tokens: pTokens + eTokens + sTokens,
-    sections: { procedural: procText, episodic: epiText, semantic: semText },
+    tokens: pTokens + aTokens + eTokens + sTokens,
+    sections: { procedural: procText, antiPatterns: antiText, episodic: epiText, semantic: semText },
+    proceduralIds,
   };
 }

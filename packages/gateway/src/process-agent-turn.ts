@@ -28,6 +28,8 @@ import { assembleContext, type AssembledContext } from '@graph/workers/context/a
 import { makeKnapsackGraph } from './knapsack-graph.js';
 import { isScopeColdStart, type EmbeddingProvider } from '@graph/shared';
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
+import { insertWorkingMemory } from '@graph/workers/memory/working-memory';
+import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
 
 /**
  * Extract a short, retrieval-relevant string from an event payload for mem::reflect's
@@ -52,7 +54,8 @@ export type AgentEventInput = z.infer<typeof EventBodySchema>;
 
 export type AgentTurnOutcome =
   | { suspended: true }
-  | { suspended: false; version_hash: string; occ_result: string; context: AssembledContext | null };
+  | { suspended: false; deduplicated: true }
+  | { suspended: false; deduplicated?: false; version_hash: string; occ_result: string; context: AssembledContext | null };
 
 export async function processAgentTurn(
   pool: Pool,
@@ -67,6 +70,28 @@ export async function processAgentTurn(
       LOG_EVENTS.SCOPE_SUSPENDED_LOCKOUT,
     );
     return { suspended: true };
+  }
+
+  // 1b. TD-B dedup window (ADR-11 supplement): block semantically duplicate
+  // memory_updated writes within 5 minutes, even under different predecessors —
+  // the OCC unique constraint cannot catch those (dedup hash excludes
+  // predecessor_hash by design). Restricted to memory_updated: tool results land
+  // as memory_updated and are the high-frequency duplication source; lifecycle
+  // events (plan_created/scope_closed/conflict_detected) are never deduped.
+  if (event.event_type === 'memory_updated') {
+    const { inserted } = await insertWorkingMemory(
+      pool,
+      scopeId,
+      event.entity_id,
+      event.event_type,
+      JSON.stringify(event.payload),
+    );
+    if (!inserted) {
+      logger.child({ component: 'gateway', scope_id: scopeId }).info(
+        LOG_EVENTS.WORKING_MEMORY_DEDUP,
+      );
+      return { suspended: false, deduplicated: true };
+    }
   }
 
   // 2. OCC write
@@ -93,17 +118,39 @@ export async function processAgentTurn(
     const graph = await makeKnapsackGraph(pool, scopeId, { bypassView: true });
     const context = await assembleContext(graph, scopeId, version_hash, event.payload, wMax, scopeClosed);
 
-    // cold_start Reflection Track injection (D-10): production wiring.
+    // Reflection Track injection — trigger selection (ADR-21, Phase 10 完整接线):
+    //   cold_start         — first turn of the scope (highest precedence)
+    //   conflict_detected  — this write lost the OCC race (occ_result='demoted')
+    //   macro_planning     — a task_spawned event. plan_created never traverses
+    //                        this route (EventBodySchema restricts agents to
+    //                        task_spawned|memory_updated; plan_created is written
+    //                        at scope creation, which is cold_start by definition).
+    //                        Spawning sub-tasks IS the in-scope planning act.
     if (context !== null && !scopeClosed) {
+      let triggerType: MemReflectInput['trigger_type'] | null = null;
       if (await isScopeColdStart(pool, scopeId)) {
+        triggerType = 'cold_start';
+      } else if (occ_result === 'demoted') {
+        triggerType = 'conflict_detected';
+      } else if (event.event_type === 'task_spawned') {
+        triggerType = 'macro_planning';
+      }
+
+      if (triggerType !== null) {
         const reflection = await memReflect(pool, embeddingProvider, {
           query_text: extractQueryText(event.payload),
-          trigger_type: 'cold_start',
+          trigger_type: triggerType,
           w_max: wMax,
           scope_id: scopeId,
         } satisfies MemReflectInput);
         context.reflectionContent = reflection.content;
         context.reflectionTokens = reflection.tokens;
+
+        // Reinforcement-loop write side (migration 013): record which templates
+        // were injected so converged closure can credit them (success_count+1).
+        if (reflection.proceduralIds.length > 0) {
+          await recordTemplateInjection(pool, scopeId, reflection.proceduralIds, triggerType);
+        }
       }
     }
 

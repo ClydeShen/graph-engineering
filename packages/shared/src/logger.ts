@@ -35,6 +35,7 @@ export const LOG_EVENTS = {
 
   EVENT_WRITTEN: 'event.written',
   OCC_CONFLICT: 'occ.conflict',
+  WORKING_MEMORY_DEDUP: 'working_memory.dedup',  // TD-B 5-min window hit — ADR 11 supplement
 
   WORKER_LIFECYCLE: 'worker.lifecycle',
   WORKER_REGISTERED: 'worker.registered',
