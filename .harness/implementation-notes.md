@@ -212,6 +212,58 @@ T6 was originally "graph inspection TUI." Superseded: graph visualization belong
 Dashboard (Phase 7+), not a standalone CLI TUI. MemexTerminal is the only TUI entry point and is
 a MemexShell component. `packages/tui` was never created. See ROADMAP.md §06-extensions.
 
+## Phase 10 — Trail Discovery (2026-06-11)
+
+### Metrics as columns + join table, NOT ledger events (PHASE-SPEC deviation)
+
+10-PHASE-SPEC said "指标存图（事件）". Implemented instead as `procedural_memory.injection_count`
++ `template_injection` join table (migration 013). Reason: OCC slot uniqueness is
+`(predecessor_hash, scope_id)` (ADR 41) — writing a metric event mid-scope after the agent's
+event would claim the agent's predecessor slot and demote the agent's NEXT write to
+conflict_detected, polluting the Trail with false conflicts. Metrics remain SQL-queryable
+(hit-rate recipe in ADR-52). Recorded in ADR-50 D-4.
+
+### Three-signal rerank, not four (ghost column)
+
+ADR-20 supplement's 4-signal SQL references `unique_worker_types` — a column that was never
+created. Followed the original P0-B decision (3 signals: rrf 0.6 / quality 0.3 / recency 0.1)
+per the "remove dangling design references" principle. Added pool-max RRF normalization —
+raw RRF (~0.01 scale) would be drowned by quality/recency (0..1 scale). ADR-50 D-5.
+
+### macro_planning trigger = task_spawned, not plan_created
+
+EventBodySchema (Zod gate, ADR 24) restricts agent-route events to task_spawned|memory_updated.
+plan_created is written at scope creation — which is cold_start by definition. In this protocol,
+spawning sub-tasks IS the in-scope planning act, so macro_planning fires on task_spawned.
+
+### P2-D optional event trigger skipped (YAGNI)
+
+"≥20 episodic rows → immediate synthesis" event trigger not implemented; the 02:00 cron
+covers it. Documented in ADR-52 §2 with the re-enable condition.
+
+### Anti-pattern retrieval is BM25-only
+
+Anti-pattern rows have no intent_embedding (TPW writes them embedding-less on the intent
+axis); the negative HNSW index is on topology_embedding, which has no query-side vector at
+reflect time (the new scope has no topology yet). ts_doc BM25 is the relevance signal.
+
+### TPW intent-embedding reuse
+
+The episodic intent+outcome embed call doubles as the positive template's intent_embedding
+(one embed call, two writes — token efficiency). Semantic basis is intent+outcome rather than
+intent-only; accepted, outcome enriches retrieval relevance.
+
+### Phase 3 infrastructure absorbed more of Phase 10 than ROADMAP assumed
+
+Already existed before Phase 10 started: WL kernel, PatternDiscoveryWorker + cross-domain
+union-find clustering (6h cron), synthesizer/decay/TTL crons, CrystallizeWorker surgical
+distillation, LessonSave Ebbinghaus confidence, working-memory dedup helper. Phase 10's
+actual new surface: template_graph canonical schema, TPW positive/correlation paths,
+3-signal rerank + anti-pattern injection, trigger selection wiring, reinforcement closure,
+contradiction supersession, TD-B production wiring, injection metrics.
+
+---
+
 ### TS2440 Pool name conflict in gateway-bot entrypoint
 
 `packages/gateway-bot/src/index.ts` uses `import type { Pool } from 'pg'` (type import) for the

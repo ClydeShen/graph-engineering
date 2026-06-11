@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "idle",
-    "started_at": "2026-06-11T00:00:00.000Z",
-    "last_session": "2026-06-11T17:30:00.000Z",
-    "last_active": "2026-06-11T17:30:00.000Z"
+    "status": "active",
+    "started_at": "2026-06-11T18:00:00.000Z",
+    "last_session": "2026-06-11T20:10:00.000Z",
+    "last_active": "2026-06-11T20:10:00.000Z"
   },
   "position": {
     "phase": "10-trail-discovery",
-    "active": "Phase 09 (memory-layers) complete and verified (4/4, cb6a0269). Phase 10 not yet started.",
-    "resume_file": ".harness/phases/09-memory-layers/.continue-here.json",
-    "stopped_at": "Phase 09 closed out: regression gate (283/283 tests, tsc clean), drift gates clean, gsd-verifier passed (09-VERIFICATION.md). Next: discuss/plan Phase 10 (trail-discovery)."
+    "active": "Phase 10 implementation complete (commits b5f3ab90, 22f33b8d, da04696a, ab805ffa + closeout). DoD G1-G8 verified at unit/contract level; DB-dependent E2E gates covered by skipIf integration tests pending a live Postgres run.",
+    "resume_file": ".planning/phases/10-trail-discovery/10-PHASE-SPEC.md",
+    "stopped_at": "Phase 10 closeout: 313 tests pass, tsc clean. ADR-50/51/52 archived; TD-B/C/D cleared; tracking table P1-D/P1-F/P2-D/P2-E/G2 closed. Next: Phase 11 (memex-shell) per 11-PHASE-SPEC DoR."
   }
 }

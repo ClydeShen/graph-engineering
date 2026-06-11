@@ -33,3 +33,9 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# iii-engine runtime state store (generated)
+data/
+
+# planning scratch
+.planning/tmp/
