@@ -13,6 +13,11 @@ dist/
 build/
 *.tsbuildinfo
 
+# Next.js build and cache
+.next/
+packages/**/.next/
+packages/**/.next/cache/
+
 # Test coverage
 coverage/
 
