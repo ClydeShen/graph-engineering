@@ -69,11 +69,19 @@ export class MemexTerminalClient {
   async createScope(intent: string): Promise<TerminalSession> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.opts.token !== undefined) headers['Authorization'] = `Bearer ${this.opts.token}`;
-    const res = await this.fetchFn(this.httpUrl('/v1/scopes'), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ intent }),
-    });
+    let res: Response;
+    try {
+      res = await this.fetchFn(this.httpUrl('/v1/scopes'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ intent }),
+      });
+    } catch {
+      // undici's bare "fetch failed" tells the user nothing (UX-audit U6).
+      throw new Error(
+        `cannot reach the gateway at ${this.opts.gatewayUrl} — is the stack running? (npm run dev)`,
+      );
+    }
     if (!res.ok) throw new Error(`createScope failed: ${res.status}`);
     const body = (await res.json()) as { scope_id: string; plan_hash: string };
     this.session.scope_id = body.scope_id;

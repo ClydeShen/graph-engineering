@@ -12,7 +12,10 @@ import type { Pool } from 'pg';
 
 /**
  * Advance the HWM for a worker to eventId, but only if eventId is newer.
- * The conditional UPDATE prevents HWM regression on duplicate delivery.
+ * UPSERT: the first advance creates the row (UPDATE-only never persisted a
+ * position — bus_state stayed empty and every boot replayed from id 0,
+ * re-triggering LLM-calling handlers; UX-audit U1). GREATEST guards against
+ * regression on duplicate delivery.
  */
 export async function advanceHwm(
   pool: Pool,
@@ -20,9 +23,10 @@ export async function advanceHwm(
   eventId: number,
 ): Promise<void> {
   await pool.query(
-    `UPDATE bus_state
-     SET last_processed_event_id = $1
-     WHERE worker_id = $2 AND last_processed_event_id < $1`,
+    `INSERT INTO bus_state (worker_id, last_processed_event_id)
+     VALUES ($2, $1)
+     ON CONFLICT (worker_id) DO UPDATE
+     SET last_processed_event_id = GREATEST(bus_state.last_processed_event_id, EXCLUDED.last_processed_event_id)`,
     [eventId, workerId],
   );
 }

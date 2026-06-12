@@ -61,7 +61,13 @@ if (requested !== undefined && !requested.startsWith('-') && !(KNOWN as readonly
   console.error(`unknown command: ${requested}\nrun \`memex --help\` for the command list`);
   process.exit(1);
 }
-const subcommand = (KNOWN as readonly string[]).includes(requested ?? '')
+// Bare `memex` shows help instead of dropping into the connect wizard
+// (UX-audit U3: surprising, and crashes under non-TTY stdin).
+if (requested === undefined) {
+  console.error('usage: memex <command>\nrun `memex --help` for the command list');
+  process.exit(1);
+}
+const subcommand = (KNOWN as readonly string[]).includes(requested)
   ? (requested as (typeof KNOWN)[number])
   : 'connect';
 
@@ -73,22 +79,35 @@ async function resolveDbUrl(): Promise<string> {
   throw new Error('DATABASE_URL not set and no database.url in the active profile config');
 }
 
-async function runBackupCommand(): Promise<void> {
-  const [{ runBackup }, { profileDir }, { mkdirSync }, { join }, { execFile }] = await Promise.all([
-    import('./backup.js'),
-    import('@graph/shared'),
-    import('node:fs'),
-    import('node:path'),
-    import('node:child_process'),
-  ]);
-  const runner = {
+// pg_dump/pg_restore runner. ENOENT gets an actionable message instead of an
+// empty stderr (UX-audit U5: dockerized postgres hosts often lack client tools).
+async function makePgToolRunner(): Promise<{ exec(cmd: string, args: string[]): Promise<{ code: number; stderr: string }> }> {
+  const { execFile } = await import('node:child_process');
+  return {
     exec: (cmd: string, args: string[]) =>
       new Promise<{ code: number; stderr: string }>((resolve) => {
         execFile(cmd, args, (err, _stdout, stderr) => {
+          if (err !== null && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+            resolve({
+              code: 1,
+              stderr: `${cmd} not found on PATH — install the PostgreSQL client tools, or run it inside your postgres container (docker exec <container> ${cmd} …)`,
+            });
+            return;
+          }
           resolve({ code: err === null ? 0 : 1, stderr: String(stderr) });
         });
       }),
   };
+}
+
+async function runBackupCommand(): Promise<void> {
+  const [{ runBackup }, { profileDir }, { mkdirSync }, { join }] = await Promise.all([
+    import('./backup.js'),
+    import('@graph/shared'),
+    import('node:fs'),
+    import('node:path'),
+  ]);
+  const runner = await makePgToolRunner();
   const outDir = process.argv[3] ?? join(profileDir(), 'backups');
   mkdirSync(outDir, { recursive: true });
   const { file } = await runBackup(runner, await resolveDbUrl(), outDir);
@@ -100,19 +119,11 @@ async function runBackupCommand(): Promise<void> {
 async function runRestoreCommand(): Promise<void> {
   const file = process.argv[3];
   if (!file) throw new Error('usage: memex restore <backup-file>');
-  const [{ runRestore }, { checkHashChain, buildRealProbes }, { execFile }] = await Promise.all([
+  const [{ runRestore }, { checkHashChain, buildRealProbes }] = await Promise.all([
     import('./backup.js'),
     import('./doctor.js'),
-    import('node:child_process'),
   ]);
-  const runner = {
-    exec: (cmd: string, args: string[]) =>
-      new Promise<{ code: number; stderr: string }>((resolve) => {
-        execFile(cmd, args, (err, _stdout, stderr) => {
-          resolve({ code: err === null ? 0 : 1, stderr: String(stderr) });
-        });
-      }),
-  };
+  const runner = await makePgToolRunner();
   const result = await runRestore(runner, await resolveDbUrl(), file, async () =>
     checkHashChain(await buildRealProbes()),
   );
@@ -233,6 +244,13 @@ async function runSkillsCommand(): Promise<void> {
     return;
   }
   throw new Error('usage: memex skills <search|install|inspect>');
+}
+
+// clack prompts crash under non-TTY stdin (uv_tty_init EBADF) — guard the
+// interactive commands at dispatch (UX-audit U4); non-interactive boots read .env.
+if ((subcommand === 'onboard' || subcommand === 'connect') && !process.stdin.isTTY) {
+  console.error(`memex ${subcommand} is interactive and needs a TTY`);
+  process.exit(1);
 }
 
 const entry =

@@ -96,9 +96,12 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
       // were already processed (or missed intentionally). Episodic writes are idempotent
       // per content_hash but re-triggering on replay would create duplicate records.
     } catch (err) {
-      // function_not_found during replay means the subscriber worker hasn't registered yet.
-      // HWM has already advanced — skip this event and continue. Non-fatal.
-      log.warn({ event_id: row.id, event_type: row.event_type, err }, LOG_EVENTS.PULSE_REPLAY + ' trigger skipped — function not found');
+      // Common causes: subscriber worker not registered yet (function_not_found)
+      // or a transient handler failure. HWM has already advanced — skip and
+      // continue. Log the actual reason, message only (full err objects carry
+      // double stack traces — UX-audit U9).
+      const reason = err instanceof Error ? err.message : String(err);
+      log.warn({ event_id: row.id, event_type: row.event_type, reason }, LOG_EVENTS.PULSE_REPLAY + ' trigger skipped');
     }
   }
 
@@ -162,7 +165,8 @@ export async function startPulseFetch(deps: PulseFetchDeps): Promise<void> {
         });
       }
     } catch (err) {
-      log.warn({ event_id: event.id, event_type: event.event_type, err }, LOG_EVENTS.PULSE_ERROR + ' trigger failed — subscriber may not be registered');
+      const reason = err instanceof Error ? err.message : String(err);
+      log.warn({ event_id: event.id, event_type: event.event_type, reason }, LOG_EVENTS.PULSE_ERROR + ' trigger failed — subscriber may not be registered');
     }
   });
 

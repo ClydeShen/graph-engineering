@@ -152,18 +152,33 @@ describe('GET /v1/skills/:id', () => {
     expect(body.error).toBe('invalid id');
   });
 
-  it('returns 400 for id that is too short', async () => {
+  // U18: plain directory names (memex skills install) are now valid ids —
+  // a well-formed name that doesn't exist on disk is 404, not 400.
+  it('returns 404 for a well-formed skill name that is not installed', async () => {
     const app = buildSkillsRoute(tempDir);
     const res = await app.fetch(new Request(`http://localhost/skills/abc123`));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('invalid id');
+    expect(body.error).toBe('not found');
   });
 
-  it('returns 400 for id with non-hex chars', async () => {
+  it('serves SKILL.md by directory name (CLI-installed skill)', async () => {
+    fs.mkdirSync(join(tempDir, 'create-skill'), { recursive: true });
+    fs.writeFileSync(
+      join(tempDir, 'create-skill', 'SKILL.md'),
+      '---\nname: create-skill\ndescription: d\n---\nbody',
+      'utf8',
+    );
     const app = buildSkillsRoute(tempDir);
-    const badId = 'g'.repeat(64); // 'g' is not hex
-    const res = await app.fetch(new Request(`http://localhost/skills/${badId}`));
+    const res = await app.fetch(new Request(`http://localhost/skills/create-skill`));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { content: string };
+    expect(body.content).toContain('create-skill');
+  });
+
+  it('returns 400 for id starting with a dot (hidden/relative path form)', async () => {
+    const app = buildSkillsRoute(tempDir);
+    const res = await app.fetch(new Request(`http://localhost/skills/.hidden`));
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('invalid id');

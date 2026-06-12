@@ -93,6 +93,11 @@ export async function handleWsMessage(
     if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
       return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
     }
+    // Precheck the shape so a typo'd --scope gets a self-explanatory error
+    // instead of a postgres uuid-syntax failure (UX-audit U7).
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.scope_id)) {
+      return { type: 'error', request_id: msg.request_id, message: `invalid scope_id (expected a UUID): ${msg.scope_id}` };
+    }
     if (typeof msg.text !== 'string' || msg.text.length === 0) {
       return { type: 'error', request_id: msg.request_id, message: 'missing text' };
     }
@@ -123,8 +128,10 @@ export async function handleWsMessage(
         context: null,
       };
     } catch (err) {
-      log.error({ err: err instanceof Error ? err.message : String(err) }, 'ws.conversation.error');
-      return { type: 'error', request_id: msg.request_id, message: 'conversation turn failed' };
+      const reason = err instanceof Error ? err.message : String(err);
+      log.error({ err: reason }, 'ws.conversation.error');
+      // Surface the reason — the client otherwise has nothing to act on (U7).
+      return { type: 'error', request_id: msg.request_id, message: `conversation turn failed: ${reason}` };
     }
   }
 

@@ -41,3 +41,4 @@ data/
 .planning/tmp/
 packages/console/.next/
 packages/console/next-env.d.ts
+service-files/

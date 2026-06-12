@@ -35,7 +35,16 @@ export default function SkillsPage() {
 
   const open = async (s: SkillRow) => {
     const res = await fetch(`/v1/skills/${s.fingerprintId}`, { cache: 'no-store' });
-    setBody({ name: s.name, text: res.ok ? await res.text() : `fetch failed: ${res.status}` });
+    // The endpoint wraps the SKILL.md body as {"content": "..."} — render the
+    // body, not the raw JSON envelope (UX-audit U19).
+    let text: string;
+    if (res.ok) {
+      const data = (await res.json()) as { content?: string };
+      text = data.content ?? '';
+    } else {
+      text = `fetch failed: ${res.status}`;
+    }
+    setBody({ name: s.name, text });
   };
 
   return (

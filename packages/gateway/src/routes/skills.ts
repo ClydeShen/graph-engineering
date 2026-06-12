@@ -19,11 +19,14 @@ import { Hono } from 'hono';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '@shared/logger';
+import { memexHome } from '@graph/shared';
 
 const log = logger.child({ component: 'gateway', route: 'GET /v1/skills' });
 
-/** SHA-256 hex string — the only valid fingerprintId format */
+/** SHA-256 hex string — fingerprint form of a skill id */
 const FINGERPRINT_ID_RE = /^[0-9a-f]{64}$/;
+/** CLI-installed skill directory name (memex skills install <reg> <id> [name]) */
+const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 export interface SkillSummary {
   fingerprintId: string;
@@ -51,7 +54,12 @@ export function parseFrontmatter(content: string): { name: string; description: 
  * @param skillsDir  Directory to scan for skills. Defaults to SKILLS_DIR env var,
  *                   falling back to './skills'. No Pool required — filesystem only.
  */
-export function buildSkillsRoute(skillsDir = process.env['SKILLS_DIR'] ?? './skills'): Hono {
+export function buildSkillsRoute(
+  // Default to the global install root the CLI writes to (~/.memex/skills) —
+  // './skills' pointed at the gateway cwd, so the console never saw installed
+  // skills (UX-audit U18). SKILLS_DIR still overrides.
+  skillsDir = process.env['SKILLS_DIR'] ?? join(memexHome(), 'skills'),
+): Hono {
   const app = new Hono();
 
   // Per-instance cache — isolated per buildSkillsRoute() call (important for tests)
@@ -107,9 +115,11 @@ export function buildSkillsRoute(skillsDir = process.env['SKILLS_DIR'] ?? './ski
   app.get('/skills/:id', (c) => {
     const id = c.req.param('id');
 
-    // SECURITY: validate id matches SHA-256 hex format before constructing any path.
-    // This prevents path traversal (T-05-05-01).
-    if (!FINGERPRINT_ID_RE.test(id)) {
+    // SECURITY: validate id before constructing any path — prevents traversal
+    // (T-05-05-01). Accepted forms: SHA-256 fingerprint, or a plain directory
+    // name as written by `memex skills install` (no separators or dots, so no
+    // way out of skillsDir).
+    if (!FINGERPRINT_ID_RE.test(id) && !SKILL_NAME_RE.test(id)) {
       return c.json({ error: 'invalid id' }, 400);
     }
 

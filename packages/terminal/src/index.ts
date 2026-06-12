@@ -90,44 +90,58 @@ async function main(): Promise<void> {
       if (text !== undefined) process.stdout.write(text);
       return;
     }
+    // Every conversation turn writes memory_updated ×2 (user + assistant) —
+    // echoing those back is pure noise in a chat surface (UX-audit U15).
+    // Other trail events (task_spawned, conflicts, …) stay visible.
+    if (evt.event_type === 'memory_updated') return;
     console.log(`  ⟶ [${evt.event_type}] ${JSON.stringify(evt.payload)}`);
   });
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'memex> ' });
   rl.prompt();
+  // Turns run strictly one at a time. With piped stdin all lines (and EOF)
+  // arrive at once — without this chain, /quit or stream close would drop
+  // in-flight messages (UX-audit U8).
+  let chain: Promise<void> = Promise.resolve();
+  const runTurn = async (text: string): Promise<void> => {
+    try {
+      const result = await client.sendUserMessage(text);
+      if (result.suspended) {
+        console.log('  (scope suspended)');
+      } else if (result.error !== undefined) {
+        console.log(`  ✗ ${result.error}`);
+      } else if (result.reply !== undefined) {
+        // Deltas already streamed via onTrailEvent — close the line.
+        console.log('');
+      } else {
+        console.log(`  ✓ recorded ${result.version_hash?.slice(0, 12) ?? '?'}`);
+      }
+    } catch (err) {
+      console.error('  ✗', err instanceof Error ? err.message : err);
+    }
+    rl.prompt();
+  };
   rl.on('line', (line) => {
     const text = line.trim();
     if (text === '/quit' || text === '/exit') {
-      client.close();
-      rl.close();
+      chain = chain.then(() => {
+        client.close();
+        rl.close();
+      });
       return;
     }
     if (text.length === 0) {
       rl.prompt();
       return;
     }
-    client
-      .sendUserMessage(text)
-      .then((result) => {
-        if (result.suspended) {
-          console.log('  (scope suspended)');
-        } else if (result.error !== undefined) {
-          console.log(`  ✗ ${result.error}`);
-        } else if (result.reply !== undefined) {
-          // Deltas already streamed via onTrailEvent — close the line.
-          console.log('');
-        } else {
-          console.log(`  ✓ recorded ${result.version_hash?.slice(0, 12) ?? '?'}`);
-        }
-      })
-      .catch((err: unknown) => {
-        console.error('  ✗', err instanceof Error ? err.message : err);
-      })
-      .finally(() => rl.prompt());
+    chain = chain.then(() => runTurn(text));
   });
   rl.on('close', () => {
-    client.close();
-    process.exit(0);
+    // Let any in-flight turn finish before tearing the process down.
+    void chain.then(() => {
+      client.close();
+      process.exit(0);
+    });
   });
 }
 

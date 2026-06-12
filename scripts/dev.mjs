@@ -181,9 +181,12 @@ function onboardingGate() {
 async function boot() {
   onboardingGate();
 
-  // 0. Free ports from any leftover processes
+  // 0. Free ports from any leftover processes (3000: a stale console would
+  // make Next.js silently move to another port while the banner still says
+  // 3000 — UX-audit U16)
   freePort(iiiPort);
   freePort(gatewayPort);
+  freePort(3000);
 
   // 1. iii engine
   procs.push(start({
