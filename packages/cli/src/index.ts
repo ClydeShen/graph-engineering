@@ -16,6 +16,7 @@ Commands:
   service       Generate system service files (systemd/launchd/schtasks)
   skills        search <q> | install <registry> <id> [name] | inspect [name]
   mcp           catalog | install <name> | configure <name> | login <name> | list | uninstall <name>
+  capability    list | bind <category> <impl> | install <preset>
   --version     Print the MemexOS version
 
 Options:
@@ -42,7 +43,7 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   process.exit(0);
 }
 
-const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp'] as const;
+const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp', 'capability', 'connect'] as const;
 const subcommand = (KNOWN as readonly string[]).includes(process.argv[2] ?? '')
   ? (process.argv[2] as (typeof KNOWN)[number])
   : 'connect';
@@ -219,6 +220,9 @@ const entry =
   : subcommand === 'service' ? runServiceCommand()
   : subcommand === 'skills' ? runSkillsCommand()
   : subcommand === 'mcp' ? import('./mcp.js').then((m) => m.runMcpCommand())
+  : subcommand === 'capability' ? import('./capability.js').then((m) => m.runCapabilityCommand())
+  : process.argv[2] === 'connect' && process.argv[3] === 'telegram'
+    ? import('./connect/telegram.js').then((m) => m.runConnectTelegram())
   : main();
 entry.catch((err: unknown) => {
   console.error('Error:', err instanceof Error ? err.message : err);

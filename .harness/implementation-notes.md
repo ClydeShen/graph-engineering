@@ -548,3 +548,46 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
   / mcp config editing (5+); existing 3 worker tests preserved (hermetic via injected config).
 - Live OAuth flow + real catalog server connect not exercised (needs network + live remote
   MCP) — carried to Phase 18 live-environment batch.
+
+## Phase 18 — first-run-experience (2026-06-12)
+
+### Decisions not covered by the spec
+
+- **Capability stats follow the migration-013 pattern**, not ledger payload parsing:
+  payload is TEXT (migration 002 red line), so co-occurrence lives in
+  capability_activation (scope_id, implementation) + capability_binding read model
+  (migration 017). Binding history stays in the ledger (memex::capability::bound);
+  the table is the current-state projection.
+- **Onboarding presets vs "onboarding writes no graph"** (Phase 11 principle):
+  preset selection installs ARTIFACTS only (bundled-skill copies, install hints for
+  other forms); bindings happen via `memex capability bind` once the DB is up.
+  ADR-51 binding semantics and the Phase 11 boot-order reality are both honored.
+- **Dashboard auto-open is health-gated**: onboarding only opens the browser when
+  /v1/sys/health answers (fresh installs have no services yet — opening a 404 helps
+  nobody). Deviation from a literal reading of ROADMAP "自动打开 Dashboard".
+- **Terminal auto-start → printed hint** (npx memex-terminal): spawning a TUI from
+  inside the clack onboarding session breaks both UIs.
+- **Agent-mode ledger discipline**: Pi session deltas render only; the graph gets
+  turn boundaries (assistant message_end ≤2000 chars, tool_execution_end ≤500 chars).
+- **Preset table is TS, not YAML dir**: curated in-repo either way; YAML parse surface
+  adds nothing until external contribution exists. Categories: browser/search/
+  filesystem/github/meta (v1 vocabulary, ADR-51 Category Entities).
+- **iii version pinning NOT done**: install.iii.dev's version-selection interface is
+  unverified offline — guessing a VERSION env contract would be fabrication. Stays in
+  the live-environment batch.
+
+### Changed from the original plan
+
+- buildSessionKey platform union widened to email/slack/webhook (email production
+  binding needed it; slack/webhook were already valid platforms in Phase 12 routing).
+- `memex connect telegram` validates via direct getMe (zero-SDK, Phase 12 ethos)
+  instead of reusing gateway-bot's ConnectorRegistry — avoids cli→gateway-bot dep.
+
+### Verification
+
+- tsc clean; 534 tests (was 509): wsl detection/browser-cmd/doctor-check,
+  capability graph fns (mock pool), endorsement rendering, telegram validate/write,
+  imap url parse, agent-mode truncation; onboarding tests extended for the new prompts.
+- LIVE leftovers (unchanged ownership): real WSL2 Kali install run, macOS/Linux install
+  runs, docker exec containment verify, live Telegram pairing handshake, Pi agent mode
+  against a live gateway, email against a real IMAP/SMTP pair, iii version pinning.

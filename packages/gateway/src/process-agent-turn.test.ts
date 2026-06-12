@@ -39,6 +39,8 @@ vi.mock('./knapsack-graph.js', () => ({
 }));
 vi.mock('@graph/shared', () => ({
   isScopeColdStart: (...a: unknown[]) => isScopeColdStart(...a),
+  // Phase 18: capability endorsement is optional context; null = nothing to inject.
+  buildCapabilityEndorsement: vi.fn(() => Promise.resolve(null)),
 }));
 vi.mock('@graph/workers/memory/reflect.function', () => ({
   memReflect: (...a: unknown[]) => memReflect(...a),

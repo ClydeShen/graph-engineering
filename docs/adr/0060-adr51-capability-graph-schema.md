@@ -1,6 +1,6 @@
 # ADR 51｜能力图（Capability Graph）：功能拓扑的图原生表示与背书机制
 
-status: proposed（骨架，2026-06-12 Fuller 会话七项拍板的结构化记录；实现细节随 Phase 17/18/20 落地时补全）
+status: accepted（2026-06-12 Fuller 会话七项拍板；Phase 17 最小增量 + Phase 18 主体已落地——`packages/shared/src/capability/{graph,presets}.ts`、migration 017、`memex capability` CLI、cold-start 背书注入 `process-agent-turn.ts`；Phase 20 消费段待做）
 日期: 2026-06-12
 
 ---

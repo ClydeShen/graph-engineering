@@ -87,6 +87,12 @@ export interface AssembledContext {
   reflectionContent?: string;
   /** Token count of reflectionContent. */
   reflectionTokens?: number;
+  /**
+   * Capability endorsement block (ADR-51 D-4/D-5, cold_start only): installed
+   * implementations ranked by scenario co-occurrence stats. Level-1 metadata
+   * only — the agent chooses; the system orders the evidence.
+   */
+  capabilityContent?: string;
 }
 
 /**

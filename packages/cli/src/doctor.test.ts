@@ -46,7 +46,7 @@ describe('memex doctor (Phase 15 G4)', () => {
     expect(byName(results, 'migrations').status).toBe('skip');
     expect(byName(results, 'hash-chain').status).toBe('skip');
     expect(byName(results, 'node-version').status).toBe('ok');
-    expect(results).toHaveLength(8); // a failure never aborts the run
+    expect(results).toHaveLength(9); // a failure never aborts the run (8 + wsl, Phase 18)
   });
 
   it('fails node-version below 22', async () => {

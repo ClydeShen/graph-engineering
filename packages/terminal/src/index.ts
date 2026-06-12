@@ -6,11 +6,11 @@
  * Reads connection settings from ~/.memex/config.json (shell.gateway_url,
  * gateway.token) with env overrides.
  *
- * v1 surface: readline REPL over the WS protocol — user lines become
- * task_spawned events in the session scope; turn results and live trail
- * events render inline. The Pi-SDK interactive agent mode (createAgentSession
- * driving a local coding agent against this graph) is the documented next
- * increment — it needs a live gateway + provider keys to verify.
+ * Two surfaces:
+ *   default  — readline REPL over the WS protocol: user lines become
+ *              task_spawned events; turn results and trail events render inline
+ *   --agent  — Pi SDK agent session (Phase 18 #6): createAgentSession drives
+ *              the conversation, turn boundaries mirror into the graph
  */
 
 import { createInterface } from 'node:readline';
@@ -32,6 +32,21 @@ async function main(): Promise<void> {
   console.log(`scope ${session.scope_id}`);
   await client.connect();
   client.subscribe(session.scope_id);
+
+  if (process.argv.includes('--agent')) {
+    const { runAgentMode } = await import('./agent-mode.js');
+    try {
+      await runAgentMode(client);
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        'agent mode unavailable:',
+        err instanceof Error ? err.message : err,
+        '\nfalling back to readline REPL (configure Pi: ~/.pi/agent)',
+      );
+    }
+  }
+
   client.onTrailEvent((evt) => {
     console.log(`  ⟶ [${evt.event_type}] ${JSON.stringify(evt.payload)}`);
   });

@@ -13,13 +13,16 @@ const answers: Record<string, unknown> = {};
 vi.mock('@clack/prompts', () => ({
   intro: vi.fn(),
   outro: vi.fn(),
-  log: { success: vi.fn(), info: vi.fn(), warn: vi.fn() },
+  log: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), message: vi.fn(), error: vi.fn() },
   isCancel: () => false,
   select: vi.fn(() => Promise.resolve(answers['select'])),
   text: vi.fn((opts: { message: string; initialValue?: string }) =>
     Promise.resolve(answers[opts.message] ?? opts.initialValue ?? ''),
   ),
   confirm: vi.fn((opts: { message: string }) => Promise.resolve(answers[opts.message] ?? true)),
+  // Phase 18 prompts: presets default to none, telegram step defaults to skip
+  // (per-test overrides via answers[message]).
+  multiselect: vi.fn(() => Promise.resolve(answers['multiselect'] ?? [])),
 }));
 
 import { runOnboard } from './onboard.js';
@@ -32,6 +35,8 @@ beforeEach(() => {
   mkdirSync(testDir, { recursive: true });
   for (const k of Object.keys(answers)) delete answers[k];
   answers['select'] = 'anthropic';
+  // Phase 18: skip the optional Telegram step in the base flow tests.
+  answers['Connect a Telegram bot now? (optional)'] = false;
 });
 
 afterEach(() => {

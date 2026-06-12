@@ -188,8 +188,36 @@ function checkChannels(p: DoctorProbes): DoctorResult {
     : { name: 'channels', status: 'warn', detail: `token missing for: ${missing.join(', ')}` };
 }
 
+/**
+ * WSL environment check (Phase 18 #2, ADR-48 WSL2 appendix). Pure injection:
+ * the caller supplies detection results so the check is unit-testable anywhere.
+ */
+export function checkWsl(env: {
+  wsl: boolean;
+  systemd: boolean;
+  hasWslview: boolean;
+  automountC: boolean;
+}): DoctorResult {
+  if (!env.wsl) return { name: 'wsl', status: 'skip', detail: 'not running under WSL' };
+  const notes: string[] = [];
+  let status: DoctorStatus = 'ok';
+  if (!env.systemd) {
+    status = 'warn';
+    notes.push('systemd off — service install unavailable (enable via /etc/wsl.conf [boot] systemd=true)');
+  }
+  if (!env.hasWslview) notes.push('wslview missing (apt install wslu) — falling back to explorer.exe');
+  if (env.automountC) {
+    notes.push('/mnt/c mounted — local exec backend can reach the Windows filesystem; prefer the docker backend (ADR-48)');
+    if (status === 'ok') status = 'warn';
+  }
+  return { name: 'wsl', status, detail: notes.length > 0 ? notes.join('; ') : 'WSL2 with systemd, wslview present' };
+}
+
 /** Run all checks. Failures never abort the run — doctor reports, it does not fix. */
 export async function runDoctor(p: DoctorProbes): Promise<DoctorResult[]> {
+  const { isWsl, hasSystemd } = await import('./wsl.js');
+  const { existsSync } = await import('node:fs');
+  const wsl = isWsl();
   return [
     await checkConfig(p),
     checkNodeVersion(p),
@@ -199,6 +227,12 @@ export async function runDoctor(p: DoctorProbes): Promise<DoctorResult[]> {
     await checkProviders(p),
     await checkGateway(p),
     checkChannels(p),
+    checkWsl({
+      wsl,
+      systemd: wsl ? hasSystemd() : false,
+      hasWslview: wsl ? existsSync('/usr/bin/wslview') : false,
+      automountC: wsl ? existsSync('/mnt/c/Windows') : false,
+    }),
   ];
 }
 

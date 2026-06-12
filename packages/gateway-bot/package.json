@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@graph/gateway-bot",
   "version": "0.1.0",
   "type": "module",
@@ -8,6 +8,11 @@
     "@graph/shared": "*",
     "@graph/types": "*",
     "hono": "^4",
+    "imapflow": "^1.0.193",
+    "nodemailer": "^7.0.0",
     "pg": "8.21.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.0"
   }
 }

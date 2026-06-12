@@ -638,7 +638,7 @@ Plans:
 
 ---
 
-## 18-first-run-experience
+## 18-first-run-experience ✅ Code-complete (2026-06-12; live-host runs remain — see implementation-notes)
 
 **目标：** Scenario 1 整条走通：在一台真实 WSL2（Kali minimal）上从 `curl | bash` 到 Telegram 互发消息一气呵成。清偿 implementation-notes 活体验证遗留清单中阻塞首跑体验的项。
 

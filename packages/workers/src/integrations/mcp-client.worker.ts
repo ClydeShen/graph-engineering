@@ -8,6 +8,7 @@ import {
   findCapabilityScope,
   loadMemexConfig,
   MemexOAuthProvider,
+  recordActivation,
   recordCapabilityEvent,
   toolEntityId,
 } from '@graph/shared';
@@ -163,6 +164,14 @@ export class McpClientWorker {
         };
 
         const callResult = await client.callTool({ name: toolName, arguments: p.args });
+
+        // Co-occurrence sampling (ADR-51 D-6): this implementation was active
+        // in this scope. Idempotent; outcome attribution joins scope_lineage.
+        if (this.pool) {
+          await recordActivation(this.pool, p.scope_id, namespace).catch(() => {
+            /* stats are best-effort — never fail the tool call */
+          });
+        }
 
         const writeResult = await this.writes.write({
           scopeId: p.scope_id,

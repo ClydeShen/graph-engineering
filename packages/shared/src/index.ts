@@ -26,3 +26,4 @@ export * from './env-filter.js';
 export * from './trust-toolset.js';
 export * from './mcp/oauth-provider.js';
 export * from './capability/graph.js';
+export * from './capability/presets.js';

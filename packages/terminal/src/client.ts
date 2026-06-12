@@ -156,6 +156,22 @@ export class MemexTerminalClient {
    * (same payload shape as the channel bots) and await the turn result.
    */
   sendUserMessage(text: string): Promise<WsTurnResultMessage> {
+    return this.recordEvent('task_spawned', {
+      task_id: crypto.randomUUID(),
+      source: 'memex-terminal',
+      text,
+      required_skills: ['message-handler'],
+    });
+  }
+
+  /**
+   * Record an arbitrary agent event into the session scope (agent mode mirrors
+   * Pi session turns into the graph through this — Phase 18 #6).
+   */
+  recordEvent(
+    eventType: 'task_spawned' | 'memory_updated',
+    payload: Record<string, unknown>,
+  ): Promise<WsTurnResultMessage> {
     const requestId = `t${++this.requestSeq}`;
     const message: WsClientMessage = {
       type: 'agent_event',
@@ -163,14 +179,9 @@ export class MemexTerminalClient {
       request_id: requestId,
       event: {
         entity_id: crypto.randomUUID(),
-        event_type: 'task_spawned',
+        event_type: eventType,
         predecessor_hash: this.session.tip_hash,
-        payload: {
-          task_id: crypto.randomUUID(),
-          source: 'memex-terminal',
-          text,
-          required_skills: ['message-handler'],
-        },
+        payload,
       },
     };
 

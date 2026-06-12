@@ -40,6 +40,27 @@ export class GatewayBot {
       const { serve } = await import('@hono/node-server');
       serve({ fetch: app.fetch, port: discordPort });
     }
+
+    // Email (Phase 18: production binding of the Phase 12 transport seam).
+    // Lazy imports: installs without email config never load imapflow/nodemailer.
+    const { makeEmailTransportFromEnv } = await import('./connectors/email-transport.js');
+    const emailTransport = makeEmailTransportFromEnv();
+    if (emailTransport) {
+      const { EmailConnector } = await import('./connectors/email-connector.js');
+      const email = new EmailConnector({ transport: emailTransport });
+      const check = await email.check();
+      if (check.ok) {
+        void email.start(async (evt) => {
+          // chat_id = thread anchor (TD-E semantics: replies continue the session scope)
+          const sessionKey = buildSessionKey('email', evt.chat_id);
+          const taskId = await dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
+          return `Task spawned: ${taskId}`;
+        });
+        console.log('[gateway-bot] email connector polling');
+      } else {
+        console.error(`[gateway-bot] email configured but check failed: ${check.detail ?? ''}`);
+      }
+    }
   }
 }
 

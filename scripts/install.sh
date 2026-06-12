@@ -15,8 +15,27 @@ MEMEX_HOME="$HOME/.memex"
 say()  { printf '%s\n' "$*"; }
 fail() { printf 'install: %s\n' "$*" >&2; exit 1; }
 
+# ── 0. WSL2 detection (Phase 18 — first-class support) ───────────────────────
+IS_WSL=0
+if [ -r /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
+  IS_WSL=1
+  say "✓ WSL2 detected — localhost forwarding lets the Windows browser reach the dashboard"
+  if [ ! -d /run/systemd/system ]; then
+    say "! systemd is off in this distro — service install will be unavailable."
+    say "  enable: printf '[boot]\\nsystemd=true\\n' | sudo tee -a /etc/wsl.conf  (then: wsl --shutdown)"
+  fi
+  if [ -d /mnt/c/Windows ]; then
+    say "! /mnt/c is mounted: the local exec backend can reach the Windows filesystem."
+    say "  prefer the docker execution backend, or disable automount (ADR-48 WSL2 appendix)."
+  fi
+fi
+
 # ── 1. Dependency checks (detect, never silently install system-level deps) ──
-command -v git >/dev/null 2>&1 || fail "git is required. Install git and re-run."
+# Minimal distros (e.g. Kali minimal under WSL) lack curl/git — give the apt path.
+command -v git >/dev/null 2>&1 || {
+  [ "$IS_WSL" = "1" ] && fail "git is required. apt update && apt install -y git curl, then re-run."
+  fail "git is required. Install git and re-run."
+}
 
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"

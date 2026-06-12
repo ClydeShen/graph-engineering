@@ -8,6 +8,7 @@
     "memex-terminal": "./src/index.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "*",
     "@graph/shared": "*",
     "@graph/types": "*"
   }

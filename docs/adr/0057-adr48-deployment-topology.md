@@ -56,6 +56,14 @@ Phase 15 (deploy-everywhere) 把开发者手工部署（clone、npm install、�
 
 `memex service` 生成 systemd unit / launchd plist / schtasks 命令文件 + 用户自行执行的注册指令。**memex 永不静默提权**（无 sudo、schtasks 用 `/rl limited`）。install 脚本同理：检测依赖并指引安装，不替用户装系统级运行时。
 
+### 附录：WSL2 一等支持（Phase 18 补充，2026-06-12）
+
+- **检测**：`/proc/version` 含 `microsoft`（install.sh §0 + `packages/cli/src/wsl.ts` `isWsl()`）
+- **浏览器**：WSL2 localhost 转发默认开启——`wslview`（wslu）优先，缺失回落 `explorer.exe`（`browserOpenCommand()`）
+- **systemd**：未启用（`/run/systemd/system` 缺失）→ 打印 `/etc/wsl.conf [boot] systemd=true` 指引而非失败；service install 在 systemd 关闭时不可用
+- **`/mnt/c` automount 风险**：local 执行后端可触达 Windows 文件系统——install.sh 与 `memex doctor`（wsl 检查项）都给出"用 docker 后端或禁 automount"指引
+- **最小发行版**（Kali minimal）：git/curl 缺失时给 apt 安装路径
+
 ## 后果
 
 - Phase 16 发布物清单定形：`scripts/install.sh`、`scripts/install.ps1`、`deploy/Dockerfile`、`deploy/docker-compose.yml`、`deploy/docker-compose.hardened.yml`——checksum 对象，路径不再移动

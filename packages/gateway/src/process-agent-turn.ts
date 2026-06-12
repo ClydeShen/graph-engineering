@@ -26,7 +26,7 @@ import {
 } from './watchdog-sql.js';
 import { assembleContext, type AssembledContext } from '@graph/workers/context/assemble';
 import { makeKnapsackGraph } from './knapsack-graph.js';
-import { isScopeColdStart, type EmbeddingProvider } from '@graph/shared';
+import { buildCapabilityEndorsement, isScopeColdStart, type EmbeddingProvider } from '@graph/shared';
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
 import { insertWorkingMemory } from '@graph/workers/memory/working-memory';
 import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
@@ -143,6 +143,11 @@ export async function processAgentTurn(
       let triggerType: MemReflectInput['trigger_type'] | null = null;
       if (await isScopeColdStart(pool, scopeId)) {
         triggerType = 'cold_start';
+        // Capability endorsement (ADR-51 D-4/D-5): cold start injects the
+        // ranked capability surface next to the reflection block. Optional —
+        // null when there are no stats/bindings or migration 017 is absent.
+        const endorsement = await buildCapabilityEndorsement(pool);
+        if (endorsement !== null) context.capabilityContent = endorsement;
       } else if (occ_result === 'demoted') {
         triggerType = 'conflict_detected';
       } else if (event.event_type === 'task_spawned') {
