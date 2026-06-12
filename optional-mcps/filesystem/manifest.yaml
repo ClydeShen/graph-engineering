@@ -1,0 +1,15 @@
+name: filesystem
+description: Local filesystem access via the official MCP filesystem server (stdio). Scope it to a directory by editing args after install.
+transport:
+  command: npx
+  args:
+    - "-y"
+    - "@modelcontextprotocol/server-filesystem"
+    - "."
+tools:
+  default_enabled:
+    - read_file
+    - read_multiple_files
+    - list_directory
+    - search_files
+    - get_file_info

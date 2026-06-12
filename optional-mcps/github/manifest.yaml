@@ -1,0 +1,5 @@
+name: github
+description: GitHub remote MCP server (issues, PRs, repos) over Streamable HTTP with OAuth PKCE. Run `memex mcp login github` after install.
+transport:
+  url: https://api.githubcopilot.com/mcp/
+  auth: oauth

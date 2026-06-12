@@ -76,6 +76,44 @@ const ChannelEntrySchema = z
   })
   .passthrough();
 
+/**
+ * One MCP server entry (Phase 17, ADR-50). Field names align with Claude Code
+ * `mcpServers` JSON and Hermes `mcp_servers` YAML so users of either can port
+ * entries verbatim: stdio uses command/args/env, HTTP uses url/headers.
+ *
+ * ADR-51 D-1: these are OPERATIONAL fields (connection bootstrap). The policy
+ * fields (`tools`, `enabled`) are desired-state INPUT kept here only for
+ * Claude Code / Hermes compatibility — the effective tool surface after
+ * connecting is observed into the graph (`memex::capability::surface_changed`),
+ * which is the semantic authority.
+ */
+export const McpServerEntrySchema = z
+  .object({
+    /** stdio transport: executable to spawn. */
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    /** http/streamable transport: server URL. */
+    url: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    /** 'oauth' triggers the PKCE flow (memex mcp login) and authProvider wiring. */
+    auth: z.literal('oauth').optional(),
+    /** Desired-state tool filter (Hermes tools.include semantics). */
+    tools: z
+      .object({
+        include: z.array(z.string()).optional(),
+        exclude: z.array(z.string()).optional(),
+      })
+      .optional(),
+    enabled: z.boolean().optional(),
+  })
+  .refine((e) => (e.command !== undefined) !== (e.url !== undefined), {
+    message: 'exactly one of command (stdio) or url (http) is required',
+  });
+
+/** Inferred type for one MCP server entry. */
+export type McpServerEntry = z.infer<typeof McpServerEntrySchema>;
+
 /** Zod schema for ~/.memex/config.json. All top-level fields are optional — Gateway falls back to env vars. */
 export const MemexConfigSchema = z.object({
   gateway: z
@@ -95,6 +133,8 @@ export const MemexConfigSchema = z.object({
   shell: z.object({ gateway_url: z.string().optional() }).optional(),
   /** Phase 15: per-profile database isolation — full connection string. */
   database: z.object({ url: z.string().optional() }).optional(),
+  /** Phase 17: MCP server registry (Claude Code / Hermes compatible shape). */
+  mcp_servers: z.record(z.string(), McpServerEntrySchema).optional(),
 });
 
 /** Inferred type for the parsed Memex config. */

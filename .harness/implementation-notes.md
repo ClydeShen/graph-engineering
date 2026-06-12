@@ -511,3 +511,40 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - Phase 15: three-platform install runs; compose up on macOS/Linux; iii version pinning
   (0.19.2 image vs 0.11.2 dev — scheduled trigger provider gap); service registration on real hosts
 - Phase 16: real registry API verification; LLM-keyed journey extension (distill/reflect steps)
+
+## Phase 17 — mcp-connector-ecosystem (2026-06-12)
+
+### Decisions not covered by the spec
+
+- **MemexOAuthProvider lives in @graph/shared**, not packages/cli as ROADMAP sketched:
+  both CLI (login flow) and workers (transport authProvider) consume it, and neither may
+  import the other. SDK types are imported type-only — zero runtime dependency added to shared.
+- **Capability scope creation stays a CLI/control-plane right** (ADR-35): `memex mcp`
+  ensures the `capability:registry` scope via nestScope; McpClientWorker only SELECTs it
+  and skips observation recording when absent (resumes once the scope exists). Workers
+  never run scope DDL.
+- **Tool Entity ids are content-derived** (sha256('mcp-tool|ns|tool') → UUID shape), no
+  new table: surface_changed events carry {name, entity_id} pairs; call events add
+  tool_entity_id to payload. Per-tool stats are a projection over the ledger (ADR-51 D-3).
+- **CLI graph writes are best-effort**: DB unreachable → warn + proceed (config write is
+  the user-facing contract; observation backfills on next surface_changed). Deviation
+  from a strict reading of ADR-51 D-7 "install writes Entity" — recorded as acceptable
+  because the alternative (install fails when DB down) breaks the offline onboarding path.
+- **requires_env values never persist**: install prompts set session env only and print
+  shell-profile guidance; config keeps `${VAR}` references (raw-file editing, no
+  resolution on write).
+- **configure's tool multiselect requires a live connection**; offline → env updates
+  still save, tool selection skipped with a notice.
+
+### Changed from the original plan
+
+- ROADMAP said oauth-provider.ts in packages/cli/src/mcp/ — moved to shared (above).
+- connect/claude-code.ts mirror: Memex entries never overwrite same-named existing
+  Claude Code entries (user's file wins) — spec didn't state precedence.
+
+### Verification
+
+- tsc clean; 33 new tests across worker (11) / catalog-registry (13) / oauth-provider (7)
+  / mcp config editing (5+); existing 3 worker tests preserved (hermetic via injected config).
+- Live OAuth flow + real catalog server connect not exercised (needs network + live remote
+  MCP) — carried to Phase 18 live-environment batch.

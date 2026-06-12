@@ -15,6 +15,7 @@ Commands:
   restore <f>   pg_restore a backup, then re-verify the hash chain
   service       Generate system service files (systemd/launchd/schtasks)
   skills        search <q> | install <registry> <id> [name] | inspect [name]
+  mcp           catalog | install <name> | configure <name> | login <name> | list | uninstall <name>
   --version     Print the MemexOS version
 
 Options:
@@ -41,7 +42,7 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   process.exit(0);
 }
 
-const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills'] as const;
+const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp'] as const;
 const subcommand = (KNOWN as readonly string[]).includes(process.argv[2] ?? '')
   ? (process.argv[2] as (typeof KNOWN)[number])
   : 'connect';
@@ -149,7 +150,9 @@ async function main() {
 
   if (selected.includes('claude-code')) {
     s.start('Connecting Claude Code…');
-    const result = await connectClaudeCode();
+    const result = await connectClaudeCode({
+      includeMcpServers: process.argv.includes('--include-mcp-servers'),
+    });
     s.stop(`Claude Code: ${result.kind}${result.backup ? ` (backup: ${result.backup})` : ''}`);
     if (result.kind === 'already-wired') log.warn('Already wired — use --force to reinstall.');
     else log.success('Claude Code MCP wired to ~/.claude.json');
@@ -215,6 +218,7 @@ const entry =
   : subcommand === 'restore' ? runRestoreCommand()
   : subcommand === 'service' ? runServiceCommand()
   : subcommand === 'skills' ? runSkillsCommand()
+  : subcommand === 'mcp' ? import('./mcp.js').then((m) => m.runMcpCommand())
   : main();
 entry.catch((err: unknown) => {
   console.error('Error:', err instanceof Error ? err.message : err);

@@ -1,0 +1,7 @@
+name: everything
+description: MCP reference/test server exercising every protocol feature (stdio). Useful for verifying the MCP client path end to end; not for production.
+transport:
+  command: npx
+  args:
+    - "-y"
+    - "@modelcontextprotocol/server-everything"

@@ -214,7 +214,7 @@ reg<{ content: string; confidence?: number }>(
 
 // graph::integration::mcp-client — startup: connect to external MCP servers
 // Also directly calls connect() at boot (not trigger-driven), so kept inline.
-const mcpClientWorker = new McpClientWorker(eventWriter);
+const mcpClientWorker = new McpClientWorker(eventWriter, pool);
 worker.registerFunction(MCP_CLIENT_TRIGGER_CONFIG.function_id, async (_: unknown) => {
   await mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
   return { connected: true };
