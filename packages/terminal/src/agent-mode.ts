@@ -81,9 +81,19 @@ export async function runAgentMode(client: MemexTerminalClient): Promise<void> {
       return;
     }
     client
-      .sendUserMessage(text) // user turn into the graph first (trail = SSOT)
-      .catch(() => {
-        /* graph mirror failure must not block the conversation */
+      // Pure graph MIRROR (trail = SSOT): recordEvent, NOT sendUserMessage —
+      // in agent mode Pi is the responder; the ADR-54 conversation core must
+      // not produce a second reply.
+      .recordEvent('memory_updated', {
+        kind: 'conversation.user',
+        turn_id: crypto.randomUUID(),
+        source: 'memex-terminal-agent',
+        text,
+      })
+      .catch((err: unknown) => {
+        // Mirror failure must not block the conversation — but never silently
+        // (P3): the user deserves to know their trail is not being recorded.
+        console.error('  ⚠ graph mirror failed:', err instanceof Error ? err.message : err);
       })
       .then(() => session.prompt(text))
       .catch((err: unknown) => {

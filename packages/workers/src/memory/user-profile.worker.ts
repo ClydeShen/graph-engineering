@@ -2,10 +2,12 @@ import type { Pool } from 'pg';
 import { occWrite } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 
+// N2 fix: iii has no 'scheduled' trigger type — cron with the engine's 7-field
+// expression (sec min hour dom mon dow year), matching the other memory crons.
 export const USER_PROFILE_TRIGGER_CONFIG = {
-  type: 'scheduled' as const,
+  type: 'cron' as const,
   function_id: 'graph::memory::user-profile',
-  config: { cron: '0 3 * * *' },
+  config: { expression: '0 30 3 * * * *' },
 } as const;
 
 export const USER_PROFILE_SCOPE_ID = '00000000-0000-4000-8000-000000000001';

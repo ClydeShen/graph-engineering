@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import { type EventWriter, type LLMProvider, SUB_SCOPE_TOPIC } from '@graph/shared';
+import { type EventWriter, type LLMProvider, SUB_SCOPE_TOPIC, SUB_SCOPE_RESULT_FUNCTION_ID } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 
 export const SUB_SCOPE_RESULT_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
-  function_id: 'graph::scope::sub-scope-result',
+  function_id: SUB_SCOPE_RESULT_FUNCTION_ID,
   config: { topic: SUB_SCOPE_TOPIC },
 } as const;
 

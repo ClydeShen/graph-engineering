@@ -40,6 +40,22 @@ export interface OccWriteArgs {
 }
 
 /**
+ * Parse a graph_event_ready notification payload back to the event row id.
+ * The payload format is owned by this module (pg_notify below sends
+ * JSON.stringify({id})); every LISTEN consumer MUST parse through here —
+ * using the raw string as an id silently breaks the bigint lookup (N4).
+ */
+export function parseGraphEventReadyPayload(raw: unknown): number | null {
+  try {
+    const parsed = typeof raw === 'string' ? (JSON.parse(raw) as { id?: unknown }) : (raw as { id?: unknown });
+    const id = Number(parsed?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Execute the OCC Writable CTE against the given pool.
  *
  * The helper:

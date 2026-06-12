@@ -721,3 +721,16 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - processAgentTurn 增 ccrStore 穿透参数（memex_retrieve 当 turn 取回被裁剪事件）
 - run-migrations.ts 加 pg_advisory_lock：并行 vitest worker 同时跑迁移的死锁（被 021
   的全表 UPDATE 放大暴露）系统性修复
+
+## 杂项修复 N2/N3/N4/P3（2026-06-12，开箱体验修复弧 4/5）
+
+- N2：user-profile trigger scheduled→cron（引擎 7 字段表达式 0 30 3 * * * *）；
+  mcp-client 干脆去掉 trigger 注册（@startup 非法 + boot 已直连，注册纯属误导）
+- N3：pulse-fetch 两条路径（replay+实时）从 trigger(topic名) 改为 trigger(SUB_SCOPE_RESULT_FUNCTION_ID)
+  + 解析行 payload 全量传递——**审计发现原代码 payload 形状也错了**（{scope_id,event_id} vs
+  worker 期望的 child_scope_id 四元组），即使函数名对了也跑不通；函数名常量收进 shared 防再漂移
+- N4 根因：occWrite 的 pg_notify payload 是 JSON {"id":N}，ws-protocol 广播器拿原始字符串
+  当 bigint id 查询→必抛→静默吞。stream.ts（SSE）同病但症状轻（失去 enrichment）。
+  修复：parseGraphEventReadyPayload 放在 occ-write.ts（与发送方同模块），两个消费点接入
+- P3：agent-mode .catch 改记 stderr；**顺带修语义冲突**：ADR-54 后 sendUserMessage 会触发
+  对话核心，agent-mode（Pi 是应答者）改用 recordEvent 纯镜像，避免双应答者

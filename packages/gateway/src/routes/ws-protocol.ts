@@ -26,6 +26,7 @@ import type {
   WsServerMessage,
   TrailSseEvent,
 } from '@graph/types/shell';
+import { parseGraphEventReadyPayload } from '@graph/shared';
 import { processAgentTurn } from '../process-agent-turn.js';
 import { runConversationTurn } from '../conversation/core.js';
 
@@ -201,7 +202,10 @@ export class WsBroadcaster {
     client.on('notification', (msg) => {
       void (async () => {
         try {
-          const eventId = msg.payload ?? '';
+          // N4 fix: the payload is JSON {id} (occWrite contract) — parse it,
+          // never use the raw string as a bigint id.
+          const eventId = parseGraphEventReadyPayload(msg.payload);
+          if (eventId === null) return;
           const { rows } = await pool.query<{ scope_id: string; event_type: string }>(
             'SELECT scope_id, event_type FROM execution_event_log WHERE id = $1',
             [eventId],

@@ -13,10 +13,11 @@ import {
   toolEntityId,
 } from '@graph/shared';
 
+// N2 fix: no trigger registration — '@startup' is not a cron expression and
+// iii has no 'scheduled' type. Boot calls connect() directly (workers/index.ts);
+// this const only names the manually-invokable function.
 export const MCP_CLIENT_TRIGGER_CONFIG = {
-  type: 'scheduled' as const,
   function_id: 'graph::integration::mcp-client',
-  config: { cron: '@startup' },
 } as const;
 
 type RegisterFn = (name: string, handler: (payload: unknown) => Promise<unknown>) => void;

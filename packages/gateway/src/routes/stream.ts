@@ -14,6 +14,7 @@ import { streamSSE } from 'hono/streaming';
 import type { Pool } from 'pg';
 import { logger } from '@shared/logger';
 import type { TrailSseEvent } from '@graph/types/shell';
+import { parseGraphEventReadyPayload } from '@graph/shared';
 
 const log = logger.child({ component: 'gateway', route: 'GET /v1/stream' });
 
@@ -28,7 +29,8 @@ export function buildStreamRoute(pool: Pool): Hono {
           await client.query('LISTEN graph_event_ready');
           client.on('notification', (msg) => {
             void (async () => {
-              const eventId = msg.payload ?? '';
+              // N4 fix: payload is JSON {id} (occWrite contract) — parse before lookup.
+              const eventId = parseGraphEventReadyPayload(msg.payload) ?? msg.payload ?? '';
               let event: TrailSseEvent = {
                 type: 'trail_event',
                 event_type: 'trail_appended',

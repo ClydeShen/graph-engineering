@@ -61,3 +61,11 @@ export const AGENT_HEARTBEAT_TTL_S = 60;
  * @see ADR 23 §4
  */
 export const SUB_SCOPE_TOPIC = 'graph::scope::sub_scope_resolved';
+
+/**
+ * Function id of the SubScopeResultWorker handler (N3 fix). The Control Plane
+ * triggers this FUNCTION directly when routing sub_scope_resolved events —
+ * SUB_SCOPE_TOPIC above is the durable topic name, which is NOT an invokable
+ * function id. Single definition here so the two sides cannot drift again.
+ */
+export const SUB_SCOPE_RESULT_FUNCTION_ID = 'graph::scope::sub-scope-result';
