@@ -9,9 +9,23 @@
  */
 
 import { spawn, spawnSync, execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, createWriteStream } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+
+// ── Log sink (inspection hatch) ──────────────────────────────────────────────
+// Everything printed to the terminal is also appended (ANSI-stripped) to
+// ~/.memex/logs/dev.log so agents and post-mortems can read what happened
+// without having owned the terminal. One file, append-only, per-boot header.
+const logDir = join(homedir(), '.memex', 'logs');
+mkdirSync(logDir, { recursive: true });
+const logFile = join(logDir, 'dev.log');
+const logSink = createWriteStream(logFile, { flags: 'a' });
+logSink.write(`\n──── dev boot ${new Date().toISOString()} ────\n`);
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+function sinkLine(line) {
+  logSink.write(line.replace(ANSI_RE, '') + '\n');
+}
 
 // ── Load .env ─────────────────────────────────────────────────────────────────
 const appEnv = { ...process.env };
@@ -72,13 +86,13 @@ function attachLineBuffer(tag, color, stream) {
     buf = parts.pop();
     for (const line of parts) {
       const out = fmtLine(tag, color, line);
-      if (out) console.log(out);
+      if (out) { console.log(out); sinkLine(out); }
     }
   });
   stream.on('end', () => {
     if (buf.trim()) {
       const out = fmtLine(tag, color, buf);
-      if (out) console.log(out);
+      if (out) { console.log(out); sinkLine(out); }
     }
   });
 }
@@ -147,6 +161,12 @@ function onboardingGate() {
     ? join(homedir(), '.memex', 'profiles', profile, 'config.json')
     : join(homedir(), '.memex', 'config.json');
   if (existsSync(configPath)) return;
+  // Non-TTY (agent-driven / piped boot): the interactive wizard would hang —
+  // print guidance and boot from env vars instead.
+  if (!process.stdin.isTTY) {
+    console.log(`${C.yellow}  No ${configPath} and no TTY — skipping onboarding (run: memex onboard). Booting from .env.${C.reset}\n`);
+    return;
+  }
   console.log(`${C.yellow}  No ${configPath} found — running onboarding first.${C.reset}\n`);
   const r = spawnSync(
     process.execPath,

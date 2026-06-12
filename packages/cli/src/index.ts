@@ -15,6 +15,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 Commands:
   onboard       First-run setup — writes ~/.memex/config.json (providers, gateway)
   chat          Open MemexTerminal — converse with the running gateway
+                  -m "text" [--scope <id>]  non-interactive single turn (scriptable)
   connect       Connect coding agents to the Graph Runtime (default)
   doctor        Diagnose the installation (config, postgres, hash chain, providers)
   backup [dir]  pg_dump custom-format backup (default dir: ~/.memex/backups)

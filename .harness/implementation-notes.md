@@ -747,3 +747,15 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
   - OCC 写入加 40P01 死锁牺牲者有界重试（2 次 + 抖动）——分区 DDL 与分区 INSERT 锁序倒置
     是生产路径同样存在的窗口，重试是教科书响应；migration 021 改 SKIP LOCKED 防等锁
 - 全仓零 TODO/FIXME 标记；连续 4 次全量 638/638 绿
+
+## Claude 自主调试原语批次（2026-06-12 晚）
+
+- --agent 模式退役（agent-mode.ts + 测试删除，terminal 不再依赖 Pi SDK）：对话只有一个应答者
+  （ADR-54 gateway 核心）；Pi 的正道 = memex connect pi（外部 coding agent，自配置认领异步任务）。
+  --agent 现在打印迁移指引退出。三层命名拍板里"MemexTerminal=Pi SDK 实现细节"的旧定位正式作废
+- memex chat -m "text" [--scope <id>]：非交互单发，回复走 stdout、scope id 走 stderr（管道干净）；
+  --scope 续聊。活体验证：单发 SINGLE-SHOT-OK + 跨 turn 暗号记忆（图投影记忆的活体证明）
+- dev.mjs 日志落盘 ~/.memex/logs/dev.log（ANSI 剥离、append、每次 boot 带时间戳头）——检修口
+- onboarding gate 非 TTY 跳过（打印 memex onboard 指引，env-only boot）——背景启动不再卡死
+- bin launcher（上一提交）+ 本批 = Claude Code 多终端调试原语齐备：
+  background `npm run dev` / `memex chat -m` / doctor / REST/WS / psql / dev.log
