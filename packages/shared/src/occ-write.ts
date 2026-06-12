@@ -9,10 +9,35 @@
  * @see docs/ADR_v4.md §ADR 02, §ADR 11
  */
 
-import type { Pool } from 'pg';
+import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import { hashablePayload } from './canonical-json.js';
 import { OCC_WRITE_SQL, OCC_WRITE_DO_NOTHING_SQL, partitionTable } from './sql/occ-writable-cte.sql.js';
 import type { WriteResult } from './types.js';
+
+/**
+ * Run a single-statement write, retrying when PostgreSQL kills it as a
+ * deadlock victim (SQLSTATE 40P01). Partition DDL (scope nesting) and
+ * partition INSERTs acquire parent/partition locks in opposite orders, so a
+ * write racing a concurrent CREATE PARTITION can be chosen as the victim.
+ * The statement is atomic — the victim made no changes — so a bounded retry
+ * is the textbook response.
+ */
+async function queryRetryingDeadlock<R extends QueryResultRow>(
+  pool: Pool,
+  sql: string,
+  params: unknown[],
+  maxRetries = 2,
+): Promise<QueryResult<R>> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await pool.query<R>(sql, params as never);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code !== '40P01' || attempt >= maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, 25 + Math.random() * 50));
+    }
+  }
+}
 
 /**
  * Arguments for an OCC write operation.
@@ -79,12 +104,12 @@ export async function occWrite(
   // Prepare canonical text — strips _meta + schema_version, sorts keys (BTreeMap equiv.)
   const canonicalText = hashablePayload(payload);
 
-  const result = await pool.query<{
+  const result = await queryRetryingDeadlock<{
     id: string | null;
     event_type: string;
     version_hash: string;
     occ_result: string;
-  }>(OCC_WRITE_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText, eventType]);
+  }>(pool, OCC_WRITE_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText, eventType]);
 
   const row = result.rows[0];
   const rowId = row.id ? Number(row.id) : null;
@@ -118,12 +143,12 @@ export async function occWriteIdempotent(
   const { scopeId, entityId, predecessorHash, payload } = args;
   const canonicalText = hashablePayload(payload);
 
-  const result = await pool.query<{
+  const result = await queryRetryingDeadlock<{
     id: string | null;
     event_type: string;
     version_hash: string;
     occ_result: string;
-  }>(OCC_WRITE_DO_NOTHING_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText]);
+  }>(pool, OCC_WRITE_DO_NOTHING_SQL(partitionTable(scopeId)), [scopeId, entityId, predecessorHash, canonicalText]);
 
   if (result.rows.length === 0) return null;
   const row = result.rows[0];

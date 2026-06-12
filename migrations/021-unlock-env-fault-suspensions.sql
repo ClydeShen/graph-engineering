@@ -12,9 +12,18 @@
 --
 -- The suspension history stays fully visible in the Trail (the original
 -- context_oom_throttled events are immutable); only the lineage status moves.
+--
+-- SKIP LOCKED: migrations re-run on every boot/test pass while live writers
+-- touch scope_lineage rows — never wait on a held lock (deadlock-proof);
+-- a row skipped this pass is caught by the next one.
 
 UPDATE scope_lineage
 SET status = 'active'
-WHERE status = 'suspended';
+WHERE scope_id IN (
+  SELECT scope_id FROM scope_lineage
+  WHERE status = 'suspended'
+  ORDER BY scope_id
+  FOR UPDATE SKIP LOCKED
+);
 
 -- End of migration 021 — pre-ADR-55 suspension amnesty.

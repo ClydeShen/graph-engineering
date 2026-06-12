@@ -734,3 +734,16 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
   修复：parseGraphEventReadyPayload 放在 occ-write.ts（与发送方同模块），两个消费点接入
 - P3：agent-mode .catch 改记 stderr；**顺带修语义冲突**：ADR-54 后 sendUserMessage 会触发
   对话核心，agent-mode（Pi 是应答者）改用 recordEvent 纯镜像，避免双应答者
+
+## 质量收口批次（2026-06-12，开箱体验修复弧 5/5）
+
+- 活体冒烟（smoketest profile，测后清理）：scope 不锁死✓ trail 广播 3 条✓ 历史误锁清零✓
+  REST/WS 双入口清晰报错✓ —— FINDINGS 五步路线全部活体验证
+- 安全：/v1/scopes/:id/chat 挂 tokenAuth（从 realtimeAuth 拆出纯 token 校验，不吃 10/min
+  连接桶——聊天是 per-message 端点）；gateway-bot 调 /chat 带 Bearer token
+- cron 的 message-handler spawn 保留——那是真异步任务（外部 agent 认领），符合 ADR-54 D-4 边界
+- 测试基建两项结构修复：
+  - GATE4 双文件共用 'typescript' 技能 → 并行运行互偷任务（FOR UPDATE SKIP LOCKED），改唯一技能
+  - OCC 写入加 40P01 死锁牺牲者有界重试（2 次 + 抖动）——分区 DDL 与分区 INSERT 锁序倒置
+    是生产路径同样存在的窗口，重试是教科书响应；migration 021 改 SKIP LOCKED 防等锁
+- 全仓零 TODO/FIXME 标记；连续 4 次全量 638/638 绿

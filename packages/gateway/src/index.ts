@@ -32,7 +32,7 @@ import { buildMetricsRoute } from './routes/metrics.js';
 import { buildDecisionsRoute } from './routes/decisions.js';
 import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
-import { realtimeAuth } from './middleware/realtime-auth.js';
+import { realtimeAuth, tokenAuth } from './middleware/realtime-auth.js';
 import {
   loadMemexConfig,
   buildEmbeddingProvider,
@@ -90,6 +90,10 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
     process.env['MEMEX_GATEWAY_TOKEN'] ?? loadMemexConfig()?.gateway?.token;
   app.use('/v1/stream', realtimeAuth(realtimeToken));
   app.use('/ws', realtimeAuth(realtimeToken));
+  // Conversation turns burn LLM tokens — same token gate as the realtime
+  // surfaces (ADR-44 D-2: no-token mode only while bound to localhost), but
+  // without the connection rate bucket (per-message endpoint).
+  app.use('/v1/scopes/:id/chat', tokenAuth(realtimeToken));
 
   // Mount route modules
   app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));

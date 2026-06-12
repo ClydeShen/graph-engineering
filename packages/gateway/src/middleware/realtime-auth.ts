@@ -35,21 +35,13 @@ function tokenMatches(provided: string, configured: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function realtimeAuth(getConfiguredToken: () => string | undefined) {
+/**
+ * Token check only (no connection rate limit) — for per-message endpoints
+ * like /v1/scopes/:id/chat where a conversation easily exceeds the
+ * connection budget but must still be behind the same token gate.
+ */
+export function tokenAuth(getConfiguredToken: () => string | undefined) {
   return async (c: Context, next: Next): Promise<Response | void> => {
-    // Connection rate limit (D-3)
-    const key = sourceKey(c);
-    const now = Date.now();
-    const bucket = buckets.get(key);
-    if (!bucket || now - bucket.windowStart > 60_000) {
-      buckets.set(key, { count: 1, windowStart: now });
-    } else {
-      bucket.count++;
-      if (bucket.count > REALTIME_CONNECT_LIMIT_PER_MIN) {
-        return c.json({ error: 'rate_limited' }, 429);
-      }
-    }
-
     const configured = getConfiguredToken();
     const provided =
       c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ??
@@ -69,5 +61,24 @@ export function realtimeAuth(getConfiguredToken: () => string | undefined) {
       return c.json({ error: 'unauthorized' }, 401);
     }
     return next();
+  };
+}
+
+export function realtimeAuth(getConfiguredToken: () => string | undefined) {
+  const checkToken = tokenAuth(getConfiguredToken);
+  return async (c: Context, next: Next): Promise<Response | void> => {
+    // Connection rate limit (D-3)
+    const key = sourceKey(c);
+    const now = Date.now();
+    const bucket = buckets.get(key);
+    if (!bucket || now - bucket.windowStart > 60_000) {
+      buckets.set(key, { count: 1, windowStart: now });
+    } else {
+      bucket.count++;
+      if (bucket.count > REALTIME_CONNECT_LIMIT_PER_MIN) {
+        return c.json({ error: 'rate_limited' }, 429);
+      }
+    }
+    return checkToken(c, next);
   };
 }

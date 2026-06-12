@@ -28,9 +28,15 @@ export async function dispatchMessage(
   fetchFn: typeof fetch = fetch,
 ): Promise<string> {
   const { scopeId } = await resolveSessionScope(pool, sessionKey);
+  // Same token gate as the realtime surfaces (ADR-44 D-2).
+  const token = process.env['MEMEX_GATEWAY_TOKEN'] ?? loadMemexConfig()?.gateway?.token;
   const res = await fetchFn(`${gatewayBaseUrl()}/v1/scopes/${scopeId}/chat`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Agent-ID': sessionKey },
+    headers: {
+      'content-type': 'application/json',
+      'X-Agent-ID': sessionKey,
+      ...(token !== undefined ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ text, source_message_id: sourceMessageId }),
   });
   if (!res.ok) {

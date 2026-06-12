@@ -115,8 +115,11 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     );
     const planHash = planRow?.version_hash ?? '0'.repeat(64);
 
-    // ── Step 2: register_agent with skills ['typescript'] ────────────────────
+    // ── Step 2: register_agent — UNIQUE skill per run: parallel test files
+    // share one DB, and a shared skill name lets another file's
+    // claim_next_task steal this task via FOR UPDATE SKIP LOCKED.
     const uniqueAgentId = randomUUID();
+    const uniqueSkill = `gate4-${uniqueAgentId.slice(0, 8)}`;
     const registerRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
@@ -132,7 +135,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
                 agent_id: uniqueAgentId,
                 name: 'GATE4-4 test agent',
                 description: 'Integration test agent for GATE4-4',
-                skills: ['typescript'],
+                skills: [uniqueSkill],
                 protocol: 'mcp',
                 version: '1.0',
               },
@@ -151,7 +154,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     expect(registerResult.registered).toBeDefined();
     agentId = registerResult.registered;
 
-    // ── Step 3: spawn_subtask with required_skills ['typescript'] ────────────
+    // ── Step 3: spawn_subtask with required_skills [uniqueSkill] ────────────
     const spawnRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
@@ -165,7 +168,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
             arguments: {
               scope_id,
               predecessor_hash: planHash,
-              required_skills: ['typescript'],
+              required_skills: [uniqueSkill],
               payload: { description: 'GATE4-4 spawned task' },
             },
           },
@@ -205,7 +208,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
             arguments: {
               scope_id,
               predecessor_hash: '0'.repeat(64),
-              required_skills: ['typescript'],
+              required_skills: [uniqueSkill],
               payload: { assigned_agent_id: randomUUID() },
             },
           },
@@ -217,7 +220,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     // D-1 guard returns isError: true
     expect(d1Body.result?.isError).toBe(true);
 
-    // ── Step 5: claim_next_task with skills ['typescript'] ───────────────────
+    // ── Step 5: claim_next_task with skills [uniqueSkill] ───────────────────
     const claimRes = await app.fetch(
       new Request('http://localhost/mcp/messages', {
         method: 'POST',
@@ -228,7 +231,7 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
           method: 'tools/call',
           params: {
             name: 'claim_next_task',
-            arguments: { skills: ['typescript'], scope_id },
+            arguments: { skills: [uniqueSkill], scope_id },
           },
         }),
       }),
