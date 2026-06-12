@@ -14,7 +14,7 @@ Commands:
   backup [dir]  pg_dump custom-format backup (default dir: ~/.memex/backups)
   restore <f>   pg_restore a backup, then re-verify the hash chain
   service       Generate system service files (systemd/launchd/schtasks)
-  skills        search <q> | install <registry> <id> [name] | inspect [name]
+  skills        search <q> | install <registry> <id> [name] [--scope global|profile] | inspect [name]
   mcp           catalog | install <name> | configure <name> | login <name> | list | uninstall <name>
   capability    list | bind <category> <impl> | install <preset>
   --version     Print the MemexOS version
@@ -173,9 +173,15 @@ async function main() {
 
 async function runSkillsCommand(): Promise<void> {
   const action = process.argv[3];
-  const [{ searchSkills, installSkill, inspectSkills, REGISTRIES }, { formatGuardReport }, { profileDir }, { join }] =
-    await Promise.all([import('./skills.js'), import('./skills-guard.js'), import('@graph/shared'), import('node:path')]);
-  const skillsRoot = join(profileDir(), 'skills');
+  const [
+    { searchSkills, installSkill, inspectSkills, skillsRootForScope, REGISTRIES },
+    { formatGuardReport },
+    { profileDir, memexHome },
+  ] = await Promise.all([import('./skills.js'), import('./skills-guard.js'), import('@graph/shared')]);
+  // --scope global|profile (Phase 19, ADR-52): default profile (== prior behavior)
+  const scopeArgIdx = process.argv.indexOf('--scope');
+  const scope = scopeArgIdx !== -1 && process.argv[scopeArgIdx + 1] === 'global' ? 'global' : 'profile';
+  const skillsRoot = skillsRootForScope(scope, { memexHome: memexHome(), profileDir: profileDir() });
 
   if (action === 'search') {
     const query = process.argv.slice(4).join(' ');

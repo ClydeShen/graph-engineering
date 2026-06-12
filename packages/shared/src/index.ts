@@ -27,3 +27,4 @@ export * from './trust-toolset.js';
 export * from './mcp/oauth-provider.js';
 export * from './capability/graph.js';
 export * from './capability/presets.js';
+export * from './artifact/store.js';

@@ -27,6 +27,8 @@ import { buildMcpRoute } from './routes/mcp.js';
 import { buildAgentsRoute } from './routes/agents.js';
 import { buildStreamRoute } from './routes/stream.js';
 import { buildSkillsRoute } from './routes/skills.js';
+import { buildArtifactsRoute } from './routes/artifacts.js';
+import { buildMetricsRoute } from './routes/metrics.js';
 import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
@@ -84,6 +86,8 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildMemoryRoute(pool, gatewayEmbeddingProvider));
   app.route('/v1', buildStreamRoute(pool));
   app.route('/v1', buildSkillsRoute());
+  app.route('/v1', buildArtifactsRoute(pool));
+  app.route('/v1', buildMetricsRoute(pool));
   // /ws is mounted by the production entry below — buildWsRoute is async
   // (dynamic 'hono/bun' import) and Bun-only; buildApp stays sync for tests.
   app.route('/', buildMcpRoute(pool));

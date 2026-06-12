@@ -591,3 +591,35 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - LIVE leftovers (unchanged ownership): real WSL2 Kali install run, macOS/Linux install
   runs, docker exec containment verify, live Telegram pairing handshake, Pi agent mode
   against a live gateway, email against a real IMAP/SMTP pair, iii version pinning.
+
+## Phase 19 — console-and-artifacts (2026-06-12)
+
+### Decisions not covered by (or revising) the spec
+
+- **Artifact events → read model + payload references** (ADR-52 D-1), revising the
+  ROADMAP's `memex::artifact::created` Association sketch: payload is TEXT (migration
+  002) and mid-scope infra events claim OCC slots (migration 013) — so artifact metadata
+  is the `artifact` table (migration 018), content is hash-addressed on disk, and the
+  ledger references artifacts through producer result payloads. Zero ledger bloat.
+- **PK (content_hash, scope_id)**: shared content across scopes = N provenance rows,
+  one file; erase unlinks the file only when no live row references the hash.
+- **Producer opt-in** (ADR-52 D-3): saveArtifact() is mechanism; first mandatory
+  producer is the Phase 20 browser screenshot path.
+- **Skill scope = ADR-46 tri-level reuse** (ADR-52 D-4): global/profile implemented
+  (--scope flag, profile default = zero migration); principal level lands with
+  Phase 20 agent-initiated installs.
+- **Console**: full Next.js 15 + React 19 + G6 v5 + Recharts + Tailwind package
+  (packages/console) per UI-SPEC; root tsc excludes it (own tsconfig; `next build`
+  is the compile gate — all 9 routes prerender). Missing UI-SPEC backend contracts
+  landed: /v1/metrics/infra, /v1/scopes/audit/suspended. Web Worker force layout
+  deferred until canvas jank is observed live (value change, not type change).
+  suspended audit's error_reason maps from scope intent in v1 (no dedicated
+  error_reason column exists; revisit if a real column lands).
+
+### Verification
+
+- tsc clean; 543 tests (was 534): artifact store (hash addressing, traversal guard,
+  idempotent write, erase cascade with shared-hash protection), topology-diff.
+- next build: 9/9 routes compile + prerender; G6 dynamically imported (not in
+  first-load JS). LIVE leftover: visual verification of the G6 canvas against a
+  running gateway (joins the live-environment batch).

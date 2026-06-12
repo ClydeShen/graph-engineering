@@ -10,7 +10,7 @@
  */
 
 import type { Pool } from 'pg';
-import { canonicalJson, writeInfraEvent } from '@graph/shared';
+import { canonicalJson, eraseArtifactsForScope, writeInfraEvent } from '@graph/shared';
 
 export interface EraseResult {
   ledger_rows_erased: number;
@@ -19,6 +19,7 @@ export interface EraseResult {
   procedural_deleted: number;
   lessons_flagged_redistill: number;
   dek_destroyed: boolean;
+  artifacts_erased: number;
 }
 
 export async function eraseScope(
@@ -60,6 +61,15 @@ export async function eraseScope(
     [scopeId],
   );
 
+  // 2.5 Artifact cascade (ADR-52): provenance rows erased + orphaned disk
+  //     content unlinked. Table may predate migration 018 — treat as zero.
+  let artifactsErased = 0;
+  try {
+    artifactsErased = (await eraseArtifactsForScope(pool, scopeId)).rows_erased;
+  } catch {
+    /* migration 018 not applied — no artifacts to erase */
+  }
+
   // 3. DEK destruction marker (Phase 15 backup coupling reads this).
   const dek = await pool.query(
     `UPDATE key_registry SET destroyed_at = NOW(), wrapped_dek = NULL
@@ -88,5 +98,6 @@ export async function eraseScope(
     procedural_deleted: procedural.rowCount ?? 0,
     lessons_flagged_redistill: lessons.rowCount ?? 0,
     dek_destroyed: (dek.rowCount ?? 0) > 0,
+    artifacts_erased: artifactsErased,
   };
 }

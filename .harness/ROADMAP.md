@@ -684,7 +684,7 @@ Plans:
 
 ---
 
-## 19-console-and-artifacts
+## 19-console-and-artifacts ✅ Code-complete (2026-06-12, ADR-52; G6 画布活体视觉验证列入活体批次)
 
 **目标：** 用户能在 Dashboard 里看到 Memex 的工作产出——artifact（文档、代码、research 结果）的写图约定 + UI-SPEC Console 完整版落地。同时拍板 skill 安装作用域。
 

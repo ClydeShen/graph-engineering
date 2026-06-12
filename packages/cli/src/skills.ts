@@ -91,6 +91,24 @@ export function safeSkillDirName(name: string): string | null {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes('..') ? name : null;
 }
 
+/**
+ * Skill install scopes (Phase 19 decision, ADR-52 §skill-scope): reuses the
+ * Lesson visibility tri-level model (ADR-46) instead of inventing a fourth
+ * vocabulary.
+ *   global    — ~/.memex/skills (every profile sees it)
+ *   profile   — <profileDir>/skills (default; == global when no profile active)
+ *   principal — per-agent visibility; lands with Phase 20 agent-initiated
+ *               installs (the principal Entity model carries it), not here.
+ */
+export type SkillScope = 'global' | 'profile';
+
+export function skillsRootForScope(
+  scope: SkillScope,
+  dirs: { memexHome: string; profileDir: string },
+): string {
+  return scope === 'global' ? join(dirs.memexHome, 'skills') : join(dirs.profileDir, 'skills');
+}
+
 export interface InstallOutcome {
   dir: string;
   findings: GuardFinding[];
