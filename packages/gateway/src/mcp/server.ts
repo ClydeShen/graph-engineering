@@ -46,6 +46,9 @@ import { buildBrowserRunArgs } from '../security/browser-capability.js';
 const SCRUB_KEYS = new Set([
   'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
   'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY',
+  // Phase 20: the vault KEK must never reach execute_bash subprocesses —
+  // with it, container/host code could unwrap every stored credential.
+  'MEMEX_VAULT_KEK', 'MEMEX_GATEWAY_TOKEN',
 ]);
 
 function scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

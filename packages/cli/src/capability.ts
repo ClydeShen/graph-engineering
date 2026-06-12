@@ -67,21 +67,7 @@ export function installInstruction(preset: CapabilityPreset): string {
   }
 }
 
-async function withPool<T>(fn: (pool: import('pg').Pool) => Promise<T>): Promise<T | null> {
-  let dbUrl = process.env['DATABASE_URL'];
-  if (!dbUrl) {
-    const { loadMemexConfig } = await import('@graph/shared');
-    dbUrl = loadMemexConfig()?.database?.url;
-  }
-  if (!dbUrl) return null;
-  const { default: pg } = await import('pg');
-  const pool = new pg.Pool({ connectionString: dbUrl, max: 1 });
-  try {
-    return await fn(pool);
-  } finally {
-    await pool.end();
-  }
-}
+import { withPool } from './db.js';
 
 /** Bind via graph (ensures the registry scope; CLI/operator right per ADR-35). */
 export async function bindCategoryCli(category: string, implementation: string): Promise<boolean> {

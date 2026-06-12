@@ -658,3 +658,17 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - LIVE leftovers added: memex-browser container image build + real docker browser
   run; /approve //answer chat-command routing (joins Phase 14's batch); journey
   5a-5d live run.
+
+## Quality pass (2026-06-12, post Phase 17-20)
+
+- Deduplicated: cli withPool (mcp.ts + capability.ts → db.ts), browser-open logic
+  (mcp.ts now delegates to wsl.openUrl — WSL-aware everywhere).
+- Security gap closed: MEMEX_VAULT_KEK + MEMEX_GATEWAY_TOKEN added to execute_bash
+  SCRUB_KEYS (the scrub list is default-allow; the KEK passing into subprocesses
+  would have let host code unwrap every vault credential). env-filter (default-deny)
+  was already safe.
+- SHA-256SUMS regenerated (install.sh changed in Phase 18).
+- Debt sweep: zero in-code TODOs; docs/archive/OPEN_ISSUES_TRACKING.md items all
+  absorbed by phases 9-16 (G1 traversal algebra stays the documented post-1.0
+  candidate, no blocking evidence).
+- Gates: tsc clean, 561 tests green, next build 9/9, checksums verified.

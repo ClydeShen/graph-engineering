@@ -72,21 +72,7 @@ export function writeRawConfig(cfg: RawConfig, path: string = resolveConfigPath(
 
 // ── capability graph (best-effort from the CLI) ────────────────────────────
 
-async function withPool<T>(fn: (pool: import('pg').Pool) => Promise<T>): Promise<T | null> {
-  let dbUrl = process.env['DATABASE_URL'];
-  if (!dbUrl) {
-    const { loadMemexConfig } = await import('@graph/shared');
-    dbUrl = loadMemexConfig()?.database?.url;
-  }
-  if (!dbUrl) return null;
-  const { default: pg } = await import('pg');
-  const pool = new pg.Pool({ connectionString: dbUrl, max: 1 });
-  try {
-    return await fn(pool);
-  } finally {
-    await pool.end();
-  }
-}
+import { withPool } from './db.js';
 
 /** Find-or-create the capability registry scope (nestScope = control-plane right). */
 async function ensureCapabilityScope(pool: import('pg').Pool): Promise<string> {
@@ -123,20 +109,10 @@ async function recordToGraph(
 
 // ── OAuth login (Block 2) ───────────────────────────────────────────────────
 
-/** Open the system browser; always print the URL as the fallback UX. */
+/** Open the system browser (WSL-aware via wsl.ts); always print the URL as the fallback UX. */
 function openBrowser(url: string): void {
   console.log(`authorize in your browser:\n  ${url}`);
-  void import('node:child_process').then(({ spawn }) => {
-    const cmd =
-      process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-      : process.platform === 'darwin' ? ['open', [url]]
-      : ['xdg-open', [url]];
-    try {
-      spawn(cmd[0] as string, cmd[1] as string[], { detached: true, stdio: 'ignore' }).unref();
-    } catch {
-      /* headless: URL is already printed */
-    }
-  });
+  void import('./wsl.js').then(({ openUrl }) => openUrl(url));
 }
 
 export async function runLogin(name: string): Promise<void> {
