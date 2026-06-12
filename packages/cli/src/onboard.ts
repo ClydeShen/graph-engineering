@@ -231,7 +231,10 @@ export async function runOnboard(configPath: string = DEFAULT_CONFIG_PATH): Prom
       `  dashboard  ${dashboardUrl}`,
       ...(followUps.length > 0 ? ['  next installs:', ...followUps.map((f) => `    ${f}`)] : []),
       '  next       npm run dev  (or: memex service)  → then: memex connect',
-      '  terminal   npx memex-terminal  (after the gateway is up)',
+      '  chat       memex chat  (after the gateway is up; one-time: npm link --workspace packages/cli)',
+      ...(apiKeyRef !== undefined
+        ? [`  key        add ${apiKeyRef.slice(2, -1)}=<your key> to the repo .env (or export it) before starting`]
+        : []),
     ].join('\n'),
   );
 

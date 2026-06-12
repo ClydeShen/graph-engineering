@@ -5,7 +5,7 @@
   "private": true,
   "main": "src/index.ts",
   "bin": {
-    "memex-terminal": "./src/index.ts"
+    "memex-terminal": "./bin/memex-terminal.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "*",

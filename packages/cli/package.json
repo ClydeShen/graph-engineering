@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "bin": {
-    "graph-runtime": "./src/index.ts",
-    "memex": "./src/index.ts"
+    "graph-runtime": "./bin/memex.mjs",
+    "memex": "./bin/memex.mjs"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.0",
