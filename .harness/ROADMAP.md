@@ -606,12 +606,138 @@ Plans:
 
 ---
 
+# 场景驱动弧线（Phase 18–20，2026-06-12 规划）
+
+> 来源：三个 use-case scenario 差距分析（2026-06-12）——S1 WSL2 一键部署与首跑体验、S2 skills/MCP/artifact 生态、S3 自主个人助理。
+> 排序原则：先让系统在真实环境里活起来（18），再补能力面与可视化（19），最后冲自主性（20）。S3 的每一项都需要活体部署来验证，本地 WSL2（Kali）是现成靶机。Phase 17 是 S2/S3 的 MCP 前置，保持为下一个阶段不变。
+
+| 场景 | 阶段 | 一句话 |
+|---|---|---|
+| S1 一键部署 + onboarding + Terminal + Telegram | **18-first-run-experience** | 活体遗留清偿 + WSL2 一等支持 + onboarding 扩展 |
+| S2 artifact 展示 + skill 作用域 | **19-console-and-artifacts** | Artifact 写图约定 + UI-SPEC Console 完整版 |
+| S3 自主助理（网球场故事） | **20-autonomous-assistant** | agent 自主能力获取 + ask_user + 凭据保险库 + 容器化浏览器 tool |
+
+---
+
+## 18-first-run-experience
+
+**目标：** Scenario 1 整条走通：在一台真实 WSL2（Kali minimal）上从 `curl | bash` 到 Telegram 互发消息一气呵成。清偿 implementation-notes 活体验证遗留清单中阻塞首跑体验的项。
+
+**背景：** Phase 15/16 的 install/journey 只过了容器化 E2E，真实主机 install 从未跑过（implementation-notes "three-platform install runs" 遗留）。Onboarding TUI 目前只配 LLM provider + gateway 端口；MemexTerminal 是 v1 readline REPL，Pi-SDK agent 模式是代码注释里写明的"下一个增量"。
+
+### 核心交付物
+
+1. **活体遗留清偿**（implementation-notes Phase 12/14/15 遗留项中阻塞首跑的部分）
+   - 三平台 install 真机跑通（首选本地 WSL2 Kali 靶机；macOS/Linux 各至少一次）
+   - docker exec 活体接线 + containment verification（`docker inspect` 核查 `--cap-drop ALL`/`no-new-privileges` 实际生效，Phase 14 遗留）
+   - Email 生产绑定（imapflow/nodemailer，Phase 12 遗留）
+   - iii version pinning（0.19.2 image vs 0.11.2 dev 的 scheduled trigger provider 差距）；service registration on real hosts
+
+2. **WSL2 一等支持**
+   - WSL 检测（`/proc/version` 含 microsoft）→ 用 `wslview`/`explorer.exe` 打开 Windows 浏览器访问 `localhost:<port>`（WSL2 localhost 转发默认开启）
+   - systemd 检测与降级：未启用时打印 `/etc/wsl.conf` 启用指引而非失败
+   - apt 路径依赖引导（Kali minimal 缺 curl/git/Node）；Docker Desktop 集成 vs 原生 docker-ce 检测，`memex doctor` 加检查项
+   - **`/mnt/c` automount 风险文档化**：local 执行后端能触达 Windows 文件系统——部署指引指向 docker 后端或禁 automount
+
+3. **Onboarding 扩展**（`packages/cli/src/onboard.ts`）
+   - 结束时显示系统概况 summary（provider、端口、服务状态、下一步指引）
+   - 自动打开 Dashboard（经 WSL 检测分支）；结束自动启动 MemexTerminal
+   - **可选 Telegram 配对步骤**：bot token 录入 → 写 config → 启动 gateway-bot → pairing 握手（复用 Phase 11 加固后的 pairing）；跳过不阻塞
+
+4. **连接器事后配置路径**
+   - `memex connect telegram`（CLI）：onboarding 时跳过配对的用户事后交互配置；复用 ConnectorRegistry 的 `validate_config`/`check_fn`
+   - MemexTerminal 内 `/connect` 命令为可选增量（同一逻辑的 TUI 入口）
+
+5. **MemexTerminal Pi-SDK agent 模式**（Phase 11 遗留的 documented next increment）
+   - `createAgentSession` + `subscribe` 驱动真正的对话式交互；需要 live gateway + provider keys 验证——本阶段的活体部署正好提供该环境
+
+**与现有 ADR 的关系：** ADR-48（部署拓扑）补 WSL2 附录；无新 ADR 必需——本阶段是 Shell 层增量 + 活体验证，不引入新架构决策。
+
+**前置条件：** Phase 15/16 完成（install 脚本、Onboarding TUI、doctor 既有）。与 Phase 17 无硬依赖、可并行；若 onboarding 要展示 MCP catalog 入口则在 17 之后收尾。
+
+---
+
+## 19-console-and-artifacts
+
+**目标：** 用户能在 Dashboard 里看到 Memex 的工作产出——artifact（文档、代码、research 结果）的写图约定 + UI-SPEC Console 完整版落地。同时拍板 skill 安装作用域。
+
+**背景：** 完整 Console（Next.js + G6，`docs/UI-SPEC.md`）是 Phase 11 明确砍掉的遗留（现状是 gateway 内自包含 HTML live view v0）。更深一层：图里没有 "artifact" 概念——工作产出散落为事件 payload 和磁盘文件，没有"这是一个可展示交付物"的 Entity 约定，Console 没东西可渲染。
+
+### 核心交付物
+
+1. **Artifact 写图约定**（新 ADR）
+   - Artifact = 图上的 Entity：`memex::artifact::created` / `memex::artifact::updated` Association；内容 SHA-256 寻址（与 Snapshot 哈希语义一致）
+   - 大文件落盘（`~/.memex/artifacts/<hash>`），图存元数据 + 哈希引用——账本不膨胀，引用可校验
+   - Worker 产出路径接入：execute_bash 产物、MCP 工具产物、research 汇总都可声明为 artifact
+   - ADR-43 约束：artifact 随 `erase(scope)` 级联删除（provenance 列同款模式）
+
+2. **Console 完整版**（UI-SPEC.md 设计基线，Next.js + G6）
+   - 图可视化：Trail Mesh 拓扑、节点详情（Entity/HyperEdge/Lesson inspect）——Phase 6 T6 → Phase 11 → 本阶段的最终落点
+   - Trail Discovery 结果展示：Procedural Memory 骨架模板可视化（Phase 10 产出）
+   - **Artifact 预览**：markdown/code/HTML 渲染（交付物 #1 的消费端）；research 结果即 markdown artifact
+   - Skills 面板：已安装 skill 列表 + 作用域标注（两阶段加载，复用 Phase 11 loader）
+   - Gateway live view v0 保留为零安装 fallback，不删除
+
+3. **Skill 安装作用域拍板**（S2 设计决策）
+   - 现状只有全局安装；候选语义：global / per-profile（Phase 15 profiles）/ per-principal（与 Phase 13 Lesson 可见性域 agent-private/shared/global 同构）
+   - 倾向：复用 Lesson 可见性域的三级模型，不发明第四套作用域词表；随交付物 #1 的 ADR 或独立短 ADR 写入
+   - `memex skills install --scope <...>` 参数 + Console skills 面板展示
+
+**与现有 ADR 的关系：** 新 ADR 待写：Artifact Entity schema（事件类型、哈希引用、落盘布局、erase 级联）；skill 作用域决策；ADR-43（erase 级联到 artifact）；UI-SPEC.md 是 Console 的设计基线文档。
+
+**前置条件：** Phase 11 完成（SSE/WS 事件流、dashboard v0、UI-SPEC.md）；Phase 18 完成（活体部署使 Console 有真数据可看）非硬前置但强烈建议在前。
+
+---
+
+## 20-autonomous-assistant
+
+**目标：** Scenario 3 核心能力：agent 自主获取能力（找 skill、装 skill、配置自己）、主动向用户求助、安全保存用户凭据、受控浏览器操作。"网球场预订故事"固化为北极星 E2E journey。
+
+**背景：** 审批流（Phase 14）、信任分级（ADR-47）、执行后端抽象、DeliveryRouter（Phase 12）、会话连续性（TD-E）恰好都是为这类能力预留的接口——本阶段是组合现有件 + 三块新设计，不与现有架构冲突。浏览器自动化从 Post-1.0 提前，但限定为容器化 worker tool 形态。
+
+### 核心交付物
+
+1. **Agent 自主能力获取**
+   - skills search/install 包装为 worker tool（`memex::skill::search` / `memex::skill::install` 事件入图）
+   - **agent 发起的安装必须过 Phase 14 审批流**：审批请求经 DeliveryRouter 推送 home channel，skills-guard 扫描结果注入审批请求正文，用户 `/approve` 后才落盘
+   - Phase 17 的 `memex mcp install` 同样获得 agent 发起路径（同一审批协议）
+   - 验收：agent 判断缺天气查询能力 → 搜到 skill → 发起审批 → 用户批准 → 安装配置 → 调用成功，全程一条 Trail
+
+2. **`ask_user` 通用工具**
+   - 泛化 Phase 14 审批流状态机：从"批准/拒绝二元"扩展为自由问答（提问经 DeliveryRouter 投递 origin/home channel，Scope 挂起等待回复，超时策略可配）
+   - 回复接续同一 Scope（TD-E 稳定 session→Scope 映射已就位）；跨渠道提问/回答天然支持（Phase 12 会话连续性）
+   - 问答对是一等 Trail 数据——"agent 总在同一步骤求助"是 Trail Discovery 信号
+
+3. **凭据保险库**（per-service credential vault）
+   - 复用 ADR-43 的 key_registry/crypto-shredding 机制：per-service DEK、密文落库、`erase` 语义覆盖
+   - 写 LLM 前脱敏：凭据值进入 prompt 前替换为引用占位符（扩展 Phase 14 PII redaction 路径）；明文只在工具执行边界注入
+   - 用户经 `ask_user` 提供凭据 → 脱敏入库 → 后续登录复用，不再询问
+
+4. **容器化浏览器 worker tool**（Post-1.0 提前的限定形态）
+   - Playwright in docker 执行后端（`_BASE_SECURITY_ARGS` 同款隔离）；明确**不控宿主浏览器**——宿主级 computer use 仍属 post-1.0
+   - 工具面：navigate / read / fill / click / screenshot；截图可声明为 artifact（Phase 19 约定）
+   - 登录态 session 持久化限容器卷内，凭据经交付物 #3 注入
+
+5. **北极星 E2E journey：网球场预订故事**
+   - 固化为 eval journey 脚本（mock 外部端点）：缺能力识别 → 自主装 skill（审批）→ 查天气 → 查 Calendar（Phase 17 MCP）→ `ask_user` 确认时段 → 浏览器预订 → origin 通知 → email 归档（cron）
+   - 接入 Phase 16 回归门：发布前必跑
+
+6. **SECURITY.md 补章**
+   - agent 发起安装为何必须人审（"agent 不能给自己授权"）；凭据保险库边界（什么进保险库、什么永不进 LLM context）；浏览器 tool 的容器边界声明
+   - 延续 Phase 14"先安全后开放"顺序：本节成文是交付物 #1/#3/#4 对外启用的门
+
+**与现有 ADR 的关系：** 新 ADR 待写：自主能力获取审批协议（状态机、超时、审批范围 once/session/always 复用）、凭据保险库 schema、browser tool 隔离边界。复用：ADR-47（信任分级——agent 发起的工具调用不绕过 `isToolAllowed`）、ADR-43（凭据 erase）、Phase 14 审批流与执行后端抽象。
+
+**前置条件：** Phase 17 完成（Calendar/Gmail MCP + OAuth——journey 的日历环节）；Phase 18 完成（活体部署环境——本阶段全部能力需活体验证）；Phase 19 非硬前置（截图 artifact 展示降级为日志即可）。
+
+---
+
 ## Post-1.0 方向（顺应 AI 发展，不排期、不写 ADR）
 
 > 记录于此防止丢失，每项启动前需独立 scoping。
 
 - **多模态 I/O**：voice channel（STT/TTS provider 抽象可仿 ADR-22 的 LLM provider 模式）、图像输入经 vision 辅助模型路由（hermes `image_routing` 模式）
-- **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）
+- **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）——容器化 Playwright 限定形态已提前至 Phase 20；此处保留的是宿主级 computer use（控制宿主浏览器/桌面）
 - **本地模型深化**：Ollama/vLLM 一等支持已在 provider 注册表；补充本地 embedding 路径使全栈可离线
 - **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展
 - **编辑器集成**（ACP 协议，hermes `hermes acp` 模式）：Memex 作为 IDE 内 agent 的记忆与 trail 后端

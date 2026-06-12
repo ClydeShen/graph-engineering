@@ -5,11 +5,11 @@ milestone_name: milestone
 status: in_progress
 last_updated: "2026-06-12T02:30:00.000Z"
 progress:
-  total_phases: 17
+  total_phases: 20
   completed_phases: 16
   total_plans: 6
   completed_plans: 6
-  percent: 94
+  percent: 80
 ---
 
 ## Current Position
@@ -19,6 +19,11 @@ Phase: 16 (memexos-one) — COMPLETE; 1.0 candidate. Next: Phase 17
 catalog (optional-mcps/ manifests), OAuth PKCE + token cache via SDK
 OAuthClientProvider, `memex mcp` CLI family, Claude Code / Hermes config
 compatibility. Builds on Phase 6 McpClientWorker + Phase 16 skills-guard.
+Phases 18–20 added 2026-06-12 (scenario-driven arc): 18 first-run-experience
+(WSL2 live install + onboarding expansion + live-leftovers), 19
+console-and-artifacts (artifact graph convention + UI-SPEC Console), 20
+autonomous-assistant (agent self-install via approval, ask_user tool,
+credential vault, containerized Playwright; tennis-court north-star journey).
 
 - Phases 10–16 completed across two autonomous sessions (9bb5035d → b92f686b).
   479 tests passing, tsc clean, red-line security tests green.
@@ -44,6 +49,7 @@ compatibility. Builds on Phase 6 McpClientWorker + Phase 16 skills-guard.
 - Phase 6 added: Gateway Seam Extraction — processAgentTurn, makeKnapsackGraph+makeKnapsackGraphFromView factories, knapsackSlice {kept,dropped}, KnapsackConfig
 - 2026-06-11: Phases 12–16 product arc + tech debt ledger TD-A~M written into .harness/ROADMAP.md (19199ca9, af68fd2d); PHASE-SPECs 09–14 (7af8311d)
 - 2026-06-12: .planning demoted to progress ledger; .harness/ROADMAP.md is canonical for Phase 7+
+- 2026-06-12: Phases 18–20 scenario-driven arc added to .harness/ROADMAP.md (from 3-scenario gap analysis); browser automation pulled forward from post-1.0 into Phase 20 in containerized-worker-tool form only
 
 ## Decisions
 
