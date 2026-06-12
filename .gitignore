@@ -39,3 +39,5 @@ data/
 
 # planning scratch
 .planning/tmp/
+packages/console/.next/
+packages/console/next-env.d.ts
