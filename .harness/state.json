@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-12T02:00:00.000Z",
-    "last_session": "2026-06-12T10:15:00.000Z",
-    "last_active": "2026-06-12T10:15:00.000Z"
+    "last_session": "2026-06-12T10:59:45.097Z",
+    "last_active": "2026-06-12T10:59:45.097Z"
   },
   "position": {
     "phase": "20-autonomous-assistant",
-    "active": "ALL 16 ROADMAP PHASES COMPLETE — 1.0 candidate. 479 tests, tsc clean. Phase 15: Node-22 convergence (TD-M), doctor/backup/restore/service/profiles, install scripts, deploy compose (containerized E2E passed), ADR-48. Phase 16: skills install+guard, eval journey (ran live 2x) + regression gate, SECURITY/QUICKSTART/CHANGELOG, SHA-256SUMS, ADR-49.",
+    "active": "OOBE-FIX ARC COMPLETE (2026-06-12, commits f288b68b..8bbda07a): ADR-54/55/56 accepted+implemented. Conversation core (gateway-side stateless reply loop, WS user_message + REST /chat, memex_retrieve tool, text_delta live), memory resilience (fault taxonomy narrows ADR-39 lockout to true overflow, embedding=late projection w/ backlog+backfill worker, BM25 degraded retrieval), ProviderProfile registry (onboard/doctor/runtime derive from one table, config.json single authority, fallback chain active, port unified 4000), memex chat subcommand, N2/N3/N4/P3 fixed, OCC deadlock retry. 638 tests green x4 runs. Live smoke verified.",
     "resume_file": null,
-    "stopped_at": "ALL ROADMAP PHASES (1-20) CODE-COMPLETE + quality pass done (83f3068b): 561 tests, tsc clean, console next build 9/9, SHA-256SUMS verified, zero in-code TODOs, archived debt tracker fully absorbed. Phases 17-20 shipped 2026-06-12 (ADR-50/51/52/53, migrations 017-019, packages/console new). Quality pass: cli withPool/browser-open dedup, vault-KEK scrub gap closed. ONLY REMAINING WORK = live-environment batch (implementation-notes per-phase lists): 3-platform install runs, docker containment + memex-browser image, /approve //answer /pair chat routing, live Telegram/IMAP/OAuth/Pi-agent/G6-visual, journey 5a-5d live, iii version pinning (verify installer interface live). Post-1.0 candidates unchanged (ROADMAP final section). THEN scenario-driven arc (added 2026-06-12): Phase 18 first-run-experience (WSL2 live install + onboarding expansion + capability presets [category->impl: browser->agent-browser, search->Tavily; meta-skills skills.sh/find-skill/create-skill default] + live-leftover burn-down), Phase 19 console-and-artifacts (artifact graph convention + UI-SPEC Console + skill scope decision), Phase 20 autonomous-assistant (agent self-install via approval flow, ask_user tool, credential vault, sandboxed browser capability — implementation-agnostic, resolved via preset binding; tennis-court north-star journey into regression gate). Live-environment leftovers list: implementation-notes Phase 16 section (mostly absorbed into Phase 18). Release procedure: ADR-49 D-1 gate order."
+    "stopped_at": "OOBE arc done. REMAINING: live-environment batch with REAL LLM (user runs onboarding with real key/local model, then memex chat E2E), plus pre-existing live leftovers (3-platform installs, docker containment, /approve //answer /pair chat routing, Telegram/IMAP/OAuth live, journey 5a-5d live, iii pinning). FINDINGS-install-flow.md all 14 items closed. Post-1.0 candidates unchanged."
   }
 }

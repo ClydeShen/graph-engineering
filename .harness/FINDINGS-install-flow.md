@@ -1,5 +1,13 @@
 # FINDINGS — 安装→配置→首次对话 全链路测试（2026-06-12）
 
+> **状态（同日收口）：14 项全部处理完毕。** 实现批次 f288b68b…8bbda07a（7 commits），
+> ADR 54/55/56 已 accepted，638/638 测试连续 4 轮全绿，活体冒烟复验通过
+> （scope 不锁死 / trail 广播恢复 / 历史误锁清零 / 双入口清晰报错）。
+> 各项落点：P1→ADR-55，P2/P3→ADR-54，P4/N1/N5/N6→ADR-56，P5/N0→memex chat 批次，
+> N2/N3/N4→杂项批次，N7→doctor embedding 探测，N8→migration 021。
+> 唯一遗留：配真实 LLM 的端到端对话体验验证（需要用户跑 onboarding 配真 key/本地模型），
+> 属"活体批次"既有范围。
+
 > 测试方法：活体测试（`npm run dev` 全栈 + MemexTerminalClient 协议级首次对话模拟 + `memex doctor`）
 > 交叉验证：代码级审计（subagent，57 次工具调用，全部结论带 文件:行号 证据）。
 > 目标态（用户定义）：`npm run dev` → onboarding（clack）→ 全栈启动 → 新终端 `memex chat` → 用 onboarding 配的 LLM 直接对话。
