@@ -801,8 +801,8 @@
 ### ADR 22｜LLM/Embedding Provider 抽象层与最小化原则
 - **状态**: 已通过 (Approved)
 - **上下文**: 系统多处不可避免地调用推理模型（Worker 推理、冲突合并、模板提炼）和嵌入模型（`mem::reflect`、记忆写入向量化）。若硬编码具体 API，系统无法在离线或受限环境运行。
-- **决策**: 建立两条原则：① **最小化 LLM 调用**——凡能用确定性算法完成的功能禁止用 LLM；每处不可避免的调用须在 ADR 中显式标注。② **Provider 抽象接口**——在 iii-engine 层统一 `LLMProvider` / `EmbeddingProvider` 接口，Phase 1 实现 OpenAI-compatible 一种 Provider（覆盖 ollama、llama.cpp、lmstudio、OpenAI 等所有兼容端点），后续按需适配 Anthropic 等。Worker 不持有 Provider 凭证，凭证统一在 iii-config.yaml 管理。Embedding 调用消耗不计入 Worker △_padding，写入 iii-observability 单独监控。
-- **后果**: 系统可在纯本地环境（无网络）运行；LLM 调用点全部有显式文档记录；新增 Provider 只需实现两个接口，Worker 代码不变。
+- **决策摘要**: ① **最小化 LLM 调用**——凡能用确定性算法完成的功能禁止用 LLM，每处不可避免的调用须显式标注。② **Provider 抽象接口**——统一 `LLMProvider` / `EmbeddingProvider` 接口，Worker 不持有 Provider 凭证。
+- **后果**: 系统可在纯本地环境（无网络）运行；新增 Provider 只需实现两个接口，Worker 代码不变。完整规范见 `docs/adr/0023-adr22-llm-provider-abstraction.md`。
 
 ---
 

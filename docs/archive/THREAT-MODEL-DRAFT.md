@@ -1,5 +1,7 @@
 # MemexOS 威胁模型草稿（Phase 14 G8 → Phase 16 SECURITY.md 素材）
 
+> **已归档（2026-06-12）**：Phase 16 已完成，本草稿已编辑为正式 [`SECURITY.md`](../../SECURITY.md)（含漏洞披露政策）。保留于此仅作历史记录，请勿作为当前权威来源引用。
+
 > 状态：草稿。Phase 16 编辑成正式 SECURITY.md（含漏洞披露政策）。
 
 ## 信任模型核心声明

@@ -1,4 +1,7 @@
 # Architecture Decision Open Issues Tracking Table
+
+> **Archived (2026-06-12)**: all items below are resolved (✅). Since 2026-06-11 this table no longer tracks scheduling independently — `.harness/ROADMAP.md` is authoritative. Kept here as a historical record only.
+
 > Last updated: 2026-06-05 — 5 AFK architecture Issues (#8 #9 #11 #12 #13) resolved, ADR supplements 0045-0047 written
 > Locked ADRs: 42 core ADRs (ADR 01-42) + supplemental ADRs (docs/adr/ 0045-0047 added today)
 > Document version: RFC v4 / ADR v4 (incl. ADR 42)
