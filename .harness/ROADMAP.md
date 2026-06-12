@@ -613,9 +613,9 @@ Plans:
 
 | 场景 | 阶段 | 一句话 |
 |---|---|---|
-| S1 一键部署 + onboarding + Terminal + Telegram | **18-first-run-experience** | 活体遗留清偿 + WSL2 一等支持 + onboarding 扩展 |
+| S1 一键部署 + onboarding + Terminal + Telegram | **18-first-run-experience** | 活体遗留清偿 + WSL2 一等支持 + onboarding 扩展 + 通用能力预设 |
 | S2 artifact 展示 + skill 作用域 | **19-console-and-artifacts** | Artifact 写图约定 + UI-SPEC Console 完整版 |
-| S3 自主助理（网球场故事） | **20-autonomous-assistant** | agent 自主能力获取 + ask_user + 凭据保险库 + 容器化浏览器 tool |
+| S3 自主助理（网球场故事） | **20-autonomous-assistant** | agent 自主能力获取 + ask_user + 凭据保险库 + 受控浏览器能力 |
 
 ---
 
@@ -644,16 +644,23 @@ Plans:
    - 自动打开 Dashboard（经 WSL 检测分支）；结束自动启动 MemexTerminal
    - **可选 Telegram 配对步骤**：bot token 录入 → 写 config → 启动 gateway-bot → pairing 握手（复用 Phase 11 加固后的 pairing）；跳过不阻塞
 
-4. **连接器事后配置路径**
+4. **通用能力预设（capability presets）**
+   - **能力类目 → 推荐实现**的预设目录：browser → `vercel-labs/agent-browser`、search → Tavily 等；类目是稳定的，实现是用户可选可换的——一个类目可由 skill、MCP server 或 CLI 工具任一形态提供，目录条目声明其形态与安装方式
+   - 目录机制复用既有件：skill 形态走 skills 安装侧（Phase 16，含 skills-guard 扫描）；MCP 形态走 `optional-mcps/` catalog（Phase 17）；CLI 工具形态在 manifest 里声明 `requires_bins` + 安装指引
+   - Onboarding 增加可选 multiselect 步骤从预设目录挑选安装；后期插拔走同一路径（`memex skills` / `memex mcp` / 预设目录命令），onboarding 不是唯一入口
+   - **Meta-skills 默认推荐随装**：`skills.sh` 工具 + find-skill / create-skill 等元能力——agent "自己找 skill 装上"（Phase 20 交付物 #1）的前提是 find-skill 先在系统里；这是 S3 自主性的用户侧铺路
+   - "类目→实现"绑定写 config（`~/.memex/config.json`），绑定变更写图（`connector::config_updated` 同款模式），Worker 按类目解析当前实现
+
+5. **连接器事后配置路径**
    - `memex connect telegram`（CLI）：onboarding 时跳过配对的用户事后交互配置；复用 ConnectorRegistry 的 `validate_config`/`check_fn`
    - MemexTerminal 内 `/connect` 命令为可选增量（同一逻辑的 TUI 入口）
 
-5. **MemexTerminal Pi-SDK agent 模式**（Phase 11 遗留的 documented next increment）
+6. **MemexTerminal Pi-SDK agent 模式**（Phase 11 遗留的 documented next increment）
    - `createAgentSession` + `subscribe` 驱动真正的对话式交互；需要 live gateway + provider keys 验证——本阶段的活体部署正好提供该环境
 
-**与现有 ADR 的关系：** ADR-48（部署拓扑）补 WSL2 附录；无新 ADR 必需——本阶段是 Shell 层增量 + 活体验证，不引入新架构决策。
+**与现有 ADR 的关系：** ADR-48（部署拓扑）补 WSL2 附录；capability presets 的类目词表与"类目→实现"绑定 schema 写入 ADR-50 补充（与 MCP catalog manifest 同族的 registry 模式）或独立短 ADR；其余为 Shell 层增量 + 活体验证，不引入新架构决策。
 
-**前置条件：** Phase 15/16 完成（install 脚本、Onboarding TUI、doctor 既有）。与 Phase 17 无硬依赖、可并行；若 onboarding 要展示 MCP catalog 入口则在 17 之后收尾。
+**前置条件：** Phase 15/16 完成（install 脚本、Onboarding TUI、doctor 既有）。交付物 #4 的 MCP 形态条目依赖 Phase 17 catalog 机制（纯 skill/CLI 形态不依赖）；其余与 Phase 17 可并行。
 
 ---
 
@@ -693,12 +700,12 @@ Plans:
 
 **目标：** Scenario 3 核心能力：agent 自主获取能力（找 skill、装 skill、配置自己）、主动向用户求助、安全保存用户凭据、受控浏览器操作。"网球场预订故事"固化为北极星 E2E journey。
 
-**背景：** 审批流（Phase 14）、信任分级（ADR-47）、执行后端抽象、DeliveryRouter（Phase 12）、会话连续性（TD-E）恰好都是为这类能力预留的接口——本阶段是组合现有件 + 三块新设计，不与现有架构冲突。浏览器自动化从 Post-1.0 提前，但限定为容器化 worker tool 形态。
+**背景：** 审批流（Phase 14）、信任分级（ADR-47）、执行后端抽象、DeliveryRouter（Phase 12）、会话连续性（TD-E）恰好都是为这类能力预留的接口——本阶段是组合现有件 + 三块新设计，不与现有架构冲突。浏览器自动化从 Post-1.0 提前，但限定为隔离执行后端内的 worker tool 形态（实现不绑定，见交付物 #4）。
 
 ### 核心交付物
 
 1. **Agent 自主能力获取**
-   - skills search/install 包装为 worker tool（`memex::skill::search` / `memex::skill::install` 事件入图）
+   - 用户侧入口是 Phase 18 随装的 find-skill / create-skill meta-skills；worker tool 层把 skills search/install 暴露给 agent（`memex::skill::search` / `memex::skill::install` 事件入图）
    - **agent 发起的安装必须过 Phase 14 审批流**：审批请求经 DeliveryRouter 推送 home channel，skills-guard 扫描结果注入审批请求正文，用户 `/approve` 后才落盘
    - Phase 17 的 `memex mcp install` 同样获得 agent 发起路径（同一审批协议）
    - 验收：agent 判断缺天气查询能力 → 搜到 skill → 发起审批 → 用户批准 → 安装配置 → 调用成功，全程一条 Trail
@@ -713,9 +720,10 @@ Plans:
    - 写 LLM 前脱敏：凭据值进入 prompt 前替换为引用占位符（扩展 Phase 14 PII redaction 路径）；明文只在工具执行边界注入
    - 用户经 `ask_user` 提供凭据 → 脱敏入库 → 后续登录复用，不再询问
 
-4. **容器化浏览器 worker tool**（Post-1.0 提前的限定形态）
-   - Playwright in docker 执行后端（`_BASE_SECURITY_ARGS` 同款隔离）；明确**不控宿主浏览器**——宿主级 computer use 仍属 post-1.0
-   - 工具面：navigate / read / fill / click / screenshot；截图可声明为 artifact（Phase 19 约定）
+4. **受控浏览器能力**（Post-1.0 提前的限定形态；**实现不绑定**）
+   - browser 是 capability 类目而非具体工具：实现由用户经 Phase 18 capability presets 安装的条目决定——`vercel-labs/agent-browser`（预设推荐）、Playwright 或其他 CLI 可控浏览器均可，Worker 按类目解析当前绑定
+   - **不变量是隔离边界而非实现选型**：无论哪个实现，都跑在 docker 执行后端（`_BASE_SECURITY_ARGS` 同款隔离）内；明确**不控宿主浏览器**——宿主级 computer use 仍属 post-1.0
+   - Worker 面工具签名统一（navigate / read / fill / click / screenshot），与底层实现解耦；截图可声明为 artifact（Phase 19 约定）
    - 登录态 session 持久化限容器卷内，凭据经交付物 #3 注入
 
 5. **北极星 E2E journey：网球场预订故事**
@@ -737,7 +745,7 @@ Plans:
 > 记录于此防止丢失，每项启动前需独立 scoping。
 
 - **多模态 I/O**：voice channel（STT/TTS provider 抽象可仿 ADR-22 的 LLM provider 模式）、图像输入经 vision 辅助模型路由（hermes `image_routing` 模式）
-- **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）——容器化 Playwright 限定形态已提前至 Phase 20；此处保留的是宿主级 computer use（控制宿主浏览器/桌面）
+- **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）——容器化受控浏览器能力（实现经 capability presets 可选：agent-browser / Playwright 等）已提前至 Phase 20；此处保留的是宿主级 computer use（控制宿主浏览器/桌面）
 - **本地模型深化**：Ollama/vLLM 一等支持已在 provider 注册表；补充本地 embedding 路径使全栈可离线
 - **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展
 - **编辑器集成**（ACP 协议，hermes `hermes acp` 模式）：Memex 作为 IDE 内 agent 的记忆与 trail 后端
