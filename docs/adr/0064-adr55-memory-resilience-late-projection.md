@@ -1,6 +1,6 @@
 # ADR 55｜记忆韧性：embedding 作为迟到投影 + ADR-39 故障分类修订
 
-status: proposed（提纲——结构核心已在 2026-06-12 fuller 会话拍板，实现细节待 plan-phase 展开）
+status: accepted（2026-06-12 实现落地；提纲源自同日 fuller 会话拍板）
 日期: 2026-06-12
 
 ---

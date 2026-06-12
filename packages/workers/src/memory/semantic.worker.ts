@@ -15,7 +15,7 @@ export class SemanticMemoryWorker {
     private readonly memory: MemoryRepository,
     private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
-    private readonly embed: EmbeddingProvider,
+    private readonly embed: EmbeddingProvider | null,
   ) {}
 
   async onScopeClosed(scopeId: string, entityId: string, predecessorHash: string): Promise<void> {
@@ -28,16 +28,28 @@ export class SemanticMemoryWorker {
       { role: 'system', content: 'Distill the following execution traces into key facts. Be concise.' },
       { role: 'user', content: writeGuard(combined) },
     ]);
-
-    // LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
-    const { vector } = await this.embed.embed(writeGuard(fact));
     const guardedFact = writeGuard(fact);
+
+    // LLM CALL — ADR 22 (embedding calls not counted against Worker token budget).
+    // ADR 55: embedding absent/unreachable degrades to a NULL-embedding write +
+    // backlog enqueue — the fact is never lost, the index heals on recovery.
+    let vector: number[] | null = null;
+    if (this.embed !== null) {
+      try {
+        vector = (await this.embed.embed(guardedFact)).vector;
+      } catch {
+        /* late projection below */
+      }
+    }
     const { id, suggestedMerge } = await this.memory.insertSemanticFact(scopeId, guardedFact, vector);
+    if (vector === null) {
+      await this.memory.enqueueEmbeddingBackfill('semantic_memory', id, 'embedding', guardedFact);
+    }
 
     if (suggestedMerge !== null) {
       // Refinement path: >0.89 similarity — same fact restated, supersede (D-08).
       await this.memory.supersede(suggestedMerge.id, id);
-    } else {
+    } else if (vector !== null) {
       // Contradiction path (Phase 10): 0.70–0.89 band — about the same thing but
       // not a restatement. An LLM binary judgement decides whether the old fact
       // is factually contradicted; only then does supersession fire. The LLM call

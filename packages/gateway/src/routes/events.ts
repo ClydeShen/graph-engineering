@@ -16,7 +16,7 @@ import type { EmbeddingProvider } from '@graph/shared';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 import { processAgentTurn } from '../process-agent-turn.js';
 
-export function buildEventsRoute(pool: Pool, wMax: number, embeddingProvider: EmbeddingProvider): Hono {
+export function buildEventsRoute(pool: Pool, wMax: number, embeddingProvider: EmbeddingProvider | null): Hono {
   const app = new Hono();
 
   app.post('/:id/events', zValidator('json', EventBodySchema), async (c) => {

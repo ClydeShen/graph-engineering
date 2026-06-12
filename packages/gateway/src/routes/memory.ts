@@ -56,12 +56,13 @@ ORDER BY r.rrf_score DESC LIMIT $3
  */
 export async function searchSemanticMemory(
   pool: Pool,
-  embedding: EmbeddingProvider,
+  embedding: EmbeddingProvider | null,
   query: string,
   scopeId: string,
   limit: number,
 ): Promise<unknown[]> {
   try {
+    if (embedding === null) throw new Error('no embedding provider (degraded mode, ADR 55)');
     const embedResult = await embedding.embed(query);
     if (embedResult.vector.length === 0) throw new Error('empty vector');
     const embeddingLiteral = `[${embedResult.vector.join(',')}]`;
@@ -74,7 +75,7 @@ export async function searchSemanticMemory(
   }
 }
 
-export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider): Hono {
+export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider | null): Hono {
   const app = new Hono();
 
   app.get('/memory/search', async (c) => {

@@ -101,6 +101,7 @@ export function classifyProviderError(err: unknown): ClassifiedError {
     msg.includes('etimedout') ||
     msg.includes('econnreset') ||
     msg.includes('econnrefused') ||
+    msg.includes('fetch failed') || // undici's generic network failure (DNS, refused, TLS)
     msg.includes('network')
   ) {
     return { reason: 'timeout', shouldThrow: false, shouldFailover: true, original };

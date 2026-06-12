@@ -59,7 +59,7 @@ export function admitMessage(state: WsConnectionState, now = Date.now()): boolea
  * the message produces no direct reply (subscribe).
  */
 export async function handleWsMessage(
-  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider },
+  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider | null },
   raw: string,
   state: WsConnectionState,
 ): Promise<WsServerMessage | null> {
@@ -184,7 +184,7 @@ export interface WsLikeSocket {
  * call this factory once per connection.
  */
 export function makeWsConnectionHandlers(
-  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider },
+  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider | null },
   broadcaster: WsBroadcaster,
 ): () => {
   onOpen(evt: unknown, ws: WsLikeSocket): void;
@@ -225,7 +225,7 @@ export function makeWsConnectionHandlers(
 export async function buildWsRoute(
   pool: Pool,
   wMax: number,
-  embed: EmbeddingProvider,
+  embed: EmbeddingProvider | null,
 ): Promise<{ app: Hono; websocket: unknown; broadcaster: WsBroadcaster }> {
   const { createBunWebSocket } = await import('hono/bun');
   const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -248,7 +248,7 @@ export async function buildWsRouteNode(
   app: Hono,
   pool: Pool,
   wMax: number,
-  embed: EmbeddingProvider,
+  embed: EmbeddingProvider | null,
 ): Promise<{ injectWebSocket: (server: unknown) => void; broadcaster: WsBroadcaster }> {
   const { createNodeWebSocket } = await import('@hono/node-ws');
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

@@ -33,7 +33,7 @@ import { buildDecisionsRoute } from './routes/decisions.js';
 import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
-import { OpenAICompatibleProvider, loadMemexConfig, DEFAULT_GATEWAY_PORT } from '@graph/shared';
+import { loadMemexConfig, buildEmbeddingProvider, DEFAULT_GATEWAY_PORT } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
 import {
@@ -47,19 +47,12 @@ import {
 
 const DEFAULT_W_MAX = 4096;
 
-// TD-H (Phase 11) resolution: the gateway's provider was only ever consumed as
-// an EmbeddingProvider (memReflect in the events route + memory route) — there
-// is NO chat path in the gateway. Renamed accordingly and aligned with the
-// workers' embedding pattern (EMBEDDING_MODEL override; Anthropic has no
-// embeddings endpoint, so this is always openai-completions). The
-// createLLMProvider() single-construction-path rule applies to chat providers;
-// if the gateway ever needs chat, wire createLLMProvider() then.
-const gatewayEmbeddingProvider = new OpenAICompatibleProvider({
-  api: 'openai-completions',
-  baseUrl: process.env['LLM_BASE_URL'] ?? 'http://localhost:11434',
-  model: process.env['EMBEDDING_MODEL'] ?? process.env['LLM_MODEL'] ?? 'llama3',
-  apiKey: process.env['LLM_API_KEY'] ?? '',
-});
+// TD-H (Phase 11): the gateway's provider is only ever consumed as an
+// EmbeddingProvider (memReflect in the events route + memory route) — there is
+// NO infra chat path here (the ADR-54 conversation core has its own chat
+// provider). ADR 55/56: nullable, config-driven — null means the semantic
+// index runs degraded (lexical retrieval); the conversation never blocks.
+const gatewayEmbeddingProvider = buildEmbeddingProvider(loadMemexConfig());
 
 /**
  * Build and return the Hono app with all routes mounted.

@@ -685,3 +685,19 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
   - doctor 新增 embedding 检查（warn 语义）提前落在本批（探测派生本来就是 ADR-56 的派生纪律）
 - gateway/terminal/doctor/onboard 端口统一 DEFAULT_GATEWAY_PORT=4000
 - dev.mjs onboarding gate：config.json 缺失时 stdio-inherit 跑 onboard，失败不阻塞 env-only boot
+
+## ADR-55 实现（2026-06-12，开箱体验修复弧 2/5）
+
+- 故障分类切口：processAgentTurn 的 catch 用 classifyProviderError——只有 context_length
+  reason 触发 lockout，其余记 context.degraded（warn）后 context:null 返回，scope 存活
+- classify-error 补 'fetch failed' 模式（undici 通用网络失败文案，原本落 unknown）
+- memReflect：embed 参数 nullable + embed 失败内部吸收；降级 = 三层全走 BM25-only SQL
+  （RRF 退化为 0.4 分量，procedural 三信号 rerank 结构保留）；输出新增 degraded 标志
+- 迟到投影：migration 020 embedding_backlog（UNIQUE(table,id,column) 幂等）；
+  semantic/template-proposal/procedural 三个 worker embed 失败时写 NULL embedding + 入队；
+  **删掉了 template-proposal 的零向量 fallback（零向量污染余弦相似度，比 NULL 更糟）**
+- EmbeddingBackfillWorker：5min cron 排水，目标表列走代码侧 allowlist（绝不拼接行值进 SQL），
+  首个失败即 abort（端点还没恢复就别空转）
+- spec 之外的决定：semantic NULL 写入跳过 merge/contradiction 检查（需要向量），回填只恢复
+  索引参与度、不做追溯去重——记入 ADR 后果节的隐含义
+- N8：migration 021 全量解锁 suspended（安全论证：真溢出下一次写入按新分类法自动重锁）

@@ -235,3 +235,51 @@ describe('memReflect', () => {
     }
   });
 });
+
+describe('memReflect degraded mode (ADR 55 D-3)', () => {
+  it('null embed provider → lexical-only retrieval, degraded:true, turn succeeds', async () => {
+    const seen: string[] = [];
+    const pool = makePool((sql) => {
+      seen.push(sql);
+      return Promise.resolve({ rows: [] });
+    });
+
+    const result = await memReflect(pool, null, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    expect(result.degraded).toBe(true);
+    expect(result.content).toBe('');
+    // No vector CTE in any issued SQL — pure BM25 path
+    expect(seen.every((s) => !s.includes('<=>'))).toBe(true);
+  });
+
+  it('embed.embed() rejection degrades instead of failing the turn', async () => {
+    const pool = makePool();
+    const embed: EmbeddingProvider = {
+      embed: vi.fn().mockRejectedValue(new Error('fetch failed')),
+    };
+
+    const result = await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'macro_planning',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    expect(result.degraded).toBe(true);
+  });
+
+  it('healthy embed provider reports degraded:false', async () => {
+    const result = await memReflect(makePool(), makeEmbed(), {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+    expect(result.degraded).toBe(false);
+  });
+});

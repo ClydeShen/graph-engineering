@@ -11,7 +11,9 @@
 
 import type { Pool } from 'pg';
 import type { EmbeddingProvider } from '@graph/shared';
+import { classifyProviderError } from '@graph/shared';
 import { countTokens } from '@shared/tokenizer';
+import { logger, LOG_EVENTS } from '@shared/logger';
 
 export interface MemReflectInput {
   query_text: string;
@@ -46,6 +48,12 @@ export interface MemReflectOutput {
    * so converged scope closure can reinforce them (Phase 10 reinforcement loop).
    */
   proceduralIds: string[];
+  /**
+   * True when retrieval ran lexical-only (BM25) because the embedding provider
+   * was absent or unreachable (ADR 55 D-3). Trail deviation signal — the
+   * conversation proceeds either way.
+   */
+  degraded: boolean;
 }
 
 /**
@@ -239,6 +247,83 @@ async function hybridSearchProcedural(
   return rows;
 }
 
+// ── Lexical-only degraded retrieval (ADR 55 D-3) ─────────────────────────────
+// When the embedding provider is absent/unreachable, the vector CTE drops out
+// and the hybrid RRF degenerates to its BM25 component: 0.4 * 1/(60 + rank).
+// Same shape as the hybrid result rows, so formatting/truncation is unchanged.
+
+async function bm25SearchEpisodic(
+  pool: Pool,
+  queryText: string,
+  limit: number,
+  principal: string,
+): Promise<EpisodicRow[]> {
+  const { rows } = await pool.query<EpisodicRow>(
+    `SELECT id, intent_summary, outcome_summary,
+            0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC))) AS rrf_score
+     FROM episodic_memory, plainto_tsquery('english', $1) AS query
+     WHERE ts_doc @@ query AND ${visibilityFilter(3)}
+     ORDER BY ts_rank_cd(ts_doc, query) DESC
+     LIMIT $2`,
+    [queryText, limit, principal],
+  );
+  return rows;
+}
+
+async function bm25SearchSemantic(
+  pool: Pool,
+  queryText: string,
+  limit: number,
+  principal: string,
+): Promise<SemanticRow[]> {
+  const { rows } = await pool.query<SemanticRow>(
+    `SELECT id, content,
+            0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC))) AS rrf_score
+     FROM semantic_memory, plainto_tsquery('english', $1) AS query
+     WHERE ts_doc @@ query AND superseded_by IS NULL AND ${visibilityFilter(3)}
+     ORDER BY ts_rank_cd(ts_doc, query) DESC
+     LIMIT $2`,
+    [queryText, limit, principal],
+  );
+  return rows;
+}
+
+async function bm25SearchProcedural(
+  pool: Pool,
+  queryText: string,
+  limit: number,
+  principal: string,
+): Promise<ProceduralRow[]> {
+  // Three-signal rerank preserved (quality 0.3 + recency 0.1); the rrf_norm
+  // component degenerates to BM25-rank normalization.
+  const { rows } = await pool.query<ProceduralRow>(
+    `WITH bm25_scored AS (
+       SELECT p.id, p.intent_description, p.template_graph,
+              p.success_count, p.failure_count, p.last_used_at,
+              0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(p.ts_doc, query) DESC))) AS rrf_score
+       FROM procedural_memory p, plainto_tsquery('english', $1) AS query
+       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND ${visibilityFilter(3)}
+       LIMIT 20
+     ),
+     scored AS (
+       SELECT id, intent_description, template_graph, rrf_score,
+              rrf_score / NULLIF(MAX(rrf_score) OVER (), 0)         AS rrf_norm,
+              ((success_count::FLOAT + 1.0) /
+               (success_count + failure_count + 1.0))               AS quality_score,
+              GREATEST(0.0, 1.0 - (
+                EXTRACT(EPOCH FROM (NOW() - COALESCE(last_used_at, NOW()))) / (86400.0 * 30)
+              ))                                                    AS recency_score
+       FROM bm25_scored
+     )
+     SELECT id, intent_description, template_graph, rrf_score
+     FROM scored
+     ORDER BY (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) DESC
+     LIMIT $2`,
+    [queryText, limit, principal],
+  );
+  return rows;
+}
+
 interface AntiPatternRow {
   id: string;
   intent_description: string | null;
@@ -341,41 +426,66 @@ function formatSemantic(rows: SemanticRow[], budgetTokens: number): string {
 /**
  * Hybrid-retrieve and sequentially truncate across the three memory tiers
  * (Procedural -> Episodic -> Semantic) within the trigger-type token budget.
+ *
+ * ADR 55: `embed` is nullable, and embedding failures NEVER propagate — both
+ * cases degrade to lexical-only retrieval (degraded:true in the output).
+ * 降级 = 替补顶上，而非弃守: the retrieval line is held by BM25; the index
+ * self-heals later via the embedding backlog.
  */
 export async function memReflect(
   pool: Pool,
-  embed: EmbeddingProvider,
+  embed: EmbeddingProvider | null,
   input: MemReflectInput,
 ): Promise<MemReflectOutput> {
   const budget = computeReflectBudget(input.trigger_type, input.w_max);
   const limit = procLimit(input.trigger_type);
 
-  // LLM CALL — ADR 22 (embedding for query text; not counted against Worker token budget)
-  const { vector } = await embed.embed(input.query_text);
-  const queryEmbeddingLiteral = '[' + vector.join(',') + ']';
+  let queryEmbeddingLiteral: string | null = null;
+  if (embed !== null) {
+    try {
+      // LLM CALL — ADR 22 (embedding for query text; not counted against Worker token budget)
+      const { vector } = await embed.embed(input.query_text);
+      queryEmbeddingLiteral = '[' + vector.join(',') + ']';
+    } catch (err) {
+      // Environment fault taxonomy (ADR 55 D-1): an unreachable embedding
+      // endpoint is never a reason to fail the turn.
+      logger.child({ component: 'mem-reflect', scope_id: input.scope_id }).warn(
+        { reason: classifyProviderError(err).reason },
+        LOG_EVENTS.REFLECT_DEGRADED,
+      );
+    }
+  }
+  const degraded = queryEmbeddingLiteral === null;
 
   // Visibility principal (ADR-46 D-3): '' matches no owner_principal, so an
   // anonymous request sees only shared/global rows.
   const principal = input.principal ?? '';
 
   // Step 1 — Procedural (positive templates, three-signal rerank)
-  const procRows = await hybridSearchProcedural(pool, queryEmbeddingLiteral, input.query_text, limit, principal);
+  const procRows = degraded
+    ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
+    : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
   const { text: procText, ids: proceduralIds } = formatProcedural(procRows, budget);
   const pTokens = countTokens(procText);
 
   // Step 1b — Anti-patterns (negative injection, Phase 10): slotted directly after
   // positive procedural in the truncation order — both are procedural-tier content.
+  // (Already BM25-only by design — anti-pattern rows carry no intent_embedding.)
   const antiRows = await searchAntiPatterns(pool, input.query_text, 2, principal);
   const antiText = formatAntiPatterns(antiRows, Math.max(0, budget - pTokens));
   const aTokens = countTokens(antiText);
 
   // Step 2 — Episodic
-  const epiRows = await hybridSearchEpisodic(pool, queryEmbeddingLiteral, input.query_text, 5, principal);
+  const epiRows = degraded
+    ? await bm25SearchEpisodic(pool, input.query_text, 5, principal)
+    : await hybridSearchEpisodic(pool, queryEmbeddingLiteral!, input.query_text, 5, principal);
   const epiText = formatEpisodic(epiRows, Math.max(0, budget - pTokens - aTokens));
   const eTokens = countTokens(epiText);
 
   // Step 3 — Semantic
-  const semRows = await hybridSearchSemantic(pool, queryEmbeddingLiteral, input.query_text, 5, principal);
+  const semRows = degraded
+    ? await bm25SearchSemantic(pool, input.query_text, 5, principal)
+    : await hybridSearchSemantic(pool, queryEmbeddingLiteral!, input.query_text, 5, principal);
   const semText = formatSemantic(semRows, Math.max(0, budget - pTokens - aTokens - eTokens));
   const sTokens = countTokens(semText);
 
@@ -391,5 +501,6 @@ export async function memReflect(
     tokens: pTokens + aTokens + eTokens + sTokens,
     sections: { procedural: procText, antiPatterns: antiText, episodic: epiText, semantic: semText },
     proceduralIds,
+    degraded,
   };
 }

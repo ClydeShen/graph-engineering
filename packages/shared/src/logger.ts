@@ -49,5 +49,9 @@ export const LOG_EVENTS = {
   PULSE_ERROR: 'pulse.error',
 
   CONTEXT_OOM: 'context.oom',     // OOM tier invoked — ADR 13 supplement
+  CONTEXT_DEGRADED: 'context.degraded',   // environment fault — degraded, NOT suspended (ADR 55)
+  REFLECT_DEGRADED: 'reflect.degraded',   // memReflect fell back to lexical-only retrieval (ADR 55)
+  EMBEDDING_BACKLOG_ENQUEUED: 'embedding.backlog.enqueued', // late projection queued (ADR 55)
+  EMBEDDING_BACKLOG_DRAINED: 'embedding.backlog.drained',   // backfill progress (ADR 55)
   WATCHDOG_CHECK: 'watchdog.check',
 } as const;

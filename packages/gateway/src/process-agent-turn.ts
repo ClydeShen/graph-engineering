@@ -26,7 +26,12 @@ import {
 } from './watchdog-sql.js';
 import { assembleContext, type AssembledContext } from '@graph/workers/context/assemble';
 import { makeKnapsackGraph } from './knapsack-graph.js';
-import { buildCapabilityEndorsement, isScopeColdStart, type EmbeddingProvider } from '@graph/shared';
+import {
+  buildCapabilityEndorsement,
+  isScopeColdStart,
+  classifyProviderError,
+  type EmbeddingProvider,
+} from '@graph/shared';
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
 import { insertWorkingMemory } from '@graph/workers/memory/working-memory';
 import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
@@ -62,7 +67,7 @@ export async function processAgentTurn(
   scopeId: string,
   event: AgentEventInput,
   wMax: number,
-  embeddingProvider: EmbeddingProvider,
+  embeddingProvider: EmbeddingProvider | null,
   /**
    * Requesting principal from X-Agent-ID (ADR-46 D-4). Merged into the payload
    * as `_principal` BEFORE the OCC write, so a demoted write's conflict_detected
@@ -173,12 +178,26 @@ export async function processAgentTurn(
     }
 
     return { suspended: false, version_hash, occ_result, context };
-  } catch (oomErr) {
-    logger.child({ component: 'gateway', scope_id: scopeId }).error(
-      { err: oomErr instanceof Error ? oomErr.message : String(oomErr) },
-      LOG_EVENTS.CONTEXT_OOM,
+  } catch (err) {
+    // Fault taxonomy (ADR 55 D-1): the ADR-39 lockout is reserved for TRUE
+    // context overflow. Environment faults (unreachable endpoint, timeout,
+    // transient 5xx, DB hiccup) degrade the turn — context: null this once —
+    // and the scope stays alive. memReflect already absorbs embedding faults
+    // internally, so anything classified context_length here is a real
+    // assembly overflow.
+    const classified = classifyProviderError(err);
+    if (classified.reason === 'context_length') {
+      logger.child({ component: 'gateway', scope_id: scopeId }).error(
+        { err: classified.original.message },
+        LOG_EVENTS.CONTEXT_OOM,
+      );
+      await writeContextOomThrottled(pool, scopeId);
+      return { suspended: false, version_hash, occ_result, context: null };
+    }
+    logger.child({ component: 'gateway', scope_id: scopeId }).warn(
+      { err: classified.original.message, reason: classified.reason },
+      LOG_EVENTS.CONTEXT_DEGRADED,
     );
-    await writeContextOomThrottled(pool, scopeId);
     return { suspended: false, version_hash, occ_result, context: null };
   }
 }

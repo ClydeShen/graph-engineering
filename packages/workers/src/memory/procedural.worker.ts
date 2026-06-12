@@ -13,7 +13,7 @@ export class ProceduralMemoryWorker {
   constructor(
     private readonly memory: MemoryRepository,
     private readonly writes: EventWriter,
-    private readonly llm: EmbeddingProvider,
+    private readonly llm: EmbeddingProvider | null,
   ) {}
 
   async onSynthesizerOutput(
@@ -30,17 +30,20 @@ export class ProceduralMemoryWorker {
     const embeddingLiteral = `[${Array.from(embedding).join(',')}]`;
 
     // LLM CALL — ADR 22 (embedding calls excluded from Worker token budget)
+    // ADR 55: provider absent/unreachable → NULL intent_embedding + backlog enqueue.
     let intentEmbeddingLiteral: string | null = null;
-    try {
-      const result = await this.llm.embed(intentDescription);
-      if (result.vector.length > 0) {
-        intentEmbeddingLiteral = `[${result.vector.join(',')}]`;
+    if (this.llm !== null) {
+      try {
+        const result = await this.llm.embed(intentDescription);
+        if (result.vector.length > 0) {
+          intentEmbeddingLiteral = `[${result.vector.join(',')}]`;
+        }
+      } catch {
+        // Embedding failure — write NULL for intent_embedding; topology write still proceeds
       }
-    } catch {
-      // Embedding failure — write NULL for intent_embedding; topology write still proceeds
     }
 
-    await this.memory.insertProceduralTemplate({
+    const { id: templateId } = await this.memory.insertProceduralTemplate({
       scopeId,
       content: writeGuard(intentDescription),
       intentDescription: writeGuard(intentDescription),
@@ -48,6 +51,14 @@ export class ProceduralMemoryWorker {
       embeddingLiteral,
       intentEmbeddingLiteral,
     });
+    if (intentEmbeddingLiteral === null) {
+      await this.memory.enqueueEmbeddingBackfill(
+        'procedural_memory',
+        templateId,
+        'intent_embedding',
+        intentDescription,
+      );
+    }
 
     const contentHash = contentFingerprint(intentDescription);
     // Phase 1 constraint C1 — every memory write must trace to execution_event_log

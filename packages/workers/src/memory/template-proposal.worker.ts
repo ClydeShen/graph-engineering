@@ -38,7 +38,7 @@ export class TemplateProposalWorker {
     private readonly memory: MemoryRepository,
     private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
-    private readonly embed: EmbeddingProvider,
+    private readonly embed: EmbeddingProvider | null,
   ) {}
 
   /**
@@ -96,30 +96,28 @@ export class TemplateProposalWorker {
     // Step 3: LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
     // The intent+outcome embedding is reused as the positive template's intent_embedding
     // (one embed call serves both writes — token efficiency, ADR-25 suppl 2).
+    // ADR 55: embedding absent/unreachable → NULL embedding + backlog enqueue.
+    // (Replaces the old zero-vector fallback, which poisoned cosine similarity;
+    // the partial HNSW index simply skips NULL rows until backfill.)
+    const embedText = writeGuard(intentSummary) + '\n' + writeGuard(outcomeSummary);
     let intentEmbeddingLiteral: string | null = null;
-    try {
-      const { vector } = await this.embed.embed(
-        writeGuard(intentSummary) + '\n' + writeGuard(outcomeSummary),
-      );
-      intentEmbeddingLiteral = '[' + vector.join(',') + ']';
-      await this.memory.appendEpisodicSummary(
-        scopeId,
-        entityId,
-        writeGuard(intentSummary),
-        writeGuard(outcomeSummary),
-        intentEmbeddingLiteral,
-      );
-    } catch {
-      // Embedding failure — write empty-vector episodic row rather than skip entirely.
-      // HNSW index requires non-null embedding: use zero vector as fallback.
-      const fallbackEmbeddingLiteral = '[' + Array(1536).fill(0).join(',') + ']';
-      await this.memory.appendEpisodicSummary(
-        scopeId,
-        entityId,
-        writeGuard(intentSummary),
-        writeGuard(outcomeSummary),
-        fallbackEmbeddingLiteral,
-      );
+    if (this.embed !== null) {
+      try {
+        const { vector } = await this.embed.embed(embedText);
+        intentEmbeddingLiteral = '[' + vector.join(',') + ']';
+      } catch {
+        /* late projection below */
+      }
+    }
+    const { id: episodicId } = await this.memory.appendEpisodicSummary(
+      scopeId,
+      entityId,
+      writeGuard(intentSummary),
+      writeGuard(outcomeSummary),
+      intentEmbeddingLiteral,
+    );
+    if (intentEmbeddingLiteral === null) {
+      await this.memory.enqueueEmbeddingBackfill('episodic_memory', episodicId, 'embedding', embedText);
     }
 
     // Step 4: Emit memory_updated event for episodic write (Phase 1 constraint C1)
@@ -137,7 +135,7 @@ export class TemplateProposalWorker {
     if (conflictCount <= events.length * LOW_CONFLICT_RATIO) {
       try {
         const skeleton = canonicalizeTemplateGraph(buildTemplateGraphFromEvents(events));
-        await this.memory.insertProceduralTemplate({
+        const { id: templateId } = await this.memory.insertProceduralTemplate({
           scopeId,
           content: writeGuard(intentSummary),
           intentDescription: writeGuard(intentSummary),
@@ -146,6 +144,9 @@ export class TemplateProposalWorker {
           intentEmbeddingLiteral,
           isAntiPattern: false,
         });
+        if (intentEmbeddingLiteral === null) {
+          await this.memory.enqueueEmbeddingBackfill('procedural_memory', templateId, 'intent_embedding', embedText);
+        }
         await this.writes.write({
           scopeId,
           entityId,

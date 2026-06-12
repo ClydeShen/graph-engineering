@@ -22,13 +22,23 @@ interface LessonRecord {
 /** Episodic memory tier — records what happened within a Scope. */
 interface EpisodicRepository {
   appendEpisodicTrace(scopeId: string, entityId: string, content: string): Promise<void>;
-  /** Write an LLM-distilled episodic summary for a completed Scope (D-04). */
-  appendEpisodicSummary(scopeId: string, entityId: string, intentSummary: string, outcomeSummary: string, embeddingLiteral: string): Promise<void>;
+  /**
+   * Write an LLM-distilled episodic summary for a completed Scope (D-04).
+   * embeddingLiteral null = late projection (ADR 55): row lands with NULL
+   * embedding; the caller enqueues an embedding_backlog entry for backfill.
+   * Returns the inserted row id so the backlog can target it.
+   */
+  appendEpisodicSummary(scopeId: string, entityId: string, intentSummary: string, outcomeSummary: string, embeddingLiteral: string | null): Promise<{ id: string }>;
 }
 
 /** Semantic memory tier — cross-Scope generalised facts. */
 interface SemanticRepository {
-  insertSemanticFact(scopeId: string, content: string, embedding: number[]): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }>;
+  /**
+   * embedding null = late projection (ADR 55): the fact is written with NULL
+   * embedding (merge/contradiction checks need a vector and are skipped —
+   * the backfill pass restores index participation, not retroactive dedup).
+   */
+  insertSemanticFact(scopeId: string, content: string, embedding: number[] | null): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }>;
   supersede(oldId: string, newId: string): Promise<void>;
   /**
    * Contradiction-candidate band (Phase 10): similarity 0.70–0.89 — close enough
@@ -38,9 +48,24 @@ interface SemanticRepository {
   findContradictionCandidate(embedding: number[], excludeId: string): Promise<{ id: string; content: string } | null>;
 }
 
+/** Late-projection backlog (ADR 55 D-2, migration 020). */
+interface BacklogRepository {
+  /**
+   * Enqueue a missing embedding for backfill. Idempotent — one pending
+   * projection per target cell (ON CONFLICT DO NOTHING).
+   */
+  enqueueEmbeddingBackfill(
+    targetTable: 'semantic_memory' | 'episodic_memory' | 'procedural_memory',
+    targetId: string,
+    targetColumn: 'embedding' | 'intent_embedding',
+    content: string,
+  ): Promise<void>;
+}
+
 /** Procedural memory tier — positive/negative workflow templates and lessons. */
 interface ProceduralRepository {
-  insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void>;
+  /** Returns the inserted row id (embedding backlog targeting, ADR 55). */
+  insertProceduralTemplate(params: ProceduralTemplateParams): Promise<{ id: string }>;
   reinforceTemplate(templateId: string): Promise<void>;
   /** Template ids injected into this scope by mem::reflect (migration 013). */
   getInjectedTemplateIds(scopeId: string): Promise<string[]>;
@@ -60,7 +85,8 @@ export interface MemoryRepository
   extends EpisodicRepository,
     SemanticRepository,
     ProceduralRepository,
-    WorkingRepository {}
+    WorkingRepository,
+    BacklogRepository {}
 
 /** Production adapter — all memory-table SQL lives here. */
 export class PoolMemoryRepository implements MemoryRepository {
@@ -79,21 +105,34 @@ export class PoolMemoryRepository implements MemoryRepository {
     entityId: string,
     intentSummary: string,
     outcomeSummary: string,
-    embeddingLiteral: string,
-  ): Promise<void> {
-    await this.pool.query(
+    embeddingLiteral: string | null,
+  ): Promise<{ id: string }> {
+    const { rows } = await this.pool.query<{ id: string }>(
       `INSERT INTO episodic_memory
          (scope_id, entity_id, content, intent_summary, outcome_summary, embedding, source_scope_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6::vector, $1, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6::vector, $1, NOW())
+       RETURNING id`,
       [scopeId, entityId, intentSummary + '\n' + outcomeSummary, intentSummary, outcomeSummary, embeddingLiteral],
     );
+    return { id: rows[0]!.id };
   }
 
   async insertSemanticFact(
     scopeId: string,
     content: string,
-    embedding: number[],
+    embedding: number[] | null,
   ): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }> {
+    if (embedding === null) {
+      // Late projection (ADR 55): NULL embedding — partial HNSW index skips the
+      // row until backfill; merge detection needs a vector, so none is suggested.
+      const { rows } = await this.pool.query<{ id: string }>(
+        `INSERT INTO semantic_memory (scope_id, content, embedding, source_scope_id, valid_from, created_at)
+         VALUES ($1, $2, NULL, $1, NOW(), NOW())
+         RETURNING id`,
+        [scopeId, content],
+      );
+      return { id: rows[0]!.id, suggestedMerge: null };
+    }
     const embeddingLiteral = '[' + embedding.join(',') + ']';
     const { rows } = await this.pool.query<{
       inserted_id: string;
@@ -152,13 +191,14 @@ export class PoolMemoryRepository implements MemoryRepository {
     return rows.length > 0 ? { id: rows[0]!.id, content: rows[0]!.content } : null;
   }
 
-  async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void> {
-    await this.pool.query(
+  async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<{ id: string }> {
+    const { rows } = await this.pool.query<{ id: string }>(
       `INSERT INTO procedural_memory
          (scope_id, content, intent_description, template_graph, topology_embedding,
           intent_embedding, success_count, reinforcement_count, last_used_at,
           created_at, is_anti_pattern, source_scope_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW(), $7, $1)`,
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW(), $7, $1)
+       RETURNING id`,
       [
         params.scopeId,
         params.content,
@@ -168,6 +208,21 @@ export class PoolMemoryRepository implements MemoryRepository {
         params.intentEmbeddingLiteral,
         params.isAntiPattern ?? false,
       ],
+    );
+    return { id: rows[0]!.id };
+  }
+
+  async enqueueEmbeddingBackfill(
+    targetTable: 'semantic_memory' | 'episodic_memory' | 'procedural_memory',
+    targetId: string,
+    targetColumn: 'embedding' | 'intent_embedding',
+    content: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO embedding_backlog (target_table, target_id, target_column, content)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (target_table, target_id, target_column) DO NOTHING`,
+      [targetTable, targetId, targetColumn, content],
     );
   }
 
@@ -254,9 +309,15 @@ export class StubMemoryRepository implements MemoryRepository {
       entityId: string;
       intentSummary: string;
       outcomeSummary: string;
-      embeddingLiteral: string;
+      embeddingLiteral: string | null;
     }>,
-    insertSemanticFact: [] as Array<{ scopeId: string; content: string; embedding: number[] }>,
+    insertSemanticFact: [] as Array<{ scopeId: string; content: string; embedding: number[] | null }>,
+    enqueueEmbeddingBackfill: [] as Array<{
+      targetTable: string;
+      targetId: string;
+      targetColumn: string;
+      content: string;
+    }>,
     supersede: [] as Array<{ oldId: string; newId: string }>,
     findContradictionCandidate: [] as string[],
     insertProceduralTemplate: [] as ProceduralTemplateParams[],
@@ -302,18 +363,28 @@ export class StubMemoryRepository implements MemoryRepository {
     entityId: string,
     intentSummary: string,
     outcomeSummary: string,
-    embeddingLiteral: string,
-  ): Promise<void> {
+    embeddingLiteral: string | null,
+  ): Promise<{ id: string }> {
     this.calls.appendEpisodicSummary.push({ scopeId, entityId, intentSummary, outcomeSummary, embeddingLiteral });
+    return { id: 'stub-episodic-id' };
   }
 
   async insertSemanticFact(
     scopeId: string,
     content: string,
-    embedding: number[],
+    embedding: number[] | null,
   ): Promise<{ id: string; suggestedMerge: { id: string; content: string } | null }> {
     this.calls.insertSemanticFact.push({ scopeId, content, embedding });
-    return { id: 'stub-id', suggestedMerge: this._suggestedMergeResult };
+    return { id: 'stub-id', suggestedMerge: embedding === null ? null : this._suggestedMergeResult };
+  }
+
+  async enqueueEmbeddingBackfill(
+    targetTable: 'semantic_memory' | 'episodic_memory' | 'procedural_memory',
+    targetId: string,
+    targetColumn: 'embedding' | 'intent_embedding',
+    content: string,
+  ): Promise<void> {
+    this.calls.enqueueEmbeddingBackfill.push({ targetTable, targetId, targetColumn, content });
   }
 
   async supersede(oldId: string, newId: string): Promise<void> {
@@ -335,8 +406,9 @@ export class StubMemoryRepository implements MemoryRepository {
     return this._contradictionCandidate;
   }
 
-  async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<void> {
+  async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<{ id: string }> {
     this.calls.insertProceduralTemplate.push(params);
+    return { id: 'stub-procedural-id' };
   }
 
   async reinforceTemplate(templateId: string): Promise<void> {

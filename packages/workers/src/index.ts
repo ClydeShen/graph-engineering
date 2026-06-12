@@ -16,7 +16,7 @@
 import { randomUUID } from 'crypto';
 import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
-import { OccEventWriter, OpenAICompatibleProvider, loadMemexConfig, buildChatProvider } from '@graph/shared';
+import { OccEventWriter, loadMemexConfig, buildChatProvider, buildEmbeddingProvider } from '@graph/shared';
 import { PoolTrailReader } from './base/trail-reader.js';
 import { PoolMemoryRepository } from './base/memory-repository.js';
 import { bootstrapAgentRegistry } from './boot/bootstrap.js';
@@ -38,6 +38,7 @@ import { CrystallizeWorker, CRYSTALLIZE_TRIGGER_CONFIG } from './memory/crystall
 import { LessonSaveWorker, LESSON_SAVE_TRIGGER_CONFIG } from './memory/lesson-save.worker.js';
 import { McpClientWorker, MCP_CLIENT_TRIGGER_CONFIG } from './integrations/mcp-client.worker.js';
 import { UserProfileWorker, USER_PROFILE_TRIGGER_CONFIG } from './memory/user-profile.worker.js';
+import { EmbeddingBackfillWorker, EMBEDDING_BACKFILL_TRIGGER } from './memory/embedding-backfill.worker.js';
 
 // ---------------------------------------------------------------------------
 // Config sourced from env — Workers receive injected instances, not raw env
@@ -62,13 +63,9 @@ void bootstrapAgentRegistry(pool).catch(() => {
 const memexConfig = loadMemexConfig();
 const llmProvider = buildChatProvider(memexConfig);
 
-// Anthropic has no embeddings endpoint — embedding always uses openai-completions.
-const embeddingProvider = new OpenAICompatibleProvider({
-  api: 'openai-completions',
-  model: process.env['EMBEDDING_MODEL'] ?? process.env['LLM_MODEL'] ?? 'llama3',
-  baseUrl: process.env['LLM_BASE_URL'],
-  apiKey: process.env['LLM_API_KEY'] ?? '',
-});
+// ADR 55: nullable by design — null means the semantic index runs degraded
+// (lexical retrieval + late-projection backfill); conversation never blocks.
+const embeddingProvider = buildEmbeddingProvider(memexConfig);
 
 // ---------------------------------------------------------------------------
 // Worker registration
@@ -222,6 +219,12 @@ void mcpClientWorker.connect((name, fn) => worker.registerFunction(name, fn));
 // graph::memory::user-profile — 3AM daily cron: synthesize cross-scope user profile from Crystals (T4)
 const userProfileWorker = new UserProfileWorker(pool, llmProvider);
 reg(USER_PROFILE_TRIGGER_CONFIG, () => userProfileWorker.scanAllUsers());
+
+// graph::memory::embedding-backfill — 5min cron, drains the late-projection
+// backlog once the embedding endpoint recovers (ADR 55 D-2). No-op when the
+// backlog is empty, the provider is null, or the endpoint is still down.
+const embeddingBackfillWorker = new EmbeddingBackfillWorker(pool, embeddingProvider);
+reg(EMBEDDING_BACKFILL_TRIGGER, () => embeddingBackfillWorker.drain());
 
 // graph::patterns::discover — 6h cron, base_priority=1, MIN_CORPUS guard (ADR 37)
 const patternDiscovery = new PatternDiscoveryWorker();
