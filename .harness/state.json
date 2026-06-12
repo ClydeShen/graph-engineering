@@ -10,6 +10,6 @@
     "phase": "16-memexos-one",
     "active": "ALL 16 ROADMAP PHASES COMPLETE — 1.0 candidate. 479 tests, tsc clean. Phase 15: Node-22 convergence (TD-M), doctor/backup/restore/service/profiles, install scripts, deploy compose (containerized E2E passed), ADR-48. Phase 16: skills install+guard, eval journey (ran live 2x) + regression gate, SECURITY/QUICKSTART/CHANGELOG, SHA-256SUMS, ADR-49.",
     "resume_file": null,
-    "stopped_at": "1.0 candidate. Remaining work is the live-environment verification list (consolidated in implementation-notes Phase 16 section): three-platform installs, LLM-keyed journey extension, registry API verification, docker exec containment, Pi-SDK terminal mode, email production binding, iii version pinning. Release procedure: ADR-49 D-1 gate order."
+    "stopped_at": "1.0 candidate (Phases 1-16 complete). NEXT: Phase 17 (mcp-connector-ecosystem, added to ROADMAP 2026-06-12) — MCP catalog manifests, OAuth PKCE token cache (SDK OAuthClientProvider), memex mcp CLI family, Claude Code/Hermes config compat; baseline = Phase 6 McpClientWorker + Phase 16 skills-guard, do not rewrite. Also outstanding: live-environment verification list (implementation-notes Phase 16 section). Release procedure: ADR-49 D-1 gate order."
   }
 }

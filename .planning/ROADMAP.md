@@ -127,6 +127,7 @@ Building a graph-native agent runtime where the append-only PostgreSQL execution
 | 14. Trust Isolation | — | Complete (a709c9d8, 418 tests) | 2026-06-12 |
 | 15. Deploy Everywhere | — | Complete (7bf119b5, 449 tests) | 2026-06-12 |
 | 16. MemexOS 1.0 | — | Complete (b92f686b, 479 tests) | 2026-06-12 |
+| 17. MCP Connector Ecosystem | — | Not started | — |
 
 ### Phase 5: Architecture Hardening
 

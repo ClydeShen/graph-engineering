@@ -542,6 +542,70 @@ Plans:
 
 ---
 
+## 17-mcp-connector-ecosystem
+
+**目标：** 补齐与 hermes-agent 对比后最大的剩余差距——MCP server 目录（catalog）、远程 MCP 的 OAuth PKCE + token 缓存、`memex mcp` CLI 管理命令。配置文件格式与机制必须兼容 Claude Code 的 `~/.claude.json` `mcpServers` JSON 形态与 Hermes 的 `mcp_servers` YAML 形态——用过两者之一的用户应能零上手成本识别并迁移现有配置；同时为后续 plugin 生态（model-providers / platform connectors / memory / web-search providers，参照 hermes `plugins/<category>/<name>/plugin.yaml`）预留可扩展的 manifest 结构，但不在本阶段实现。
+
+**背景：** Phase 6 已交付 `McpClientWorker`（`packages/workers/src/integrations/mcp-client.worker.ts`）：仅 HTTP/Streamable transport，读取裸 `MCP_SERVER_URLS` env var，无目录、无鉴权、不分工具开关。Phase 16 G1 交付了 skills 安装侧（`memex skills search/install/inspect` + skills-guard 扫描，`packages/cli/src/skills.ts`），其 download→scan→write→confirm 流程是 MCP catalog install 的直接模板。MCP TypeScript SDK 已自带 `OAuthClientProvider` 接口（`@modelcontextprotocol/sdk` `client/auth.js`）且 `StreamableHTTPClientTransport` 接受 `authProvider` 选项，Block 2 不需要手搓 OAuth，只需实现一个持久化到磁盘的 provider 类。
+
+### 核心交付物
+
+1. **MCP Catalog（Block 1）**
+   - 新增仓库内目录 `optional-mcps/<name>/manifest.yaml`（PR-gated，沿用 skills-guard 的"预审但可审查"信任模型）
+   - manifest schema 设计为可无损映射到 Claude Code `mcpServers` JSON 条目与 Hermes `mcp_servers` YAML 条目的超集：
+     ```yaml
+     name: <id>
+     description: <string>
+     transport:
+       # stdio
+       command: <string>
+       args: [<string>]
+       env: {KEY: "${ENV_VAR}"}
+       # 或 http/streamable
+       url: <string>
+       headers: {Authorization: "Bearer ${TOKEN}"}
+       auth: oauth   # 触发 Block 2 流程
+     requires_env: [<string>]      # 安装时若未设置则提示输入
+     tools:
+       default_enabled: [<tool 名称>]   # 对应 tools.include
+     ```
+   - 新增 `McpCatalogRegistry`（`packages/cli/src/mcp/catalog-registry.ts`），形状参照 `packages/gateway-bot/src/connectors/registry.ts` 的 `ConnectorRegistry`：`list()` / `get(name)` / `validateConfig()` / `statusReport()`（探测 `requires_env`）
+   - `MemexConfigSchema`（`packages/shared/src/config/loader.ts`）新增可选 `mcp_servers: Record<string, McpServerEntrySchema>` 顶层字段（additive，向后兼容）。字段命名直接对齐 Claude Code / Hermes：stdio 用 `command`/`args`/`env`，HTTP 用 `url`/`headers`（对应 Claude Code `type: "http"`），`auth: "oauth"`，`tools: {include?, exclude?}`（对应 Hermes `tools.include`），`enabled: boolean`
+   - `McpClientWorker` 扩展：
+     - 除现有 `MCP_SERVER_URLS` 外，从 `loadMemexConfig()` 读取 `mcp_servers`（env var 仍兼容，降级为一条匿名条目）
+     - 新增 **stdio transport** 支持（SDK 的 `StdioClientTransport`），按条目有 `command` 还是 `url` 选择 transport
+     - 注册前按 `tools.include`/`tools.exclude` 过滤 `listTools()` 结果（当前是全量注册）
+     - 工具命名：保留现有 `graph::mcp-ext::<host>::<tool>`（沿用既有命名，按 CLAUDE.md 不强改既存标识符），但当条目来自 config/catalog 时允许用 catalog 名替代裸 host 作为命名空间段
+
+2. **OAuth PKCE + token 缓存（Block 2）**
+   - 新增 `packages/cli/src/mcp/oauth-provider.ts`：`MemexOAuthProvider implements OAuthClientProvider`（SDK 接口）——`tokens()`/`saveTokens()` 读写 `~/.memex/mcp-tokens/<server>.json`（0600 权限，对应 hermes `~/.hermes/mcp-tokens/<server>.json`），`clientInformation()`/`saveClientInformation()`、`codeVerifier()`/`saveCodeVerifier()`（PKCE）同样落盘缓存，`redirectUrl` 指向本地临时端口 `http://localhost:<port>/callback`
+   - `redirectToAuthorization()`：打开系统浏览器（headless 环境打印 URL），与 hermes 的浏览器授权 UX 一致
+   - `memex mcp login <name>`：调用 SDK 的 `auth(provider, {serverUrl})`，起一个临时本地 HTTP server 接收 redirect callback，完成 PKCE 交换并落盘 token
+   - 当条目 `auth: oauth` 时，`McpClientWorker` 向 `StreamableHTTPClientTransport` 传入 `authProvider: new MemexOAuthProvider(serverName)`；token 刷新由 SDK 按其文档行为自动处理
+   - token 缓存目录 `~/.memex/mcp-tokens/` 按 profile 隔离（`profileDir()` 之下）
+
+3. **`memex mcp` CLI 命令族（Block 3）**
+   - 新增 `packages/cli/src/mcp.ts`，从 `index.ts` 的 `KNOWN` 数组加入 `'mcp'`，沿用 `runSkillsCommand()` 的 dispatch 模式：
+     - `memex mcp catalog` — 列出所有 `optional-mcps/*/manifest.yaml`，标注 enabled/installed 状态（对应 `hermes mcp`）
+     - `memex mcp install <name>` — manifest 写入 `~/.memex/config.json` 的 `mcp_servers.<name>`（`@clack/prompts` 提示 `requires_env`，与 onboard.ts 一致）；安装前对 manifest 内容跑 skills-guard 扫描（复用 `scanSkillContent` —— 目录内容同样是"来自 registry 的内容"）
+     - `memex mcp configure <name>` — 重新提示 env vars + 工具 include/exclude 多选清单（对 `listTools()` 结果 multiselect，需要先尝试连接）
+     - `memex mcp login <name>` — Block 2 OAuth 流程
+     - `memex mcp list` — 列出已配置 server 及实时状态（connected/error）
+     - `memex mcp uninstall <name>` — 从 config 移除并删除对应缓存 token
+
+4. **主流配置兼容性（跨切面）**
+   - `memex connect claude-code`（`packages/cli/src/connect/claude-code.ts`）扩展：完成 `graph-runtime` 写入 `~/.claude.json` `mcpServers` 后，可选地将 `~/.memex/config.json` 中已启用的 `mcp_servers` 条目同步镜像进 `~/.claude.json` 的 `mcpServers`（`--include-mcp-servers` 或交互提示）——已通过 `memex mcp install` 配置过的用户切到 Claude Code 时零重复配置
+   - 新增 `docs/mcp-config-compat.md`：Memex `mcp_servers.<name>` ↔ Claude Code `mcpServers.<name>` ↔ Hermes `mcp_servers.<name>` 字段映射表，供两类用户对照
+
+### 与现有 ADR 的关系
+- 扩展 ADR-22（LLM Provider Abstraction）的声明式 registry 哲学到 MCP server registry（非 LLM provider，但相同的 registration 模式）
+- 新 ADR-50：MCP Catalog Manifest Schema + OAuth Token Cache 设计（manifest 字段定义、token 文件权限/路径、stdio vs http transport 选择逻辑、tools include/exclude 语义）
+- 复用 ADR-47（trust isolation）的 `isToolAllowed`：catalog 安装的 MCP 工具同样要过现有信任分级，`graph::mcp-ext::*` 不自动绕过
+
+**前置条件：** Phase 16 完成（skills 安装侧 + skills-guard 已就位，本阶段直接复用其 download→scan→write 流程）；以 Phase 6 `McpClientWorker` 现状（HTTP-only、env-var 驱动）为扩展基线，不重写。
+
+---
+
 ## Post-1.0 方向（顺应 AI 发展，不排期、不写 ADR）
 
 > 记录于此防止丢失，每项启动前需独立 scoping。

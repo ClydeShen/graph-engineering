@@ -5,16 +5,20 @@ milestone_name: milestone
 status: in_progress
 last_updated: "2026-06-12T02:30:00.000Z"
 progress:
-  total_phases: 16
+  total_phases: 17
   completed_phases: 16
   total_plans: 6
   completed_plans: 6
-  percent: 100
+  percent: 94
 ---
 
 ## Current Position
 
-Phase: 16 (memexos-one) — COMPLETE. All 16 roadmap phases done; 1.0 candidate.
+Phase: 16 (memexos-one) — COMPLETE; 1.0 candidate. Next: Phase 17
+(mcp-connector-ecosystem, added to .harness/ROADMAP.md 2026-06-12) — MCP
+catalog (optional-mcps/ manifests), OAuth PKCE + token cache via SDK
+OAuthClientProvider, `memex mcp` CLI family, Claude Code / Hermes config
+compatibility. Builds on Phase 6 McpClientWorker + Phase 16 skills-guard.
 
 - Phases 10–16 completed across two autonomous sessions (9bb5035d → b92f686b).
   479 tests passing, tsc clean, red-line security tests green.
