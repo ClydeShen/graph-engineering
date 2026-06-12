@@ -48,6 +48,13 @@ async function main(): Promise<void> {
   }
 
   client.onTrailEvent((evt) => {
+    // text_delta = streamed reply chunk (ADR 54) — render as assistant text,
+    // not as a trail diagnostic line.
+    if (evt.event_type === 'text_delta') {
+      const { text } = evt.payload as { text?: string };
+      if (text !== undefined) process.stdout.write(text);
+      return;
+    }
     console.log(`  ⟶ [${evt.event_type}] ${JSON.stringify(evt.payload)}`);
   });
 
@@ -67,9 +74,16 @@ async function main(): Promise<void> {
     client
       .sendUserMessage(text)
       .then((result) => {
-        if (result.deduplicated) console.log('  (duplicate within 5min window — not re-recorded)');
-        else if (result.suspended) console.log('  (scope suspended)');
-        else console.log(`  ✓ recorded ${result.version_hash?.slice(0, 12)} (${result.occ_result})`);
+        if (result.suspended) {
+          console.log('  (scope suspended)');
+        } else if (result.error !== undefined) {
+          console.log(`  ✗ ${result.error}`);
+        } else if (result.reply !== undefined) {
+          // Deltas already streamed via onTrailEvent — close the line.
+          console.log('');
+        } else {
+          console.log(`  ✓ recorded ${result.version_hash?.slice(0, 12) ?? '?'}`);
+        }
       })
       .catch((err: unknown) => {
         console.error('  ✗', err instanceof Error ? err.message : err);

@@ -701,3 +701,23 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - spec 之外的决定：semantic NULL 写入跳过 merge/contradiction 检查（需要向量），回填只恢复
   索引参与度、不做追溯去重——记入 ADR 后果节的隐含义
 - N8：migration 021 全量解锁 suspended（安全论证：真溢出下一次写入按新分类法自动重锁）
+
+## ADR-54 实现（2026-06-12，开箱体验修复弧 3/5）
+
+- 对话核心：packages/gateway/src/conversation/core.ts（runConversationTurn）——无状态，
+  每 turn tip 查询→processAgentTurn 投影→LLM→助手回合 occWrite 回图
+- spec 待定项落定：
+  - 事件类型不开 memex::turn::* 新枚举（ADR-40 哈希一等列扩枚举成本>收益）——
+    memory_updated + payload kind conversation.user/assistant + 唯一 turn_id（防 TD-B 去重误杀）
+  - 工具结果以纯文本折回对话（单工具循环不需要 provider 级 tool-message 协议），上限 3 轮
+  - text_delta v1 = 单块退化流（providers 无 token streaming；协议槽位已激活，
+    后续只改 provider 不改协议）
+  - chat provider 为 null（完全未配置）时返回 onboard 指引而非拨打不存在的 localhost
+- Provider 层新增 ToolCallingProvider.chatTurn（openai tools / anthropic tool_use 两条传输），
+  FallbackProvider 同语义穿透；**顺带修了 AnthropicProvider 的潜在 400 bug**：
+  role:'system' 原样塞 messages 数组（Messages API 拒收），现拆到顶层 system 参数
+- 入口：WS user_message（terminal 流式）+ POST /v1/scopes/:id/chat（gateway-bot 渠道）；
+  渠道 onMessage 返回值从 "Task spawned: ..." 变成真实助手回复
+- processAgentTurn 增 ccrStore 穿透参数（memex_retrieve 当 turn 取回被裁剪事件）
+- run-migrations.ts 加 pg_advisory_lock：并行 vitest worker 同时跑迁移的死锁（被 021
+  的全表 UPDATE 放大暴露）系统性修复

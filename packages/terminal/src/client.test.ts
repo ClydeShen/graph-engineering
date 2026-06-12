@@ -75,7 +75,7 @@ describe('MemexTerminalClient', () => {
     expect(JSON.parse(ws.sent[0]!)).toEqual({ type: 'subscribe', scope_id: 'scope-t' });
   });
 
-  it('sendUserMessage uses the session tip as predecessor and resolves on correlated turn_result', async () => {
+  it('sendUserMessage sends a user_message turn and resolves on correlated turn_result', async () => {
     const { client, ws } = makeClient();
     await client.createScope('s');
     const connectP = client.connect();
@@ -83,28 +83,30 @@ describe('MemexTerminalClient', () => {
     await connectP;
 
     const turnP = client.sendUserMessage('hello graph');
+    // ADR 54: conversation turns ride the user_message protocol — the gateway
+    // owns predecessor tracking and runs the conversation core.
     const sent = JSON.parse(ws.sent[0]!) as {
       type: string;
       request_id: string;
-      event: { predecessor_hash: string; event_type: string; payload: { text: string } };
+      scope_id: string;
+      text: string;
     };
-    expect(sent.type).toBe('agent_event');
-    expect(sent.event.event_type).toBe('task_spawned');
-    expect(sent.event.predecessor_hash).toBe('p'.repeat(64));
-    expect(sent.event.payload.text).toBe('hello graph');
+    expect(sent.type).toBe('user_message');
+    expect(sent.scope_id).toBe('scope-t');
+    expect(sent.text).toBe('hello graph');
 
     ws.emit('message', {
       data: JSON.stringify({
         type: 'turn_result',
         request_id: sent.request_id,
         version_hash: 'n'.repeat(64),
-        occ_result: 'won',
+        reply: 'hi!',
         context: null,
       }),
     });
 
     const result = await turnP;
-    expect(result.occ_result).toBe('won');
+    expect(result.reply).toBe('hi!');
     // tip advanced — the NEXT message chains on the new hash (graph-projected state)
     expect(client.session.tip_hash).toBe('n'.repeat(64));
   });

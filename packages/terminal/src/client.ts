@@ -126,7 +126,7 @@ export class MemexTerminalClient {
           if (msg.version_hash !== undefined) this.session.tip_hash = msg.version_hash;
           entry.resolve(msg);
         } else {
-          entry.resolve({ type: 'turn_result', request_id: requestId, context: null });
+          entry.resolve({ type: 'turn_result', request_id: requestId, error: msg.message, context: null });
         }
       }
       return;
@@ -152,15 +152,17 @@ export class MemexTerminalClient {
   }
 
   /**
-   * Submit a user message as a task_spawned event into the session scope
-   * (same payload shape as the channel bots) and await the turn result.
+   * Submit one conversation turn (ADR 54): the gateway runs the conversation
+   * core (graph write → projection → LLM → graph write) and streams reply
+   * deltas as trail_event text_delta frames before the turn_result.
    */
   sendUserMessage(text: string): Promise<WsTurnResultMessage> {
-    return this.recordEvent('task_spawned', {
-      task_id: crypto.randomUUID(),
-      source: 'memex-terminal',
+    const requestId = `t${++this.requestSeq}`;
+    return this.sendWithCorrelation(requestId, {
+      type: 'user_message',
+      scope_id: this.session.scope_id,
+      request_id: requestId,
       text,
-      required_skills: ['message-handler'],
     });
   }
 
@@ -173,7 +175,7 @@ export class MemexTerminalClient {
     payload: Record<string, unknown>,
   ): Promise<WsTurnResultMessage> {
     const requestId = `t${++this.requestSeq}`;
-    const message: WsClientMessage = {
+    return this.sendWithCorrelation(requestId, {
       type: 'agent_event',
       scope_id: this.session.scope_id,
       request_id: requestId,
@@ -183,8 +185,14 @@ export class MemexTerminalClient {
         predecessor_hash: this.session.tip_hash,
         payload,
       },
-    };
+    });
+  }
 
+  /** Send a correlated request and await its turn_result (shared plumbing). */
+  private sendWithCorrelation(
+    requestId: string,
+    message: WsClientMessage,
+  ): Promise<WsTurnResultMessage> {
     return new Promise<WsTurnResultMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);

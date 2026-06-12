@@ -1,6 +1,6 @@
 # ADR 54｜对话核心：gateway 侧无状态应答循环（MemexShell 种子）
 
-status: proposed（提纲——结构核心已在 2026-06-12 fuller 会话拍板，实现细节待 plan-phase 展开）
+status: accepted（2026-06-12 实现落地；提纲源自同日 fuller 会话拍板）
 日期: 2026-06-12
 
 ---
@@ -27,12 +27,21 @@ claim 链路。gateway 进程内置对话核心（MemexShell 的种子模块）�
 gateway-bot 各渠道共享同一宿主。LLM key 只存在于配置所在的服务端——跨机器
 `memex chat` 不需要本地配 key。
 
+实现：`packages/gateway/src/conversation/core.ts`（runConversationTurn）；
+入口两个——WS `user_message` 消息（terminal）与 `POST /v1/scopes/:id/chat`
+REST（gateway-bot 渠道、非 WS 客户端）。
+
 ### D-2：核心无状态——Graph → Context，每 turn 从图投影
 
 对话核心**不持有消息列表**（Hermes AIAgent 的 `Context = State` 模式与 Memex 范式
 冲突，明确不抄）。每 turn：用户消息照常 OCC 写图 → `processAgentTurn` 返回 context
 投影（现成机制）→ LLM 调用消费投影 → 助手回合作为事件写回图。
-助手回合事件类型：建议 `memex::turn::assistant`（新事件类型走 memex:: 前缀约定）——待定。
+
+事件类型落定：对话回合记为 `memory_updated`，payload kind =
+`conversation.user` / `conversation.assistant`，带唯一 turn_id（防 TD-B 去重窗误杀）。
+不引入 `memex::turn::*` 新账本事件类型——OCC 写路径的 event_type 枚举
+（task_spawned|memory_updated，ADR-40 哈希公式一等列）扩枚举的迁移成本
+超过收益；对话回合本质上就是一次记忆写入。
 
 ### D-3：首版范围 = 聊天 + memex_retrieve 单工具 + text_delta 流式
 

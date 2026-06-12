@@ -65,9 +65,21 @@ export interface WsSubscribeMessage {
   scope_id?: string;
 }
 
-export type WsClientMessage = WsAgentEventMessage | WsSubscribeMessage;
+/**
+ * Client → Gateway: one conversation turn (ADR 54). The gateway owns
+ * predecessor tracking and runs the conversation core; reply text streams
+ * back as trail_event text_delta frames, then a turn_result closes the turn.
+ */
+export interface WsUserMessage {
+  type: 'user_message';
+  scope_id: string;
+  text: string;
+  request_id?: string;
+}
 
-/** Gateway → Client: result of an agent_event turn. */
+export type WsClientMessage = WsAgentEventMessage | WsSubscribeMessage | WsUserMessage;
+
+/** Gateway → Client: result of an agent_event or user_message turn. */
 export interface WsTurnResultMessage {
   type: 'turn_result';
   request_id?: string;
@@ -75,6 +87,10 @@ export interface WsTurnResultMessage {
   deduplicated?: boolean;
   version_hash?: string;
   occ_result?: string;
+  /** Full assistant reply for a user_message turn (deltas already streamed). */
+  reply?: string;
+  /** Client-side mirror of a protocol error reply (set by the terminal client). */
+  error?: string;
   context: unknown;
 }
 

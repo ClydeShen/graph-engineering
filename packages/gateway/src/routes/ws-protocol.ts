@@ -20,13 +20,14 @@ import { Hono } from 'hono';
 import type { Pool } from 'pg';
 import { EventBodySchema } from '@shared/schemas';
 import { logger } from '@shared/logger';
-import type { EmbeddingProvider } from '@graph/shared';
+import type { EmbeddingProvider, LLMProvider } from '@graph/shared';
 import type {
   WsClientMessage,
   WsServerMessage,
   TrailSseEvent,
 } from '@graph/types/shell';
 import { processAgentTurn } from '../process-agent-turn.js';
+import { runConversationTurn } from '../conversation/core.js';
 
 const log = logger.child({ component: 'gateway', route: 'GET /ws' });
 
@@ -54,14 +55,25 @@ export function admitMessage(state: WsConnectionState, now = Date.now()): boolea
   return state.messageCount <= WS_MESSAGE_LIMIT_PER_SEC;
 }
 
+export interface WsDeps {
+  pool: Pool;
+  wMax: number;
+  embed: EmbeddingProvider | null;
+  /** Conversation chat provider (ADR 54). null = user_message returns guidance. */
+  chat: LLMProvider | null;
+}
+
 /**
  * Handle one client message. Returns the server response message, or null when
  * the message produces no direct reply (subscribe).
+ *
+ * @param send Optional mid-turn sink (text_delta frames during user_message).
  */
 export async function handleWsMessage(
-  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider | null },
+  deps: WsDeps,
   raw: string,
   state: WsConnectionState,
+  send?: (msg: WsServerMessage) => void,
 ): Promise<WsServerMessage | null> {
   let msg: WsClientMessage;
   try {
@@ -73,6 +85,46 @@ export async function handleWsMessage(
   if (msg.type === 'subscribe') {
     state.subscriptions.add(msg.scope_id ?? '*');
     return null;
+  }
+
+  // ── Conversation turn (ADR 54): gateway-side reply loop ────────────────────
+  if (msg.type === 'user_message') {
+    if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
+      return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
+    }
+    if (typeof msg.text !== 'string' || msg.text.length === 0) {
+      return { type: 'error', request_id: msg.request_id, message: 'missing text' };
+    }
+    try {
+      const result = await runConversationTurn(deps, {
+        scopeId: msg.scope_id,
+        text: msg.text,
+        onDelta: (text) =>
+          send?.({
+            type: 'trail_event',
+            event_type: 'text_delta', // ADR-44 reserved slot, now live
+            payload: { text, request_id: msg.request_id },
+            scope_id: msg.scope_id,
+            timestamp: new Date().toISOString(),
+          }),
+      });
+      if (result.kind === 'suspended') {
+        return { type: 'turn_result', request_id: msg.request_id, suspended: true, context: null };
+      }
+      if (result.kind === 'error') {
+        return { type: 'error', request_id: msg.request_id, message: result.message };
+      }
+      return {
+        type: 'turn_result',
+        request_id: msg.request_id,
+        version_hash: result.assistant_version_hash,
+        reply: result.reply,
+        context: null,
+      };
+    } catch (err) {
+      log.error({ err: err instanceof Error ? err.message : String(err) }, 'ws.conversation.error');
+      return { type: 'error', request_id: msg.request_id, message: 'conversation turn failed' };
+    }
   }
 
   if (msg.type === 'agent_event') {
@@ -184,7 +236,7 @@ export interface WsLikeSocket {
  * call this factory once per connection.
  */
 export function makeWsConnectionHandlers(
-  deps: { pool: Pool; wMax: number; embed: EmbeddingProvider | null },
+  deps: WsDeps,
   broadcaster: WsBroadcaster,
 ): () => {
   onOpen(evt: unknown, ws: WsLikeSocket): void;
@@ -207,7 +259,9 @@ export function makeWsConnectionHandlers(
           ws.close(1008, 'message rate exceeded');
           return;
         }
-        const reply = await handleWsMessage(deps, String(evt.data), state);
+        const reply = await handleWsMessage(deps, String(evt.data), state, (m) =>
+          ws.send(JSON.stringify(m)),
+        );
         if (reply !== null) ws.send(JSON.stringify(reply));
       },
       onClose() {
@@ -226,6 +280,7 @@ export async function buildWsRoute(
   pool: Pool,
   wMax: number,
   embed: EmbeddingProvider | null,
+  chat: LLMProvider | null = null,
 ): Promise<{ app: Hono; websocket: unknown; broadcaster: WsBroadcaster }> {
   const { createBunWebSocket } = await import('hono/bun');
   const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -233,7 +288,7 @@ export async function buildWsRoute(
   const broadcaster = new WsBroadcaster();
   // `as never`: Bun's handler generics are narrower than the shared shape; the
   // runtime contract (onOpen/onMessage/onClose) is identical.
-  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed }, broadcaster) as never));
+  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed, chat }, broadcaster) as never));
   return { app, websocket, broadcaster };
 }
 
@@ -249,10 +304,11 @@ export async function buildWsRouteNode(
   pool: Pool,
   wMax: number,
   embed: EmbeddingProvider | null,
+  chat: LLMProvider | null = null,
 ): Promise<{ injectWebSocket: (server: unknown) => void; broadcaster: WsBroadcaster }> {
   const { createNodeWebSocket } = await import('@hono/node-ws');
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   const broadcaster = new WsBroadcaster();
-  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed }, broadcaster) as never));
+  app.get('/ws', upgradeWebSocket(makeWsConnectionHandlers({ pool, wMax, embed, chat }, broadcaster) as never));
   return { injectWebSocket: injectWebSocket as (server: unknown) => void, broadcaster };
 }

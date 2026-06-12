@@ -8,17 +8,34 @@
  * @see ADR 22 — LLM Provider Abstraction
  */
 
-import type { ChatMessage, EmbedResult, EmbeddingProvider, LLMProvider } from './provider.interface.js';
+import type {
+  ChatMessage,
+  ChatTurnResult,
+  EmbedResult,
+  EmbeddingProvider,
+  LLMProvider,
+  ToolCallingProvider,
+  ToolDefinition,
+} from './provider.interface.js';
 import type { LLMProviderConfig } from './types.js';
 
-export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider {
+interface OpenAIChatResponse {
+  choices: Array<{
+    message: {
+      content: string | null;
+      tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+    };
+  }>;
+}
+
+export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider, ToolCallingProvider {
   private readonly config: LLMProviderConfig;
 
   constructor(config: LLMProviderConfig) {
     this.config = config;
   }
 
-  async chat(messages: ChatMessage[], opts?: { temperature?: number }): Promise<string> {
+  private async post(body: Record<string, unknown>): Promise<OpenAIChatResponse> {
     // LLM CALL — justified by ADR 22 (Workers call provider interface, not raw HTTP)
     const res = await fetch(`${this.config.baseUrl ?? 'http://localhost:11434'}/v1/chat/completions`, {
       method: 'POST',
@@ -28,18 +45,51 @@ export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider 
       },
       body: JSON.stringify({
         model: this.config.model,
-        messages,
-        temperature: opts?.temperature ?? 0.7,
         max_tokens: this.config.maxTokens ?? 4096,
+        ...body,
       }),
     });
 
     if (!res.ok) {
       throw new Error(`LLM chat request failed: ${res.status} ${res.statusText}`);
     }
+    return (await res.json()) as OpenAIChatResponse;
+  }
 
-    const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+  async chat(messages: ChatMessage[], opts?: { temperature?: number }): Promise<string> {
+    const data = await this.post({ messages, temperature: opts?.temperature ?? 0.7 });
     return data.choices[0]?.message?.content ?? '';
+  }
+
+  /** One tool-capable turn (ADR 54). Caller owns the tool loop. */
+  async chatTurn(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    opts?: { temperature?: number },
+  ): Promise<ChatTurnResult> {
+    const data = await this.post({
+      messages,
+      temperature: opts?.temperature ?? 0.7,
+      ...(tools.length > 0
+        ? {
+            tools: tools.map((t) => ({
+              type: 'function',
+              function: { name: t.name, description: t.description, parameters: t.inputSchema },
+            })),
+          }
+        : {}),
+    });
+    const msg = data.choices[0]?.message;
+    const toolCalls = (msg?.tool_calls ?? []).map((tc) => {
+      let input: unknown = {};
+      try {
+        input = JSON.parse(tc.function.arguments);
+      } catch {
+        /* malformed arguments — pass empty input; the tool reports its own error */
+      }
+      return { id: tc.id, name: tc.function.name, input };
+    });
+    return { text: msg?.content ?? '', toolCalls };
   }
 
   async embed(text: string): Promise<EmbedResult> {

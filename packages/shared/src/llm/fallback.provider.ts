@@ -9,7 +9,14 @@
  * @see classifyProviderError for error classification logic
  */
 
-import type { LLMProvider, ChatMessage } from './provider.interface.js';
+import type {
+  LLMProvider,
+  ChatMessage,
+  ChatTurnResult,
+  ToolCallingProvider,
+  ToolDefinition,
+} from './provider.interface.js';
+import { supportsToolTurns } from './provider.interface.js';
 import { classifyProviderError } from './classify-error.js';
 
 /** A named provider with a priority (lower number = higher priority). */
@@ -32,7 +39,7 @@ export class AllProvidersExhaustedError extends Error {
  * concrete providers. On transient failure, it advances to the next provider.
  * On fatal failure, it re-throws immediately.
  */
-export class FallbackProvider implements LLMProvider {
+export class FallbackProvider implements LLMProvider, ToolCallingProvider {
   private readonly sorted: ProviderEntry[];
 
   constructor(providers: ProviderEntry[]) {
@@ -52,6 +59,31 @@ export class FallbackProvider implements LLMProvider {
           throw classified.original;
         }
         // classified.shouldFailover — continue to next provider
+      }
+    }
+    throw new AllProvidersExhaustedError();
+  }
+
+  /** Tool-capable turn with the same failover semantics as chat() (ADR 54). */
+  async chatTurn(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    opts?: { temperature?: number },
+  ): Promise<ChatTurnResult> {
+    for (const entry of this.sorted) {
+      try {
+        if (supportsToolTurns(entry.provider)) {
+          // LLM CALL — justified by ADR 22
+          return await entry.provider.chatTurn(messages, tools, opts);
+        }
+        // Provider without tool support: degrade to plain chat (no tool calls).
+        // LLM CALL — justified by ADR 22
+        return { text: await entry.provider.chat(messages, opts), toolCalls: [] };
+      } catch (err) {
+        const classified = classifyProviderError(err);
+        if (classified.shouldThrow) {
+          throw classified.original;
+        }
       }
     }
     throw new AllProvidersExhaustedError();

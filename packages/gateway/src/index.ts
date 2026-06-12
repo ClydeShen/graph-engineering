@@ -33,7 +33,14 @@ import { buildDecisionsRoute } from './routes/decisions.js';
 import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
-import { loadMemexConfig, buildEmbeddingProvider, DEFAULT_GATEWAY_PORT } from '@graph/shared';
+import {
+  loadMemexConfig,
+  buildEmbeddingProvider,
+  buildChatProvider,
+  DEFAULT_GATEWAY_PORT,
+  type LLMProvider,
+} from '@graph/shared';
+import { buildChatRoute } from './routes/chat.js';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
 import {
@@ -53,6 +60,19 @@ const DEFAULT_W_MAX = 4096;
 // provider). ADR 55/56: nullable, config-driven — null means the semantic
 // index runs degraded (lexical retrieval); the conversation never blocks.
 const gatewayEmbeddingProvider = buildEmbeddingProvider(loadMemexConfig());
+
+// Conversation chat provider (ADR 54): null when nothing is configured at all —
+// the conversation core then answers with onboarding guidance instead of
+// dialing a non-existent localhost default.
+function buildGatewayChatProvider(): LLMProvider | null {
+  const config = loadMemexConfig();
+  const hasConfigProviders = (config?.providers?.length ?? 0) > 0;
+  const hasEnvProvider =
+    process.env['LLM_BASE_URL'] !== undefined || process.env['LLM_API_KEY'] !== undefined;
+  if (!hasConfigProviders && !hasEnvProvider) return null;
+  return buildChatProvider(config);
+}
+const gatewayChatProvider = buildGatewayChatProvider();
 
 /**
  * Build and return the Hono app with all routes mounted.
@@ -74,6 +94,7 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   // Mount route modules
   app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));
   app.route('/v1/scopes', buildEventsRoute(pool, wMax, gatewayEmbeddingProvider));
+  app.route('/v1/scopes', buildChatRoute(pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider));
   app.route('/v1/scopes', buildScopeReadRoute(pool, wMax));
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildTopologyRoute(pool));
@@ -149,14 +170,14 @@ const isBun = typeof (globalThis as Record<string, unknown>)['Bun'] !== 'undefin
 let websocket: unknown;
 
 if (isBun) {
-  const ws = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider);
+  const ws = await buildWsRoute(pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider);
   app.route('/', ws.app);
   websocket = ws.websocket;
 } else if (!process.env['VITEST']) {
   // '@hono/node-ws' needs the same Hono instance that serve() runs — /ws is
   // registered on the main app, then the upgrade is injected into the server.
   const { serve } = await import('@hono/node-server');
-  const { injectWebSocket } = await buildWsRouteNode(app, pool, wMax, gatewayEmbeddingProvider);
+  const { injectWebSocket } = await buildWsRouteNode(app, pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider);
   const server = serve({ fetch: app.fetch, port: gatewayPort, hostname: gatewayHost });
   injectWebSocket(server);
 }

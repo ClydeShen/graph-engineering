@@ -29,6 +29,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  *
  * @param pool - A pg.Pool connected to the target database.
  */
+/** Advisory lock key for the migration runner (any stable 64-bit constant). */
+const MIGRATION_LOCK_KEY = 0x6d656d6578; // 'memex'
+
 export async function runMigrations(pool: Pool): Promise<void> {
   const migrationsDir = __dirname;
 
@@ -38,12 +41,22 @@ export async function runMigrations(pool: Pool): Promise<void> {
     .filter((f) => f.endsWith('.sql'))
     .sort(); // lexical sort: 001 < 002 < 003 etc.
 
-  for (const filename of sqlFiles) {
-    const filePath = join(migrationsDir, filename);
-    const sql = await readFile(filePath, 'utf8');
-    console.log(`[migrations] Running ${filename}...`);
-    await pool.query(sql);
-    console.log(`[migrations] ${filename} OK`);
+  // Serialize concurrent runners (parallel vitest workers each run migrations):
+  // a session-level advisory lock makes re-runs wait instead of deadlocking on
+  // shared row/DDL locks. Held on one dedicated connection for the whole pass.
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+    for (const filename of sqlFiles) {
+      const filePath = join(migrationsDir, filename);
+      const sql = await readFile(filePath, 'utf8');
+      console.log(`[migrations] Running ${filename}...`);
+      await client.query(sql);
+      console.log(`[migrations] ${filename} OK`);
+    }
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});
+    client.release();
   }
 }
 

@@ -25,7 +25,7 @@ import {
 
 const pool = {} as Pool;
 const embed = { embed: vi.fn() };
-const deps = { pool, wMax: 4000, embed };
+const deps = { pool, wMax: 4000, embed, chat: null };
 
 const validEvent = {
   entity_id: '11111111-1111-4111-8111-111111111111',

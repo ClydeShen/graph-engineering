@@ -14,16 +14,16 @@ export class GatewayBot {
     const discordPort = Number(process.env['DISCORD_PORT'] ?? '4001');
     const telegramWebhookUrl = process.env['TELEGRAM_WEBHOOK_URL'];
 
+    // ADR 54: dispatchMessage now returns the assistant reply itself — channels
+    // are conversational, not task-spawn acknowledgements.
     const onTelegramMessage = async (chatId: string, text: string, updateId: number): Promise<string> => {
       const sessionKey = buildSessionKey('telegram', chatId);
-      const taskId = await dispatchMessage(sessionKey, text, this.pool, String(updateId));
-      return `Task spawned: ${taskId}`;
+      return dispatchMessage(sessionKey, text, this.pool, String(updateId));
     };
 
     const onDiscordMessage = async (chatId: string, text: string, interactionId: string): Promise<string> => {
       const sessionKey = buildSessionKey('discord', chatId);
-      const taskId = await dispatchMessage(sessionKey, text, this.pool, interactionId);
-      return `Task spawned: ${taskId}`;
+      return dispatchMessage(sessionKey, text, this.pool, interactionId);
     };
 
     if (telegramToken) {
@@ -53,8 +53,7 @@ export class GatewayBot {
         void email.start(async (evt) => {
           // chat_id = thread anchor (TD-E semantics: replies continue the session scope)
           const sessionKey = buildSessionKey('email', evt.chat_id);
-          const taskId = await dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
-          return `Task spawned: ${taskId}`;
+          return dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
         });
         console.log('[gateway-bot] email connector polling');
       } else {

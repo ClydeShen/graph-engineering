@@ -25,6 +25,7 @@ import {
   writeContextOomThrottled,
 } from './watchdog-sql.js';
 import { assembleContext, type AssembledContext } from '@graph/workers/context/assemble';
+import type { CcrStore } from '@graph/workers/context/ccr';
 import { makeKnapsackGraph } from './knapsack-graph.js';
 import {
   buildCapabilityEndorsement,
@@ -75,6 +76,11 @@ export async function processAgentTurn(
    * Trail data without changing hash semantics.
    */
   principal?: string,
+  /**
+   * Turn-scoped CCR store (ADR 54): when provided, dropped event payloads are
+   * cached so the conversation core can serve memex_retrieve calls this turn.
+   */
+  ccrStore?: CcrStore,
 ): Promise<AgentTurnOutcome> {
   // 1. Suspended lockout (ADR 39)
   if (await checkSuspended(pool, scopeId)) {
@@ -134,7 +140,9 @@ export async function processAgentTurn(
   // 5. Context assembly
   try {
     const graph = await makeKnapsackGraph(pool, scopeId, { bypassView: true });
-    const context = await assembleContext(graph, scopeId, version_hash, event.payload, wMax, scopeClosed);
+    const context = await assembleContext(
+      graph, scopeId, version_hash, event.payload, wMax, scopeClosed, undefined, ccrStore,
+    );
 
     // Reflection Track injection — trigger selection (ADR-21, Phase 10 完整接线):
     //   cold_start         — first turn of the scope (highest precedence)
