@@ -20,12 +20,28 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { occWrite, checkCommand } from '@graph/shared';
 import { ZERO_HASH, AGENT_HEARTBEAT_TTL_S } from '@graph/shared';
+import {
+  formatGuardReport,
+  injectSecrets,
+  installSkill,
+  profileDir,
+  REGISTRIES,
+  resolveBindings,
+  saveArtifact,
+  scanSkillContent,
+  searchSkills,
+} from '@graph/shared';
 import { AgentCardSchema, registerAgent } from '../agent-registry.js';
+import { ApprovalService } from '../security/approval.js';
+import { AskUserService } from '../security/ask-user.js';
+import { requestInstall, executeInstall, searchCapabilities } from '../security/acquisition.js';
+import { buildBrowserRunArgs } from '../security/browser-capability.js';
 
 const SCRUB_KEYS = new Set([
   'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
@@ -523,7 +539,288 @@ export function buildMcpServer(pool: Pool): McpServer {
     );
   }
 
+  // ── Phase 20 (ADR-53): autonomous-assistant tool family ─────────────────────
+  // Trust gating happens at the HTTP MCP route (isToolAllowed interception);
+  // capability_install and browser are PAIRED_DENIED — trusted principals only.
+  const approvals = new ApprovalService(pool);
+  const askUser = new AskUserService(pool);
+
+  // Tool 9: ask_user — approvals generalized to free-form Q&A. Q&A pairs are
+  // trail data: "always asks at this step" is a Trail Discovery signal.
+  server.registerTool(
+    'ask_user',
+    {
+      description:
+        'Ask the human a free-form question. Returns a question_id immediately; ' +
+        'poll ask_user_status for the answer. Silence (10 min) = timed_out.',
+      inputSchema: z.object({
+        question: z.string().min(1).max(2000),
+        scope_id: z.string().regex(UUID_V4, 'scope_id must be UUID v4'),
+        predecessor_hash: z.string().regex(HASH_HEX64, 'predecessor_hash must be 64-char hex'),
+        principal: z.string().max(128).default('mcp-agent'),
+      }),
+    },
+    async ({ question, scope_id, predecessor_hash, principal }) => {
+      const questionId = await askUser.ask(scope_id, principal, question);
+      try {
+        await occWrite(pool, {
+          scopeId: scope_id,
+          entityId: randomUUID(),
+          predecessorHash: predecessor_hash,
+          eventType: 'memory_updated',
+          payload: { kind: 'memex::ask_user::asked', question_id: questionId, question },
+        });
+      } catch {
+        /* trail mark is best-effort; the question row is authoritative */
+      }
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify({ question_id: questionId, status: 'pending' }) },
+        ],
+      };
+    },
+  );
+
+  // Tool 10: ask_user_status — poll for the answer.
+  server.registerTool(
+    'ask_user_status',
+    {
+      description: 'Check an ask_user question: pending | answered (+answer) | timed_out.',
+      inputSchema: z.object({ question_id: z.string().regex(UUID_V4) }),
+    },
+    async ({ question_id }) => {
+      const result = await askUser.status(question_id);
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify(result ?? { status: 'unknown_question' }) },
+        ],
+      };
+    },
+  );
+
+  // Tool 11: capability_search — unified search over presets + skill registries
+  // (ADR-51 verb family: search_catalog; no `select` — the agent chooses).
+  server.registerTool(
+    'capability_search',
+    {
+      description:
+        'Search installable capabilities (presets + skill registries) when the current ' +
+        'task needs an ability you do not have. Install via capability_install (human approval required).',
+      inputSchema: z.object({ query: z.string().min(1).max(200) }),
+    },
+    async ({ query }) => {
+      const candidates = await searchCapabilities(query, {
+        searchRegistries: (q) => searchSkills(fetch, q),
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(candidates) }] };
+    },
+  );
+
+  // Tool 12: capability_install — two-phase: file approval (guard report in the
+  // body), then execute once the human approves. An agent cannot grant itself
+  // authority (ADR-53).
+  server.registerTool(
+    'capability_install',
+    {
+      description:
+        'Install a capability. First call with install_ref files a human approval ' +
+        '(guard scan included) and returns approval_id. After the human approves, ' +
+        'call again with BOTH install_ref and approval_id to execute.',
+      inputSchema: z.object({
+        install_ref: z.string().min(1).max(300),
+        approval_id: z.string().regex(UUID_V4).optional(),
+        scope_id: z.string().regex(UUID_V4, 'scope_id must be UUID v4'),
+        principal: z.string().max(128).default('mcp-agent'),
+      }),
+    },
+    async ({ install_ref, approval_id, scope_id, principal }) => {
+      const deps = makeAcquisitionDeps();
+      if (approval_id === undefined) {
+        const filed = await requestInstall(approvals, deps, scope_id, principal, install_ref);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                ...filed,
+                status: 'pending',
+                next: 'await human approval, then re-call with approval_id',
+              }),
+            },
+          ],
+        };
+      }
+      const result = await executeInstall(pool, approvals, deps, approval_id, install_ref, principal);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+    },
+  );
+
+  // Tool 13: browser (conditional, like execute_bash) — category-resolved
+  // implementation inside the docker backend; host browsers are never driven.
+  if (process.env['MEMEX_BROWSER_ENABLED'] === 'true') {
+    server.registerTool(
+      'browser',
+      {
+        description:
+          'Controlled browser action inside an isolated container: navigate | read | ' +
+          'fill | click | screenshot. The implementation is the bound `browser` capability.',
+        inputSchema: z.object({
+          op: z.enum(['navigate', 'read', 'fill', 'click', 'screenshot']),
+          url: z.string().max(2000).optional(),
+          selector: z.string().max(500).optional(),
+          text: z.string().max(4000).optional(),
+          scope_id: z.string().regex(UUID_V4, 'scope_id must be UUID v4'),
+          predecessor_hash: z.string().regex(HASH_HEX64, 'predecessor_hash must be 64-char hex'),
+        }),
+      },
+      async ({ op, url, selector, text, scope_id, predecessor_hash }) => {
+        const bindings = await resolveBindings(pool).catch(() => ({}) as Record<string, string>);
+        const impl = bindings['browser'];
+        if (impl === undefined) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: 'no browser implementation bound — memex capability bind browser <impl>',
+              },
+            ],
+          };
+        }
+        let args: string[];
+        try {
+          args = buildBrowserRunArgs(impl, {
+            op,
+            ...(url !== undefined ? { url } : {}),
+            ...(selector !== undefined ? { selector } : {}),
+            ...(text !== undefined ? { text } : {}),
+          });
+        } catch (err) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: err instanceof Error ? err.message : String(err) }],
+          };
+        }
+
+        // Vault injection happens at THIS boundary only (ADR-53): placeholders
+        // in the container command resolve to plaintext here, never earlier.
+        const last = args[args.length - 1]!;
+        if (last.includes('{{vault:')) {
+          const injected = await injectSecrets(pool, last);
+          if (injected.missing.length > 0) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `vault secrets missing/shredded: ${injected.missing.join(', ')}`,
+                },
+              ],
+            };
+          }
+          args[args.length - 1] = injected.resolved;
+        }
+
+        try {
+          const execFileAsync = promisify(execFile);
+          const { stdout } = await execFileAsync('docker', args, {
+            timeout: 60000,
+            maxBuffer: 8 * 1024 * 1024,
+          });
+
+          // Screenshots are artifacts (ADR-52 first mandatory producer).
+          let artifactHash: string | undefined;
+          if (op === 'screenshot') {
+            const image = Buffer.from(stdout.trim(), 'base64');
+            const saved = await saveArtifact(pool, {
+              scopeId: scope_id,
+              content: image,
+              kind: 'image',
+              mediaType: 'image/png',
+              label: `browser screenshot ${new Date().toISOString()}`,
+            });
+            artifactHash = saved.contentHash;
+          }
+
+          await occWrite(pool, {
+            scopeId: scope_id,
+            entityId: randomUUID(),
+            predecessorHash: predecessor_hash,
+            eventType: 'memory_updated',
+            // redaction direction: the ledger gets the op, never fill VALUES
+            payload: {
+              kind: 'memex::browser::op',
+              op,
+              implementation: impl,
+              ...(artifactHash !== undefined ? { artifact_hash: artifactHash } : {}),
+            },
+          }).catch(() => {
+            /* trail mark best-effort */
+          });
+
+          const resultText =
+            op === 'screenshot' ? JSON.stringify({ artifact_hash: artifactHash }) : stdout.slice(0, 16384);
+          return { content: [{ type: 'text' as const, text: resultText }] };
+        } catch (err) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `browser backend failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+          };
+        }
+      },
+    );
+  }
+
   return server;
+}
+
+/**
+ * Acquisition deps over the shared skills client. v1 executes `skill:` refs
+ * end-to-end; `preset:` refs return operator guidance (presets may need env
+ * prompts / OAuth that only the interactive CLI can drive).
+ */
+function makeAcquisitionDeps(): {
+  scanCandidate(ref: string): Promise<{ findings: number; report: string }>;
+  performInstall(ref: string): Promise<{ location: string }>;
+} {
+  const parseSkillRef = (ref: string): { registry: (typeof REGISTRIES)[number]; id: string } => {
+    const m = /^skill:([^:]+):(.+)$/.exec(ref);
+    const registry = m ? REGISTRIES.find((r) => r.name === m[1]) : undefined;
+    if (!m || !registry) {
+      throw new Error(`unsupported install_ref '${ref}' — expected skill:<registry>:<id> or preset:<name>`);
+    }
+    return { registry, id: m[2]! };
+  };
+  return {
+    async scanCandidate(ref) {
+      if (ref.startsWith('preset:')) {
+        return {
+          findings: 0,
+          report: 'preset install — runs via operator CLI (memex capability install), no remote content to scan',
+        };
+      }
+      const { registry, id } = parseSkillRef(ref);
+      const res = await fetch(registry.downloadUrl(id), { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`download failed: ${res.status} from ${registry.name}`);
+      const findings = scanSkillContent(await res.text());
+      return { findings: findings.length, report: formatGuardReport(findings) };
+    },
+    async performInstall(ref) {
+      if (ref.startsWith('preset:')) {
+        return { location: `operator action required: memex capability install ${ref.slice('preset:'.length)}` };
+      }
+      const { registry, id } = parseSkillRef(ref);
+      // installSkill re-downloads + re-scans (TOCTOU guard); confirmed=true is
+      // legitimate here because the human approved WITH the scan report in hand.
+      const outcome = await installSkill(fetch, registry, id, id, join(profileDir(), 'skills'), true);
+      return { location: outcome.dir };
+    },
+  };
 }
 
 // Re-export ZERO_HASH for convenience (used in tests)

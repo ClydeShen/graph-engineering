@@ -173,11 +173,11 @@ async function main() {
 
 async function runSkillsCommand(): Promise<void> {
   const action = process.argv[3];
-  const [
-    { searchSkills, installSkill, inspectSkills, skillsRootForScope, REGISTRIES },
-    { formatGuardReport },
-    { profileDir, memexHome },
-  ] = await Promise.all([import('./skills.js'), import('./skills-guard.js'), import('@graph/shared')]);
+  // skills client + guard moved to @graph/shared in Phase 20 (gateway needs them too)
+  const {
+    searchSkills, installSkill, inspectSkills, skillsRootForScope, REGISTRIES,
+    formatGuardReport, profileDir, memexHome,
+  } = await import('@graph/shared');
   // --scope global|profile (Phase 19, ADR-52): default profile (== prior behavior)
   const scopeArgIdx = process.argv.indexOf('--scope');
   const scope = scopeArgIdx !== -1 && process.argv[scopeArgIdx + 1] === 'global' ? 'global' : 'profile';

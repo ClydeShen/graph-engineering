@@ -47,6 +47,31 @@ D-8): the full approval lifecycle, blocklist hits, trust downgrades, and erase
 operations. "This agent keeps probing beyond its privileges" is an emergent
 signal that Trail Discovery can surface from the ledger.
 
+## Autonomous-assistant boundaries (Phase 20, ADR-53)
+
+**Agents cannot grant themselves authority.** Agent-initiated capability
+installs (`capability_install`) always pass through the human approval state
+machine; the skills-guard scan report is embedded in the approval body so the
+human decides with the findings in front of them. Content is re-downloaded and
+re-scanned at execution time (TOCTOU guard). Silence is not consent — pending
+approvals time out to denial.
+
+**Credential vault.** Secrets are envelope-encrypted per service (AES-256-GCM
+DEK, wrapped by the operator KEK from `MEMEX_VAULT_KEK`); destroying the
+wrapped DEK crypto-shreds the value (ADR-43 mechanism). The invariant: secret
+values never enter the ledger or LLM context. Prompts carry
+`{{vault:<service>}}` placeholders; plaintext exists only at the tool
+execution boundary, immediately before subprocess/transport use. A missing
+KEK disables the vault loudly — there is no plaintext fallback.
+
+**Controlled browser.** The `browser` tool drives a containerized browser
+(docker execution backend, `--cap-drop ALL`, `no-new-privileges`, read-only
+root, bridge network for egress only). It never drives a host browser; login
+state lives only in the container. Screenshots enter the system as
+hash-addressed artifacts; the ledger records operations and implementation
+names, never form-fill values. `capability_install` and `browser` require
+the `trusted` level — `paired` principals need an explicit upgrade.
+
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately via **GitHub Security Advisories** on

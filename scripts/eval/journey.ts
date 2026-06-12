@@ -11,6 +11,9 @@
  *   3. OCC conflict            — same predecessor → demoted (causal inversion)
  *   4. context projection      — knapsack compression metric sampled
  *   5. memory search           — hybrid retrieval route answers
+ *   5a-5d. tennis-court north star (Phase 20, ADR-53; external endpoints mocked):
+ *          acquisition approval gate / ask_user round-trip / vault lifecycle
+ *          (KEK-gated) / capability endorsement surfacing
  *   6. erase(scope)            — payload blanked, chain intact (doctor rule)
  *   7. metrics snapshot        — written to .harness/analysis/eval-snapshot.json
  *      and compared against the previous snapshot (regression gate, ADR-49)
@@ -29,6 +32,17 @@ import {
   type EvalSnapshot,
 } from '../../packages/cli/src/eval-metrics.js';
 import { eraseScope } from '../../packages/gateway/src/security/erase.js';
+import { ApprovalService } from '../../packages/gateway/src/security/approval.js';
+import { AskUserService } from '../../packages/gateway/src/security/ask-user.js';
+import { requestInstall, executeInstall } from '../../packages/gateway/src/security/acquisition.js';
+import {
+  buildCapabilityEndorsement,
+  injectSecrets,
+  recordActivation,
+  redactSecrets,
+  vaultShred,
+  vaultStore,
+} from '@graph/shared';
 
 const GATEWAY = process.env['GATEWAY_URL'] ?? 'http://127.0.0.1:4000';
 const DB = process.env['DATABASE_URL'];
@@ -100,6 +114,58 @@ async function main(): Promise<void> {
   const search = await fetch(`${GATEWAY}/v1/memory/search?q=journey&scope_id=${scope_id}`);
   if (!search.ok) fail('memory search', `HTTP ${search.status}`);
   pass('memory search route answers');
+
+  // ── Tennis-court north star (Phase 20, ADR-53; external endpoints mocked) ──
+
+  // 5a. autonomous capability acquisition: agent cannot grant itself authority
+  {
+    const approvals = new ApprovalService(pool);
+    const deps = {
+      scanCandidate: async () => ({ findings: 1, report: 'MEDIUM network call in SKILL.md' }),
+      performInstall: async () => ({ location: '/tmp/journey-skill' }),
+    };
+    const filed = await requestInstall(approvals, deps, scope_id, 'journey-agent', 'skill:agentskills.io:weather');
+    const before = await executeInstall(pool, approvals, deps, filed.approval_id, 'skill:agentskills.io:weather', 'journey-agent');
+    if (before.status !== 'pending') fail('acquisition gate', `install ran before approval: ${before.status}`);
+    await approvals.decide(filed.approval_id, true, 'once');
+    const after = await executeInstall(pool, approvals, deps, filed.approval_id, 'skill:agentskills.io:weather', 'journey-agent');
+    if (after.status !== 'installed') fail('acquisition gate', `expected installed, got ${after.status}`);
+    pass('acquisition gate: pending blocks, approval unblocks', `findings=${filed.findings}`);
+  }
+
+  // 5b. ask_user round-trip (question → human answer → agent reads it)
+  {
+    const askUser = new AskUserService(pool);
+    const qid = await askUser.ask(scope_id, 'journey-agent', 'Book 6pm or 7pm?');
+    if (!(await askUser.answer(qid, '7pm'))) fail('ask_user', 'answer transition failed');
+    const status = await askUser.status(qid);
+    if (status?.status !== 'answered' || status.answer !== '7pm') fail('ask_user', JSON.stringify(status));
+    pass('ask_user round-trip', '7pm');
+  }
+
+  // 5c. vault boundary: store → redact (LLM direction) → inject (tool boundary) → shred
+  if (process.env['MEMEX_VAULT_KEK']) {
+    await vaultStore(pool, 'journey-court', 'pw-12345');
+    const redacted = redactSecrets('login pw-12345', { 'journey-court': 'pw-12345' });
+    if (redacted.includes('pw-12345')) fail('vault', 'redaction leaked the value');
+    const injected = await injectSecrets(pool, redacted);
+    if (!injected.resolved.includes('pw-12345')) fail('vault', 'injection failed');
+    await vaultShred(pool, 'journey-court');
+    if ((await injectSecrets(pool, redacted)).missing.length === 0) fail('vault', 'shred did not kill the secret');
+    pass('vault: redact→inject→shred lifecycle');
+  } else {
+    pass('vault lifecycle', 'skipped (MEMEX_VAULT_KEK not set)');
+  }
+
+  // 5d. endorsement: capability co-occurrence becomes ranked cold-start evidence
+  {
+    await recordActivation(pool, scope_id, 'journey-weather-skill');
+    const endorsement = await buildCapabilityEndorsement(pool);
+    if (endorsement === null || !endorsement.includes('journey-weather-skill')) {
+      fail('endorsement', 'activation did not surface in the endorsement block');
+    }
+    pass('endorsement: activation surfaces in cold-start evidence');
+  }
 
   // 6. erase(scope) — ledger blanked, chain intact
   await eraseScope(pool, scope_id, 'eval-journey', 'admin');

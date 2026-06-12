@@ -215,7 +215,7 @@ export async function runMcpCommand(): Promise<void> {
     if (!manifest) throw new Error(`no catalog manifest '${name}' under ${catalogRoot()}`);
 
     // Catalog content is registry content — same guard as skill installs.
-    const { scanSkillContent, formatGuardReport } = await import('./skills-guard.js');
+    const { scanSkillContent, formatGuardReport } = await import('@graph/shared');
     const findings = scanSkillContent(registry.rawContent(name) ?? '');
     if (findings.length > 0) {
       console.log(formatGuardReport(findings));

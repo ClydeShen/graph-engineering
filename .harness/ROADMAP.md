@@ -716,7 +716,7 @@ Plans:
 
 ---
 
-## 20-autonomous-assistant
+## 20-autonomous-assistant ✅ Code-complete (2026-06-12, ADR-53; 浏览器镜像构建/渠道命令路由/journey 活体跑列入活体批次)
 
 **目标：** Scenario 3 核心能力：agent 自主获取能力（找 skill、装 skill、配置自己）、主动向用户求助、安全保存用户凭据、受控浏览器操作。"网球场预订故事"固化为北极星 E2E journey。
 

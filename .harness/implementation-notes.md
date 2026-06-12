@@ -623,3 +623,38 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - next build: 9/9 routes compile + prerender; G6 dynamically imported (not in
   first-load JS). LIVE leftover: visual verification of the G6 canvas against a
   running gateway (joins the live-environment batch).
+
+## Phase 20 — autonomous-assistant (2026-06-12)
+
+### Decisions not covered by the spec
+
+- **skills client + guard moved to @graph/shared** (ADR-53 D-7): gateway needs
+  scanning + registry install for agent-initiated acquisition; cli keeps consuming
+  via @graph/shared. Pure-logic move, zero new deps in shared.
+- **capability_install v1 scope**: skill:<registry>:<id> refs execute end-to-end;
+  preset:<name> refs return operator guidance (presets may need interactive env/
+  OAuth that only the CLI can drive). Recorded in ADR-53 D-1.
+- **Two-phase tool call instead of a blocking tool**: capability_install returns
+  approval_id immediately (MCP transports time out; approvals take minutes-to-
+  never). Same shape for ask_user (poll ask_user_status).
+- **executeInstall TOCTOU stance**: installSkill re-downloads + re-scans; the
+  `confirmedDespiteFindings=true` flag is legitimate there because the human
+  approved WITH the scan report in the approval body.
+- **Vault KEK is operator-owned env** (MEMEX_VAULT_KEK): no key derivation, no
+  silent fallback — missing KEK = vault loudly unavailable. Journey step 5c is
+  KEK-gated for the same reason.
+- **Browser network=bridge deviation** from exec-backend's default 'none' is the
+  single security-arg change (a browser without egress is a paperweight);
+  everything else from _BASE_SECURITY_ARGS stays.
+- **Ledger redaction**: browser op events record {op, implementation, artifact_hash?}
+  — never url/selector/fill values (fill may carry injected secrets).
+
+### Verification
+
+- tsc clean; 561 tests (was 543): vault lifecycle (roundtrip/shred/fail-closed/
+  redact-inject), ask-user state machine, acquisition (approval gating, guard
+  report embedding, down-registry tolerance), browser mapper (5 ops, quoting,
+  security args). Journey steps 5a-5d added (live-gated, typechecked).
+- LIVE leftovers added: memex-browser container image build + real docker browser
+  run; /approve //answer chat-command routing (joins Phase 14's batch); journey
+  5a-5d live run.

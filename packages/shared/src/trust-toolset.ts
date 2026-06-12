@@ -15,12 +15,15 @@ export const WEBHOOK_SAFE_TOOLS = [
   'search_memory',
 ] as const;
 
-const PAIRED_DENIED = new Set(['execute_bash']);
+// Tools that reach the exec/disk boundary need the explicit trust upgrade.
+// Phase 20 adds capability_install (writes skills to disk after approval) and
+// browser (drives the containerized browser backend).
+const PAIRED_DENIED = new Set(['execute_bash', 'capability_install', 'browser']);
 
 /**
  * Is `tool` permitted for a principal at `trust`?
  *   trusted   → everything
- *   paired    → everything except execute_bash (explicit upgrade required)
+ *   paired    → everything except the exec/disk boundary set above
  *   untrusted → WEBHOOK_SAFE_TOOLS only
  */
 export function isToolAllowed(trust: TrustLevel, tool: string): boolean {

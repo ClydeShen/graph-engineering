@@ -14,7 +14,7 @@
 
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { scanSkillContent, type GuardFinding } from './skills-guard.js';
+import { scanSkillContent, type GuardFinding } from './guard.js';
 
 export interface SkillSearchResult {
   registry: string;

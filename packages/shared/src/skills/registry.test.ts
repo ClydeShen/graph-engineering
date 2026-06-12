@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSkillContent, formatGuardReport } from './skills-guard.js';
+import { scanSkillContent, formatGuardReport } from './guard.js';
 import {
   searchSkills,
   installSkill,
@@ -10,7 +10,7 @@ import {
   safeSkillDirName,
   REGISTRIES,
   type SkillRegistryDescriptor,
-} from './skills.js';
+} from './registry.js';
 
 // ── skills-guard red-line fixtures (Phase 16 G2): ≥6 malicious classes ───────
 
