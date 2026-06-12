@@ -1,0 +1,25 @@
+WARN_BYTES=5242880    # 5 MB
+BLOCK_BYTES=52428800  # 50 MB
+
+blocked=0
+tmpfile="$(git rev-parse --git-dir)/PRE_COMMIT_STAGED_FILES"
+git diff --cached --name-only --diff-filter=ACM > "$tmpfile"
+
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  size=$(git cat-file -s ":$file" 2>/dev/null)
+  [ -z "$size" ] && continue
+
+  if [ "$size" -ge "$BLOCK_BYTES" ]; then
+    echo "ERROR: $file is $((size / 1048576))MB — exceeds the 50MB limit."
+    echo "       Likely a build artifact (.next/cache, dist, etc). Add it to .gitignore"
+    echo "       instead of committing it. Use 'git restore --staged <file>' to unstage."
+    blocked=1
+  elif [ "$size" -ge "$WARN_BYTES" ]; then
+    echo "WARNING: $file is $((size / 1048576))MB — large file, double-check this should be committed."
+  fi
+done < "$tmpfile"
+rm -f "$tmpfile"
+
+[ "$blocked" -eq 1 ] && exit 1
+exit 0

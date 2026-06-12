@@ -18,7 +18,8 @@
     "db:migrate": "npx tsx scripts/migrate.ts",
     "db:reset": "docker compose down -v && docker compose up -d && npx tsx scripts/migrate.ts",
     "demo": "tsx scripts/demo-runner.ts",
-    "analyze-feedback": "tsx scripts/analyze-feedback.ts"
+    "analyze-feedback": "tsx scripts/analyze-feedback.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@dqbd/tiktoken": "1.0.22",
@@ -31,8 +32,11 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@types/node": "^22",
     "@types/pg": "^8",
+    "husky": "^9.1.7",
     "tsx": "4.22.4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
