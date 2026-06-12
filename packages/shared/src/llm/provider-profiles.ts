@@ -101,6 +101,22 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     local: true,
   },
   {
+    name: 'llamacpp',
+    displayName: 'llama.cpp (local llama-server)',
+    api: 'openai-completions',
+    baseUrl: 'http://localhost:8080', // llama-server default host:port
+    supportsEmbedding: true, // /v1/embeddings exists when started with --embeddings
+    local: true,
+  },
+  {
+    name: 'mlx',
+    displayName: 'MLX (Apple silicon, mlx_lm.server)',
+    api: 'openai-completions',
+    baseUrl: 'http://localhost:8000', // mlx_lm.server default port (docs)
+    supportsEmbedding: false, // mlx_lm.server serves chat/completions only — no /v1/embeddings
+    local: true,
+  },
+  {
     name: 'deepseek',
     displayName: 'DeepSeek',
     api: 'openai-completions',

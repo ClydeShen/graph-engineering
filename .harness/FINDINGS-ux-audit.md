@@ -24,7 +24,7 @@
 | U14 | 低 | doctor `channels: no channels configured`——用户 onboarding 时 telegram 验证失败被静默跳过的既有遗留 | ⏳ `memex connect telegram` 补救 |
 | U15 | 低 | REPL 对话中每个 turn 回显 `⟶ [memory_updated] {"event_id":N}` 诊断行——聊天界面的纯噪音 | ✅ REPL 抑制 memory_updated 回显（其他 trail 事件保留） |
 | U16 | 中 | dev.mjs 不回收 console 端口 3000：残留 console 进程时 Next.js 静默换 3004，banner 仍写 3000——用户打开的是旧实例 | ✅ freePort(3000) |
-| U17 | 低 | Topology/Artifacts 页要求手动输入 scope_id (uuid)——用户无从得知 uuid，没有 scope 列表/选择器 | 📝 设计改进项（需要 scope 列表端点+选择器，超本批范围） |
+| U17 | 低 | Topology/Artifacts 页要求手动输入 scope_id (uuid)——用户无从得知 uuid，没有 scope 列表/选择器 | ✅ GET /v1/scopes 列表端点（limit 钳制 1-200）+ ScopePicker 下拉（intent·短id·status），两页接入，活体验证联动加载 |
 | U18 | **高** | console Skills 页永远 "no exported skills"：gateway `/v1/skills` 默认读 `./skills`（gateway cwd），CLI 装到 `~/.memex/skills`——两边永远对不上；且 detail 路由只接受 64-hex id，按名字安装的技能点开 404 | ✅ 默认根改 memexHome()/skills + detail 接受安全目录名（防穿越正则保留） |
 | U19 | 中 | Skills 详情面板把 `{"content":"..."}` 原始 JSON 整包渲染（console 没解析 envelope）——此前被 U18 的空列表掩盖 | ✅ 解析 content 字段 |
 

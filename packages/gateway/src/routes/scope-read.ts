@@ -28,6 +28,29 @@ export function buildScopeReadRoute(pool: Pool, wMax: number): Hono {
   const app = new Hono();
 
   /**
+   * GET /v1/scopes — recent scopes for pickers (UX-audit U17).
+   * Response: { scopes: [{ scope_id, intent, status, created_at }] }
+   * ?limit=N (default 50, max 200). Read-only, newest first.
+   */
+  app.get('/', async (c) => {
+    const rawLimit = Number(c.req.query('limit') ?? 50);
+    const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
+    const result = await pool.query<{
+      scope_id: string;
+      intent: string | null;
+      status: string;
+      created_at: string;
+    }>(
+      `SELECT scope_id, intent, status, created_at
+       FROM scope_lineage
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return c.json({ scopes: result.rows });
+  });
+
+  /**
    * GET /v1/scopes/:id
    * Response: { scope_id, status, context }
    *

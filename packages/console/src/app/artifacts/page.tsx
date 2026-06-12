@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { api, type ArtifactMeta } from '@/lib/api';
+import { ScopePicker } from '@/components/ScopePicker';
 
 export default function ArtifactsPage() {
   const [input, setInput] = useState('');
@@ -47,6 +48,12 @@ export default function ArtifactsPage() {
           void load(input.trim());
         }}
       >
+        <ScopePicker
+          onPick={(id) => {
+            setInput(id);
+            void load(id);
+          }}
+        />
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}

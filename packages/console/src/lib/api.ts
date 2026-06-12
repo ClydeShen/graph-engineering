@@ -44,6 +44,13 @@ export interface SuspendedScope {
   unconverged_nodes_count: number;
 }
 
+export interface ScopeSummary {
+  scope_id: string;
+  intent: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface ArtifactMeta {
   content_hash: string;
   scope_id: string;
@@ -64,6 +71,7 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const api = {
   health: () => getJson<HealthResponse>('/v1/sys/health'),
+  scopes: (limit = 50) => getJson<{ scopes: ScopeSummary[] }>(`/v1/scopes?limit=${limit}`),
   topology: (scopeId: string) => getJson<TopologyResponse>(`/v1/scopes/${encodeURIComponent(scopeId)}/topology`),
   metrics: () => getJson<InfraMetrics>('/v1/metrics/infra'),
   suspended: () => getJson<SuspendedScope[]>('/v1/scopes/audit/suspended'),

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TopologyCanvas } from '@/components/TopologyCanvas';
+import { ScopePicker } from '@/components/ScopePicker';
 
 export default function TopologyPage() {
   const [input, setInput] = useState('');
@@ -16,6 +17,12 @@ export default function TopologyPage() {
           setScopeId(input.trim());
         }}
       >
+        <ScopePicker
+          onPick={(id) => {
+            setInput(id);
+            setScopeId(id);
+          }}
+        />
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
