@@ -59,5 +59,5 @@ export async function runConnectTelegram(): Promise<void> {
   writeTelegramChannel('${TELEGRAM_BOT_TOKEN}');
   log.success(`Wrote channels.telegram.token to ${resolveConfigPath()}`);
   log.warn('Export the secret in your shell profile:\n  export TELEGRAM_BOT_TOKEN=<the token>');
-  outro('Restart gateway-bot, then message your bot /pair to begin pairing.');
+  outro('Restart the stack (npm run dev) — then just message your bot; every chat routes to the conversation core (ADR 54).');
 }

@@ -21,7 +21,8 @@
 | U11 | 低 | iii `Trigger type scheduled not found` ERROR ×1，出现在第三轮重连注册中；我们代码无 'scheduled' 注册（N2 已修），疑似引擎重注册路径残留 | 📝 随 U1/U2 消失则关账 |
 | U12 | 低 | iii-config.yaml watcher 误报：repo 根目录任何文件创建都触发 `reload: config changed`（diff 0/0/0 无害但有噪音） | 📝 引擎侧 watcher 粒度 |
 | U13 | 信息 | console 首页 500（Turbopack PostCSS 子进程 0xc0000142）**仅发生在沙箱内启动的 dev stack**；独立无沙箱运行正常（307）。用户正常 `npm run dev` 不受影响 | 📝 沙箱环境因素 |
-| U14 | 低 | doctor `channels: no channels configured`——用户 onboarding 时 telegram 验证失败被静默跳过的既有遗留 | ⏳ `memex connect telegram` 补救 |
+| U14 | 低 | doctor `channels: no channels configured`——用户 onboarding 时 telegram 验证失败被静默跳过的既有遗留 | ✅ token getMe 验证通过（@memememex_bot）；.env + config.json channels 引用写入；doctor "1 channel(s), tokens present"；long-poll 活体启动 |
+| U20 | **高** | gateway-bot 是独立进程（自启动入口）但 dev.mjs 从不启动它——配好 telegram 渠道也永远没有 bot 在跑（U14 的深层根因）；且 long-poll 启动无日志，活渠道与死渠道在日志里无法区分 | ✅ dev.mjs 条件启动 [bot] 进程（telegram/discord/email env 存在时）+ long-poll 启动标记日志；过时 "/pair" 提示文案修正（ADR-54 后渠道直接对话） |
 | U15 | 低 | REPL 对话中每个 turn 回显 `⟶ [memory_updated] {"event_id":N}` 诊断行——聊天界面的纯噪音 | ✅ REPL 抑制 memory_updated 回显（其他 trail 事件保留） |
 | U16 | 中 | dev.mjs 不回收 console 端口 3000：残留 console 进程时 Next.js 静默换 3004，banner 仍写 3000——用户打开的是旧实例 | ✅ freePort(3000) |
 | U17 | 低 | Topology/Artifacts 页要求手动输入 scope_id (uuid)——用户无从得知 uuid，没有 scope 列表/选择器 | ✅ GET /v1/scopes 列表端点（limit 钳制 1-200）+ ScopePicker 下拉（intent·短id·status），两页接入，活体验证联动加载 |

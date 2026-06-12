@@ -23,6 +23,9 @@ export async function startLongPoll(
 ): Promise<void> {
   let offset = 0;
   const base = `https://api.telegram.org/bot${token}`;
+  // Startup marker — without it a live channel is indistinguishable from a
+  // dead one in the logs (UX-audit U14/U20 verification hatch).
+  console.log('[telegram] long-poll started');
 
   while (!signal?.aborted) {
     let updates: TelegramUpdate[] = [];

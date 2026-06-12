@@ -217,7 +217,18 @@ async function boot() {
     env: appEnv,
   }));
 
-  // 4. Console (Next.js) — starts alongside gateway.
+  // 4. Gateway-bot — channel ingress (Telegram long-poll / Discord / email).
+  // Only started when a channel is actually configured via env (UX-audit U20:
+  // it was never launched by dev.mjs, so a configured Telegram bot stayed dead).
+  if (appEnv.TELEGRAM_BOT_TOKEN || (appEnv.DISCORD_BOT_TOKEN && appEnv.DISCORD_APPLICATION_ID) || appEnv.MEMEX_IMAP_URL) {
+    procs.push(start({
+      tag: 'bot    ', color: C.red,
+      cmd: process.execPath, args: ['--import', 'tsx/esm', 'packages/gateway-bot/src/index.ts'],
+      env: appEnv,
+    }));
+  }
+
+  // 5. Console (Next.js) — starts alongside gateway.
   // PORT is scrubbed from the child env: Next.js honours PORT, and inheriting
   // the gateway's port made the console bind 4000 on another interface (N1).
   const consoleEnv = { ...appEnv, NEXT_PUBLIC_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}` };

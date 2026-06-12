@@ -227,7 +227,7 @@ export async function runOnboard(configPath: string = DEFAULT_CONFIG_PATH): Prom
       'Summary',
       `  provider   ${providerKey as string} / ${model as string}`,
       `  gateway    port ${port}${token !== undefined ? ' (token auth on)' : ''}`,
-      `  channels   ${telegramConfigured ? 'telegram (pair via /pair after gateway-bot starts)' : 'none yet (memex connect telegram)'}`,
+      `  channels   ${telegramConfigured ? 'telegram (message your bot once the stack is up)' : 'none yet (memex connect telegram)'}`,
       `  dashboard  ${dashboardUrl}`,
       ...(followUps.length > 0 ? ['  next installs:', ...followUps.map((f) => `    ${f}`)] : []),
       '  next       npm run dev  (or: memex service)  → then: memex connect',

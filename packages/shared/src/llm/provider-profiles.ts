@@ -109,11 +109,13 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     local: true,
   },
   {
-    name: 'mlx',
-    displayName: 'MLX (Apple silicon, mlx_lm.server)',
+    name: 'omlx',
+    displayName: 'oMLX (Apple silicon, local)',
     api: 'openai-completions',
-    baseUrl: 'http://localhost:8000', // mlx_lm.server default port (docs)
-    supportsEmbedding: false, // mlx_lm.server serves chat/completions only — no /v1/embeddings
+    baseUrl: 'http://localhost:8000', // omlx serve default (jundot/omlx)
+    // oMLX serves /v1/chat/completions, /v1/embeddings, and /v1/rerank —
+    // chat + embedding are consumed here; rerank has no runtime slot yet.
+    supportsEmbedding: true,
     local: true,
   },
   {
