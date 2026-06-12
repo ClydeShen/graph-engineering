@@ -14,6 +14,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 Commands:
   onboard       First-run setup — writes ~/.memex/config.json (providers, gateway)
+  chat          Open MemexTerminal — converse with the running gateway
   connect       Connect coding agents to the Graph Runtime (default)
   doctor        Diagnose the installation (config, postgres, hash chain, providers)
   backup [dir]  pg_dump custom-format backup (default dir: ~/.memex/backups)
@@ -23,6 +24,9 @@ Commands:
   mcp           catalog | install <name> | configure <name> | login <name> | list | uninstall <name>
   capability    list | bind <category> <impl> | install <preset>
   --version     Print the MemexOS version
+
+Install (repo checkout): npm install && npm link --workspace packages/cli
+  → makes the global \`memex\` command available
 
 Options:
   --help, -h    Show this help message
@@ -48,9 +52,16 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   process.exit(0);
 }
 
-const KNOWN = ['onboard', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp', 'capability', 'connect'] as const;
-const subcommand = (KNOWN as readonly string[]).includes(process.argv[2] ?? '')
-  ? (process.argv[2] as (typeof KNOWN)[number])
+const KNOWN = ['onboard', 'chat', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp', 'capability', 'connect'] as const;
+const requested = process.argv[2];
+// Unknown subcommands error out instead of silently falling through to
+// `connect` (P5: `memex chta` must not open the connect multiselect).
+if (requested !== undefined && !requested.startsWith('-') && !(KNOWN as readonly string[]).includes(requested)) {
+  console.error(`unknown command: ${requested}\nrun \`memex --help\` for the command list`);
+  process.exit(1);
+}
+const subcommand = (KNOWN as readonly string[]).includes(requested ?? '')
+  ? (requested as (typeof KNOWN)[number])
   : 'connect';
 
 async function resolveDbUrl(): Promise<string> {
@@ -225,6 +236,8 @@ async function runSkillsCommand(): Promise<void> {
 
 const entry =
   subcommand === 'onboard' ? runOnboard()
+  // memex chat — MemexTerminal REPL (its module entry starts the session).
+  : subcommand === 'chat' ? import('@graph/terminal').then(() => {})
   : subcommand === 'doctor' ? runDoctorCommand()
   : subcommand === 'backup' ? runBackupCommand()
   : subcommand === 'restore' ? runRestoreCommand()
