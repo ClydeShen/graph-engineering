@@ -127,7 +127,7 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 
 ## 技术债清偿轨道（2026-06-11 盘点，编入 Phase 09–15）
 
-> 来源：`.harness/implementation-notes.md`、`docs/未决问题追踪.md`、`09/11-DESIGN-NOTES.md`、代码内 TODO。
+> 来源：`.harness/implementation-notes.md`、`docs/OPEN_ISSUES_TRACKING.md`、`09/11-DESIGN-NOTES.md`、代码内 TODO。
 > 原则：每项债务编入"它自然属于的阶段"——该阶段的交付物本来就要触碰这块代码，顺势清偿，不另设独立的"还债阶段"。各项已同步写入对应阶段的核心交付物。
 
 | # | 债务 | 来源 | 清偿阶段 | 理由 |

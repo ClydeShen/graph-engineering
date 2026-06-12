@@ -19,7 +19,7 @@ Gate 1 测试和 Phase 1 实现产生的所有记录已迁移至正式文档：
 | G1-Fix-2: Node.js v22 启动方式 | `docs/TECH_STACK.md` §6 |
 | G1-Obs-1: Gateway 需要 Bun 运行时 | `docs/TECH_STACK.md` §6 |
 | G1-Obs-2: OCC winner 被覆写 bug | `docs/adr/0043-adr41-occ-partition-and-causal-append.md` (ADR 41) |
-| Control Plane OOM status=terminated bug | `docs/未决问题追踪.md` §P0-E (Phase 2 必修) |
+| Control Plane OOM status=terminated bug | `docs/OPEN_ISSUES_TRACKING.md` §P0-E (Phase 2 必修) |
 | 测试文件结构 + E2E 自动化决策 | `tests/README.md` |
 
 ---

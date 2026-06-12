@@ -56,7 +56,7 @@ For each ADR referenced by changed files:
 
 #### 3b. Open question tracker
 
-Find the project's open question tracker (e.g. `docs/未决问题追踪.md`, `docs/OPEN-QUESTIONS.md`):
+Find the project's open question tracker (e.g. `docs/OPEN_ISSUES_TRACKING.md`, `docs/OPEN-QUESTIONS.md`):
 - [ ] For each 🔴 / 🟡 item: check if the code resolves it
 - [ ] Update status to ✅ where resolved — add evidence: `file.ts:line_number` confirms
 - [ ] Update footer counts
@@ -139,7 +139,7 @@ Before finishing, list everything:
 
 ### Doc changes (N files)
 - ADR 22: updated LLMProvider.chat() method name (was complete())
-- 未决问题追踪: P0-E ✅ (watchdog.ts:200 confirmed)
+- OPEN_ISSUES_TRACKING: P0-E ✅ (watchdog.ts:200 confirmed)
 
 ### GitHub syncs (N actions)
 - Issue #15: progress comment (2/4 Gate 2 endpoints implemented)

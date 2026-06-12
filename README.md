@@ -59,33 +59,40 @@ When a Scope closes, CrystallizeWorker queries the episodic trail, calls an LLM 
 │   Agent                                                         │
 │     │                                                           │
 │     ▼                                                           │
-│  ┌──────────────────────────────┐                               │
-│  │  Gateway (Hono + MCP/HTTP)   │  ← Claude Code, Pi Terminal  │
-│  └──────────────┬───────────────┘                               │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  MemexShell — MemexTerminal · Dashboard · CLI · Bots     │   │
+│  │  Telegram · Discord · Slack · Email · Webhook · Cron     │   │
+│  └──────────────┬───────────────────────────────────────────┘   │
+│                 │ REST + WS/SSE                                  │
+│  ┌──────────────▼───────────────┐                               │
+│  │  Gateway (Hono + MCP/HTTP)   │  ← Claude Code, Pi Terminal,  │
+│  └──────────────┬───────────────┘     external MCP agents       │
 │                 │ iii.trigger()                                  │
 │     ┌───────────▼──────────────────────────────────┐            │
 │     │              iii Engine (Worker Bus)          │            │
 │     │                                              │            │
 │     │  SpawnWorker   ConflictResolver   Frontier   │            │
 │     │  CrystallizeWorker   LessonSaveWorker        │            │
+│     │  TemplateProposalWorker  PatternDiscoveryWorker │         │
 │     └───────────────────────┬──────────────────────┘            │
 │                             │ OCC writes                        │
 │     ┌───────────────────────▼──────────────────────┐            │
 │     │          Trail Mesh (PostgreSQL)              │            │
 │     │                                              │            │
 │     │  entities  versions  hyper_edges             │            │
-│     │  episodic_memory  lessons  crystals          │            │
+│     │  episodic_memory  semantic_memory            │            │
+│     │  procedural_memory  lessons  crystals        │            │
 │     │  pgvector HNSW  pgcrypto SHA-256             │            │
 │     └──────────────────────────────────────────────┘            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Trail flow:**
-1. Agent calls Gateway → MCP tool invoked → `iii.trigger()` fires
+1. Agent or channel message calls Gateway (REST/MCP/WS) → `iii.trigger()` fires
 2. Worker writes Association (hyper-edge) to Trail Mesh via OCC
 3. On scope close → CrystallizeWorker distills trail → Crystal written
 4. Crystal triggers LessonSaveWorker → Lesson saved with Ebbinghaus reinforcement
-5. Pattern discovery scans Trail Mesh for recurring topologies across Scopes
+5. TemplateProposalWorker / PatternDiscoveryWorker scan the Trail Mesh for recurring topologies and inject proven skeletons into future Scopes — this is Trail Discovery
 
 ---
 
@@ -110,12 +117,15 @@ When a Scope closes, CrystallizeWorker queries the episodic trail, calls an LLM 
 
 | Layer | Technology |
 |---|---|
-| Trail Mesh (SSOT) | PostgreSQL 15+ — append-only event log, pgcrypto SHA-256, pgvector HNSW |
+| Trail Mesh (SSOT) | PostgreSQL 16+ — append-only event log, pgcrypto SHA-256, pgvector HNSW |
 | Worker Routing | iii Engine — event-driven worker bus |
-| Gateway | Hono + MCP Streamable HTTP — agent entry point |
+| Gateway | Hono + MCP Streamable HTTP + WS/SSE realtime — agent entry point |
 | Workers | TypeScript — iii-sdk `registerWorker` + `registerFunction` |
-| Crystallization LLM | OpenAI-compatible REST (`/v1/chat/completions`) |
-| Semantic Search | pgvector HNSW on lesson embeddings |
+| LLM Providers | Anthropic Messages API + OpenAI-compatible (Ollama/vLLM/LM Studio/DeepSeek), registry + fallback |
+| Memory | Episodic / Semantic / Procedural — hybrid BM25 + pgvector HNSW (RRF) retrieval |
+| Shell | MemexTerminal (TUI), Dashboard (live SSE view), `memex` CLI |
+| Connectors | Telegram, Discord, Slack, Email, inbound Webhook (HMAC) + graph-native cron |
+| Security | CommandGate (3-tier), docker execution backend, cross-channel approvals, erase(scope) |
 
 ---
 
@@ -124,11 +134,35 @@ When a Scope closes, CrystallizeWorker queries the episodic trail, calls an LLM 
 | Phase | Description | Status |
 |---|---|---|
 | 01 — discuss | Domain model, terminology, RFC ratification | Complete |
-| 02 — plan | Architecture, data model, ADRs (23 locked) | Complete |
+| 02 — plan | Architecture, data model, ADRs | Complete |
 | 03 — execute | PostgreSQL schema, event bus, hash chain, workers | Complete |
-| 04 — external-integrations | MCP gateway, CLI connect, distributed locking, crystallization | Complete |
-| 05 — provider-safety | Anthropic adapter, CommandGate, skill export, webhook notify | Planned |
-| 06 — extensions | MCP client, execute_bash, gateway-bot, UserProfile, TUI | Planned |
+| 04 — external-integrations | MCP gateway, connect CLI, distributed locking, crystallization | Complete |
+| 05 — provider-safety | Anthropic adapter, CommandGate, skill export, webhook notify | Complete |
+| 06 — extensions | MCP client, execute_bash, gateway-bot, UserProfile, pairing | Complete |
+| 07 — architecture | Memory repository seam, lifecycle/graph-handle refactor | Complete |
+| 08 — context-assembly | Knapsack slicing, CCR compression, Wasm tokenizer | Complete |
+| 09 — memory-layers | Episodic / semantic / procedural memory, hybrid retrieval | Complete |
+| 10 — trail-discovery | Template proposal/injection, pattern discovery, reinforcement | Complete |
+| 11 — memex-shell | Realtime WS/SSE, onboarding TUI, MemexTerminal, Dashboard | Complete |
+| 12 — connector-matrix | Telegram/Discord/Slack/Email/Webhook, graph-native cron | Complete |
+| 13 — agent-federation | Sub-agent delegation, agent registry, visibility domains | Complete |
+| 14 — trust-isolation | Docker execution backend, approvals, erase, PII filtering | Complete |
+| 15 — deploy-everywhere | Installers, Docker compose, doctor, backup/restore, profiles | Complete |
+| 16 — memexos-one | Skills install side, eval harness, SECURITY/QUICKSTART, release | Complete |
+| 17 — mcp-connector-ecosystem | MCP catalog, OAuth PKCE, `memex mcp` CLI | Planned |
+
+Phases 1–16 form the **1.0 candidate** (479 tests, `tsc` clean). See `.harness/ROADMAP.md` for full phase detail and `CHANGELOG.md` for the release notes.
+
+---
+
+## Documentation
+
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — install and blaze your first Trail in five minutes
+- **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)** — full user manual: installation (all platforms), configuration, every feature, troubleshooting
+- **[docs/api/reference.md](docs/api/reference.md)** — REST + MCP API reference
+- **[docs/guides/](docs/guides/)** — developer guides (getting started, configuration, deployment, development)
+- **[SECURITY.md](SECURITY.md)** — trust model and vulnerability disclosure
+- **[docs/adr/](docs/adr/)** — architectural decision records
 
 ---
 
