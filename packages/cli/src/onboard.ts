@@ -16,24 +16,12 @@ import { intro, outro, select, text, confirm, log, isCancel, multiselect } from 
 import {
   CAPABILITY_PRESETS,
   DEFAULT_CONFIG_PATH,
+  DEFAULT_GATEWAY_PORT,
   MemexConfigSchema,
+  PROVIDER_PROFILES,
+  getProviderProfile,
   type MemexConfig,
 } from '@graph/shared';
-
-interface ProviderPreset {
-  type: string;
-  baseUrl?: string;
-  defaultModel: string;
-  envVar?: string;
-}
-
-const PRESETS: Record<string, ProviderPreset> = {
-  anthropic: { type: 'anthropic', defaultModel: 'claude-sonnet-4-6', envVar: 'ANTHROPIC_API_KEY' },
-  ollama: { type: 'openai-compatible', baseUrl: 'http://localhost:11434', defaultModel: 'llama3' },
-  vllm: { type: 'openai-compatible', baseUrl: 'http://localhost:8000', defaultModel: '' },
-  lmstudio: { type: 'openai-compatible', baseUrl: 'http://localhost:1234', defaultModel: '' },
-  deepseek: { type: 'openai-compatible', baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-chat', envVar: 'DEEPSEEK_API_KEY' },
-};
 
 function bail(value: unknown): asserts value is string | boolean | symbol {
   if (isCancel(value)) {
@@ -57,39 +45,80 @@ export async function runOnboard(configPath: string = DEFAULT_CONFIG_PATH): Prom
     writeFileSync(configPath + '.bak', readFileSync(configPath));
   }
 
+  // ADR 56 D-2: picker options derive from the ProviderProfile registry —
+  // onboarding never maintains its own provider list.
   const providerKey = await select({
     message: 'LLM provider',
-    options: [
-      { value: 'anthropic', label: 'Anthropic (Claude)' },
-      { value: 'ollama', label: 'Ollama (local)' },
-      { value: 'vllm', label: 'vLLM (local)' },
-      { value: 'lmstudio', label: 'LM Studio (local)' },
-      { value: 'deepseek', label: 'DeepSeek' },
-    ],
+    options: PROVIDER_PROFILES.map((p) => ({
+      value: p.name,
+      label: p.displayName,
+      ...(p.signupUrl !== undefined ? { hint: `key: ${p.signupUrl}` } : {}),
+    })),
   });
   bail(providerKey);
-  const preset = PRESETS[providerKey as string]!;
+  const profile = getProviderProfile(providerKey as string)!;
+
+  let customBaseUrl: string | undefined;
+  if (profile.baseUrl === undefined && profile.name === 'custom') {
+    const url = await text({
+      message: 'Endpoint base URL (OpenAI-compatible)',
+      validate: (v) => (/^https?:\/\//.test(v) ? undefined : 'http(s):// URL required'),
+    });
+    bail(url);
+    customBaseUrl = url as string;
+  }
 
   const model = await text({
     message: 'Model',
-    initialValue: preset.defaultModel,
+    initialValue: profile.defaultModel ?? '',
     validate: (v) => (v.length === 0 ? 'model is required' : undefined),
   });
   bail(model);
 
   let apiKeyRef: string | undefined;
-  if (preset.envVar) {
+  if (profile.envVar !== undefined || profile.name === 'custom') {
     const envVar = await text({
-      message: 'API key env var (stored as ${VAR} reference, never the key itself)',
-      initialValue: preset.envVar,
+      message: 'API key env var (stored as ${VAR} reference, never the key itself; empty = no key)',
+      initialValue: profile.envVar ?? '',
     });
     bail(envVar);
-    apiKeyRef = '${' + (envVar as string) + '}';
+    if ((envVar as string).length > 0) apiKeyRef = '${' + (envVar as string) + '}';
+  }
+
+  // ── Optional embedding endpoint (ADR 55: never required) ─────────────────
+  let embeddingSection: MemexConfig['embedding'];
+  if (profile.supportsEmbedding && profile.defaultEmbeddingModel !== undefined) {
+    embeddingSection = { provider: profile.name, model: profile.defaultEmbeddingModel };
+    log.info(`Embedding: ${profile.name}/${profile.defaultEmbeddingModel} (semantic memory index)`);
+  } else {
+    const wantEmbedding = await confirm({
+      message: `${profile.displayName} has no embeddings endpoint. Configure a separate one? (optional — skipping means lexical retrieval until one is added)`,
+    });
+    bail(wantEmbedding);
+    if (wantEmbedding === true) {
+      const embeddable = PROVIDER_PROFILES.filter(
+        (p) => p.supportsEmbedding && p.defaultEmbeddingModel !== undefined,
+      );
+      const embChoice = await select({
+        message: 'Embedding provider',
+        options: embeddable.map((p) => ({
+          value: p.name,
+          label: `${p.displayName} (${p.defaultEmbeddingModel})`,
+        })),
+      });
+      bail(embChoice);
+      const embProfile = getProviderProfile(embChoice as string)!;
+      embeddingSection = {
+        provider: embProfile.name,
+        model: embProfile.defaultEmbeddingModel!,
+        ...(embProfile.envVar !== undefined ? { apiKey: '${' + embProfile.envVar + '}' } : {}),
+      };
+    }
   }
 
   const portInput = await text({
     message: 'Gateway port',
-    initialValue: '3000',
+    initialValue: String(DEFAULT_GATEWAY_PORT),
     validate: (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? undefined : 'positive integer'),
   });
   bail(portInput);
@@ -163,13 +192,18 @@ export async function runOnboard(configPath: string = DEFAULT_CONFIG_PATH): Prom
     providers: [
       {
         name: providerKey as string,
-        type: preset.type,
+        type: profile.api === 'anthropic-messages' ? 'anthropic' : 'openai-compatible',
         model: model as string,
         priority: 1,
-        ...(preset.baseUrl !== undefined ? { baseUrl: preset.baseUrl } : {}),
+        ...(customBaseUrl !== undefined
+          ? { baseUrl: customBaseUrl }
+          : profile.baseUrl !== undefined
+            ? { baseUrl: profile.baseUrl }
+            : {}),
         ...(apiKeyRef !== undefined ? { apiKey: apiKeyRef } : {}),
       },
     ],
+    ...(embeddingSection !== undefined ? { embedding: embeddingSection } : {}),
     ...(telegramConfigured
       ? { channels: { telegram: { token: '${TELEGRAM_BOT_TOKEN}' } } }
       : {}),

@@ -672,3 +672,16 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
   absorbed by phases 9-16 (G1 traversal algebra stays the documented post-1.0
   candidate, no blocking evidence).
 - Gates: tsc clean, 561 tests green, next build 9/9, checksums verified.
+
+## ADR-56 实现（2026-06-12，开箱体验修复弧 1/5）
+
+- 新增 `shared/src/llm/provider-profiles.ts`（12 个 profile 含 custom）+ `from-config.ts`
+  （buildChatProvider / buildEmbeddingProvider / resolveEmbeddingEndpoint）+ `config/dotenv.ts`
+- spec 之外的决定：
+  - `resolveProfile` 对未知 name 回退 custom profile，老 config 不会 boot 失败
+  - embedding 推导**绝不**把 chat model 当 embedding model（vllm 无默认 embedding model 时返回 null 而非编造）
+  - `supportsEmbedding` 标志按保守原则只给有把握的端点（openai/ollama/gemini/vllm/lmstudio/custom）
+  - workers 的 embedding 构造暂未切到 nullable builder——等 ADR-55 的 null 处理一起落（避免中间态破窗）
+  - doctor 新增 embedding 检查（warn 语义）提前落在本批（探测派生本来就是 ADR-56 的派生纪律）
+- gateway/terminal/doctor/onboard 端口统一 DEFAULT_GATEWAY_PORT=4000
+- dev.mjs onboarding gate：config.json 缺失时 stdio-inherit 跑 onboard，失败不阻塞 env-only boot

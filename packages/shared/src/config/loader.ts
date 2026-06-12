@@ -28,6 +28,13 @@ import { z } from 'zod';
 /** Default path to the Memex config file. */
 export const DEFAULT_CONFIG_PATH = join(homedir(), '.memex', 'config.json');
 
+/**
+ * Single gateway port default (ADR 56 D-5). Consumed by gateway boot, terminal,
+ * doctor, onboarding, and dev.mjs — 4000 avoids the Next.js console default
+ * (3000). Override order: config gateway.port > PORT env > this constant.
+ */
+export const DEFAULT_GATEWAY_PORT = 4000;
+
 /** Root of all Memex state on this machine. */
 export function memexHome(): string {
   return join(homedir(), '.memex');
@@ -126,6 +133,20 @@ export const MemexConfigSchema = z.object({
     })
     .optional(),
   providers: z.array(ProviderEntrySchema).optional(),
+  /**
+   * Optional embedding endpoint (ADR 55/56). Embedding is NOT required —
+   * absent/unreachable means the semantic index runs in degraded mode
+   * (late-projection backfill + lexical retrieval), never blocking conversation.
+   * `provider` references a ProviderProfile name; explicit fields override it.
+   */
+  embedding: z
+    .object({
+      provider: z.string().optional(),
+      baseUrl: z.string().optional(),
+      model: z.string().optional(),
+      apiKey: z.string().optional(),
+    })
+    .optional(),
   channels: z.record(z.string(), ChannelEntrySchema).optional(),
   /** Phase 12 slot: inbound webhook HMAC secret (channel refuses to start without it). */
   webhook: z.object({ hmac_secret: z.string().optional() }).optional(),

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import { intro, outro, multiselect, spinner, log } from '@clack/prompts';
+import { loadDotenv } from '@graph/shared';
 import { connectClaudeCode } from './connect/claude-code.js';
 import { connectPi } from './connect/pi.js';
 import { runOnboard } from './onboard.js';
+
+// ADR 56 D-5: the CLI sees the same repo-root .env as dev.mjs (never overrides
+// already-set process env — priority: env > .env > config.json).
+loadDotenv();
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`memex <command>

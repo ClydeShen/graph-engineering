@@ -16,7 +16,7 @@
 import { randomUUID } from 'crypto';
 import { registerWorker, TriggerAction } from 'iii-sdk';
 import { Pool } from 'pg';
-import { OccEventWriter, createLLMProvider, OpenAICompatibleProvider, type LLMApi } from '@graph/shared';
+import { OccEventWriter, OpenAICompatibleProvider, loadMemexConfig, buildChatProvider } from '@graph/shared';
 import { PoolTrailReader } from './base/trail-reader.js';
 import { PoolMemoryRepository } from './base/memory-repository.js';
 import { bootstrapAgentRegistry } from './boot/bootstrap.js';
@@ -56,13 +56,11 @@ void bootstrapAgentRegistry(pool).catch(() => {
   // Best-effort: agent_registry bootstrap failure must not crash the worker process (D-2)
 });
 
-const llmProvider = createLLMProvider({
-  api: (process.env['LLM_API'] ?? 'openai-completions') as LLMApi,
-  model: process.env['LLM_MODEL'] ?? 'llama3',
-  baseUrl: process.env['LLM_BASE_URL'],
-  apiKey: process.env['LLM_API_KEY'] ?? '',
-  maxTokens: process.env['LLM_MAX_TOKENS'] ? Number(process.env['LLM_MAX_TOKENS']) : undefined,
-});
+// ADR 56: ~/.memex/config.json providers[] is the main path (fallback chain
+// included); scattered LLM_* env vars remain the legacy fallback inside the
+// builder when no config file exists.
+const memexConfig = loadMemexConfig();
+const llmProvider = buildChatProvider(memexConfig);
 
 // Anthropic has no embeddings endpoint — embedding always uses openai-completions.
 const embeddingProvider = new OpenAICompatibleProvider({

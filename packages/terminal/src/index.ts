@@ -14,7 +14,7 @@
  */
 
 import { createInterface } from 'node:readline';
-import { loadMemexConfig } from '@graph/shared';
+import { loadMemexConfig, DEFAULT_GATEWAY_PORT } from '@graph/shared';
 import { MemexTerminalClient } from './client.js';
 
 async function main(): Promise<void> {
@@ -22,7 +22,7 @@ async function main(): Promise<void> {
   const gatewayUrl =
     process.env['MEMEX_GATEWAY_URL'] ??
     config?.shell?.gateway_url ??
-    `http://127.0.0.1:${config?.gateway?.port ?? 3000}`;
+    `http://127.0.0.1:${config?.gateway?.port ?? DEFAULT_GATEWAY_PORT}`;
   const token = process.env['MEMEX_GATEWAY_TOKEN'] ?? config?.gateway?.token;
 
   const client = new MemexTerminalClient({ gatewayUrl, ...(token !== undefined ? { token } : {}) });

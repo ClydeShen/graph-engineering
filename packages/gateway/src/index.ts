@@ -33,7 +33,7 @@ import { buildDecisionsRoute } from './routes/decisions.js';
 import { buildWsRoute, buildWsRouteNode } from './routes/ws-protocol.js';
 import { buildDashboardRoute } from './routes/dashboard.js';
 import { realtimeAuth } from './middleware/realtime-auth.js';
-import { OpenAICompatibleProvider, loadMemexConfig } from '@graph/shared';
+import { OpenAICompatibleProvider, loadMemexConfig, DEFAULT_GATEWAY_PORT } from '@graph/shared';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
 import {
@@ -145,7 +145,7 @@ void warmPairingCache(pool).catch(() => {
 
 const app = buildApp(pool, ddlPool, wMax);
 
-const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? 3000);
+const gatewayPort = Number(process.env.PORT ?? memexConfig?.gateway?.port ?? DEFAULT_GATEWAY_PORT);
 // ADR-44 D-2: bind localhost by default — exposing the gateway is an explicit choice.
 const gatewayHost = process.env.MEMEX_BIND ?? '127.0.0.1';
 

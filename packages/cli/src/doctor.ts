@@ -12,7 +12,15 @@
  * INCLUDED in linkage verification — the chain itself must remain intact.
  */
 
-import { ZERO_HASH, loadMemexConfig, activeProfile, type MemexConfig } from '@graph/shared';
+import {
+  ZERO_HASH,
+  DEFAULT_GATEWAY_PORT,
+  loadMemexConfig,
+  activeProfile,
+  resolveProfile,
+  resolveEmbeddingEndpoint,
+  type MemexConfig,
+} from '@graph/shared';
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail' | 'skip';
 
@@ -143,10 +151,13 @@ async function checkProviders(p: DoctorProbes): Promise<DoctorResult> {
   const parts: string[] = [];
   let failed = 0;
   for (const prov of providers) {
-    if (prov.baseUrl) {
+    // ADR 56 D-2: probe URL derives from the ProviderProfile registry, so the
+    // doctor never disagrees with the runtime about where a provider lives.
+    const probeUrl = prov.baseUrl ?? resolveProfile(prov).baseUrl;
+    if (probeUrl) {
       try {
         // Any HTTP response (even 401/404) proves the endpoint is reachable.
-        await p.fetchFn(prov.baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+        await p.fetchFn(probeUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
         parts.push(`${prov.name}: reachable`);
       } catch {
         parts.push(`${prov.name}: UNREACHABLE`);
@@ -164,10 +175,41 @@ async function checkProviders(p: DoctorProbes): Promise<DoctorResult> {
   };
 }
 
+/**
+ * Embedding endpoint probe (ADR 55 D-4). Unreachable/unconfigured is a WARN,
+ * never a FAIL — the semantic index degrades (lexical retrieval + backfill
+ * queue); conversation is not blocked.
+ */
+async function checkEmbedding(p: DoctorProbes): Promise<DoctorResult> {
+  const endpoint = resolveEmbeddingEndpoint(p.loadConfig(), p.env);
+  if (endpoint === null) {
+    return {
+      name: 'embedding',
+      status: 'warn',
+      detail: 'no embedding endpoint configured — semantic index degraded (lexical retrieval)',
+    };
+  }
+  try {
+    await p.fetchFn(endpoint.baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+    return {
+      name: 'embedding',
+      status: 'ok',
+      detail: `${endpoint.baseUrl} (${endpoint.model}, ${endpoint.source})`,
+    };
+  } catch {
+    return {
+      name: 'embedding',
+      status: 'warn',
+      detail: `${endpoint.baseUrl} unreachable — degraded mode active; index backfills on recovery`,
+    };
+  }
+}
+
 async function checkGateway(p: DoctorProbes): Promise<DoctorResult> {
   const config = p.loadConfig();
   const url =
-    config?.shell?.gateway_url ?? `http://127.0.0.1:${config?.gateway?.port ?? p.env['PORT'] ?? 3000}`;
+    config?.shell?.gateway_url ??
+    `http://127.0.0.1:${config?.gateway?.port ?? p.env['PORT'] ?? DEFAULT_GATEWAY_PORT}`;
   try {
     const res = await p.fetchFn(`${url}/v1/sys/health`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return { name: 'gateway', status: 'warn', detail: `${url} responded ${res.status}` };
@@ -225,6 +267,7 @@ export async function runDoctor(p: DoctorProbes): Promise<DoctorResult[]> {
     await checkMigrations(p),
     await checkHashChain(p),
     await checkProviders(p),
+    await checkEmbedding(p),
     await checkGateway(p),
     checkChannels(p),
     checkWsl({

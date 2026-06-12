@@ -8,9 +8,10 @@
  * starts pulse-fetch, otherwise pulse-replay fires before handlers exist.
  */
 
-import { spawn, execSync } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 
 // ── Load .env ─────────────────────────────────────────────────────────────────
 const appEnv = { ...process.env };
@@ -137,7 +138,29 @@ ${C.bold}${C.cyan}  Graph-Native Agent Runtime${C.reset}  ${C.dim}dev${C.reset}
 
 const procs = [];
 
+// ── Onboarding gate (ADR 56 D-5) ─────────────────────────────────────────────
+// First run with no ~/.memex/config.json: run the interactive onboarding TUI
+// before booting services, so the stack starts with a real provider config.
+function onboardingGate() {
+  const profile = process.env.MEMEX_PROFILE;
+  const configPath = profile && /^[A-Za-z0-9_-]+$/.test(profile)
+    ? join(homedir(), '.memex', 'profiles', profile, 'config.json')
+    : join(homedir(), '.memex', 'config.json');
+  if (existsSync(configPath)) return;
+  console.log(`${C.yellow}  No ${configPath} found — running onboarding first.${C.reset}\n`);
+  const r = spawnSync(
+    process.execPath,
+    ['--import', 'tsx/esm', 'packages/cli/src/index.ts', 'onboard'],
+    { stdio: 'inherit', env: appEnv, shell: false },
+  );
+  if (r.status !== 0 || !existsSync(configPath)) {
+    console.log(`${C.yellow}  Onboarding incomplete — booting from env vars only (.env).${C.reset}\n`);
+  }
+}
+
 async function boot() {
+  onboardingGate();
+
   // 0. Free ports from any leftover processes
   freePort(iiiPort);
   freePort(gatewayPort);
@@ -171,11 +194,15 @@ async function boot() {
     env: appEnv,
   }));
 
-  // 4. Console (Next.js) — starts alongside gateway
+  // 4. Console (Next.js) — starts alongside gateway.
+  // PORT is scrubbed from the child env: Next.js honours PORT, and inheriting
+  // the gateway's port made the console bind 4000 on another interface (N1).
+  const consoleEnv = { ...appEnv, NEXT_PUBLIC_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}` };
+  delete consoleEnv.PORT;
   procs.push(start({
     tag: 'console', color: C.cyan,
     cmd: 'npm', args: ['run', 'dev'],
-    env: { ...appEnv, NEXT_PUBLIC_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}` },
+    env: consoleEnv,
     cwd: join(process.cwd(), 'packages', 'console'),
   }));
 }

@@ -46,7 +46,9 @@ describe('memex doctor (Phase 15 G4)', () => {
     expect(byName(results, 'migrations').status).toBe('skip');
     expect(byName(results, 'hash-chain').status).toBe('skip');
     expect(byName(results, 'node-version').status).toBe('ok');
-    expect(results).toHaveLength(9); // a failure never aborts the run (8 + wsl, Phase 18)
+    expect(results).toHaveLength(10); // a failure never aborts the run (9 + embedding, ADR 55)
+    // ADR 55 D-4: missing embedding is a warn (degraded), never a fail
+    expect(byName(results, 'embedding').status).toBe('warn');
   });
 
   it('fails node-version below 22', async () => {

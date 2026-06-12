@@ -1,6 +1,6 @@
 # ADR 56｜ProviderProfile 声明表与配置单权威
 
-status: proposed（提纲——结构核心已在 2026-06-12 fuller 会话拍板，实现细节待 plan-phase 展开）
+status: accepted（2026-06-12 实现落地；提纲源自同日 fuller 会话拍板）
 日期: 2026-06-12
 
 ---

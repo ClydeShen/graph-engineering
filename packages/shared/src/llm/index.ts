@@ -5,3 +5,5 @@ export * from './anthropic.provider.js';
 export * from './factory.js';
 export * from './classify-error.js';
 export * from './fallback.provider.js';
+export * from './provider-profiles.js';
+export * from './from-config.js';
