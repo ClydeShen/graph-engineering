@@ -105,7 +105,7 @@ export class PoolMemoryRepository implements MemoryRepository {
          VALUES ($1, $2, $3::vector, $1, NOW(), NOW())
          RETURNING id
        ),
-       similar AS (
+       nearby AS (
          SELECT sm.id, sm.content
          FROM semantic_memory sm
          WHERE sm.superseded_by IS NULL
@@ -115,7 +115,7 @@ export class PoolMemoryRepository implements MemoryRepository {
          LIMIT 1
        )
        SELECT i.id AS inserted_id, s.id AS similar_id, s.content AS similar_content
-       FROM inserted i LEFT JOIN similar s ON true`,
+       FROM inserted i LEFT JOIN nearby s ON true`,
       [scopeId, content, embeddingLiteral],
     );
     return {

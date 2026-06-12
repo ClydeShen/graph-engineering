@@ -104,8 +104,8 @@ function freePort(port) {
   }
 }
 
-function start({ tag, color, cmd, args, env }) {
-  const proc = spawn(cmd, args, { env, shell: true, cwd: process.cwd() });
+function start({ tag, color, cmd, args, env, cwd }) {
+  const proc = spawn(cmd, args, { env, shell: true, cwd: cwd ?? process.cwd() });
   attachLineBuffer(tag, color, proc.stdout);
   attachLineBuffer(tag, color, proc.stderr);
   proc.on('exit', (code) => {
@@ -126,6 +126,7 @@ ${C.bold}${C.cyan}  Graph-Native Agent Runtime${C.reset}  ${C.dim}dev${C.reset}
   ${C.dim}[ctrl   ]${C.reset} ${C.green}control plane${C.reset}   DDL · Pulse-Fetch · Watchdog
   ${C.dim}[workers]${C.reset} ${C.yellow}workers${C.reset}         Frontier · PatternDiscovery · Context
   ${C.dim}[gateway]${C.reset} ${C.magenta}gateway${C.reset}         http://localhost:${gatewayPort}
+  ${C.dim}[console]${C.reset} ${C.cyan}console${C.reset}         http://localhost:3000
   ${C.dim}────────────────────────────────────────${C.reset}
 `);
 
@@ -152,7 +153,7 @@ async function boot() {
   await wait(2000);
   procs.push(start({
     tag: 'workers', color: C.yellow,
-    cmd: 'node', args: ['--import', 'tsx/esm', 'packages/workers/src/index.ts'],
+    cmd: process.execPath, args: ['--import', 'tsx/esm', 'packages/workers/src/index.ts'],
     env: appEnv,
   }));
 
@@ -160,14 +161,22 @@ async function boot() {
   await wait(3000);
   procs.push(start({
     tag: 'ctrl   ', color: C.green,
-    cmd: 'node', args: ['--import', 'tsx/esm', 'packages/control-plane/src/index.ts'],
+    cmd: process.execPath, args: ['--import', 'tsx/esm', 'packages/control-plane/src/index.ts'],
     env: appEnv,
   }));
   procs.push(start({
     tag: 'gateway', color: C.magenta,
     // TD-M (ADR-57): Node 22 single runtime — gateway no longer needs Bun.
-    cmd: 'node', args: ['--import', 'tsx/esm', 'packages/gateway/src/index.ts'],
+    cmd: process.execPath, args: ['--import', 'tsx/esm', 'packages/gateway/src/index.ts'],
     env: appEnv,
+  }));
+
+  // 4. Console (Next.js) — starts alongside gateway
+  procs.push(start({
+    tag: 'console', color: C.cyan,
+    cmd: 'npm', args: ['run', 'dev'],
+    env: { ...appEnv, NEXT_PUBLIC_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}` },
+    cwd: join(process.cwd(), 'packages', 'console'),
   }));
 }
 

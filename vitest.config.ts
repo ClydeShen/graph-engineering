@@ -1,5 +1,20 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { readFileSync } from 'fs';
+
+function loadDotenv(): Record<string, string> {
+  try {
+    return Object.fromEntries(
+      readFileSync(path.resolve(__dirname, '.env'), 'utf8')
+        .split('\n')
+        .filter(l => l.trim() && !l.startsWith('#'))
+        .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+        .filter(([k]) => k),
+    );
+  } catch {
+    return {};
+  }
+}
 
 export default defineConfig({
   resolve: {
@@ -17,5 +32,6 @@ export default defineConfig({
   },
   test: {
     include: ['packages/**/*.test.ts', 'src/**/*.test.ts', 'tests/**/*.test.ts'],
+    env: loadDotenv(),
   },
 });

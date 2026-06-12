@@ -85,6 +85,10 @@ describe('MCP route — tools/list and spawn→claim→complete sequence (GATE4-
         'wait_all_tasks',
         'register_agent',
         'query_context',
+        'ask_user',
+        'ask_user_status',
+        'capability_install',
+        'capability_search',
       ];
 
       expect(toolNames.sort()).toEqual(expectedTools.sort());

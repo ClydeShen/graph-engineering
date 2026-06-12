@@ -74,6 +74,10 @@ describe('GATE4-4: MCP end-to-end round trip', () => {
     const toolNames = (body.result?.tools ?? []).map((t) => t.name).sort();
 
     const expected = [
+      'ask_user',
+      'ask_user_status',
+      'capability_install',
+      'capability_search',
       'claim_next_task',
       'complete_task',
       'get_task_status',

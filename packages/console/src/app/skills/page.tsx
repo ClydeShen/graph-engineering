@@ -23,7 +23,8 @@ export default function SkillsPage() {
       try {
         const res = await fetch('/v1/skills', { cache: 'no-store' });
         if (!res.ok) throw new Error(`/v1/skills → ${res.status}`);
-        const list = (await res.json()) as SkillRow[];
+        const data = (await res.json()) as { skills: SkillRow[] } | SkillRow[];
+        const list = Array.isArray(data) ? data : (data as { skills: SkillRow[] }).skills ?? [];
         setSkills(list);
         setStatus(list.length === 0 ? 'no exported skills' : null);
       } catch (err) {
