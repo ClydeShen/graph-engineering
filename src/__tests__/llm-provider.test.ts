@@ -54,7 +54,11 @@ describe('OpenAICompatibleProvider', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url] = mockFetch.mock.calls[0] as [string, ...unknown[]];
     expect(url).toBe(`${BASE_URL}/v1/embeddings`);
-    expect(result.vector).toEqual([0.1, 0.2, 0.3]);
+    // Vectors are zero-padded to the vector(1536) schema width (BGE-M3 1024 /
+    // Gemini 768 would fail the insert otherwise); leading values are preserved.
+    expect(result.vector).toHaveLength(1536);
+    expect(result.vector.slice(0, 3)).toEqual([0.1, 0.2, 0.3]);
+    expect(result.vector.slice(3).every((v) => v === 0)).toBe(true);
     expect(result.countedAgainstBudget).toBe(false);
   });
 
