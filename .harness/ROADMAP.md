@@ -699,6 +699,7 @@ Plans:
    - ADR-43 约束：artifact 随 `erase(scope)` 级联删除（provenance 列同款模式）
 
 2. **Console 完整版**（UI-SPEC.md 设计基线，Next.js + G6）
+   > ⚠️ **此交付物的 Console-UI 部分已被取代（2026-06-14）**：设计权威迁移到 `docs/CONSOLE-REDESIGN.md`，引擎由 G6 翻案为 react-force-graph-2d，UI-SPEC.md 已归档。执行弧见下方 **21-console-redesign**。本阶段的 artifact 写图约定（ADR-52，交付物 #1/#3）仍有效、已落地。
    - 图可视化：Trail Mesh 拓扑、节点详情（Entity/HyperEdge/Lesson inspect）——Phase 6 T6 → Phase 11 → 本阶段的最终落点
    - Trail Discovery 结果展示：Procedural Memory 骨架模板可视化（Phase 10 产出）
    - **Artifact 预览**：markdown/code/HTML 渲染（交付物 #1 的消费端）；research 结果即 markdown artifact
@@ -760,6 +761,49 @@ Plans:
 **与现有 ADR 的关系：** 新 ADR 待写：自主能力获取审批协议（状态机、超时、审批范围 once/session/always 复用）、凭据保险库 schema、browser tool 隔离边界。复用：ADR-47（信任分级——agent 发起的工具调用不绕过 `isToolAllowed`；**能力图统计与背书不构成授权**，ADR-51）、ADR-43（凭据 erase）、ADR-51（能力图——本阶段是其消费段，browser facade 注册时 CLI 子命令投影统计升格为 facade Tool 节点统计，D-3）、Phase 14 审批流与执行后端抽象。
 
 **前置条件：** Phase 17 完成（Calendar/Gmail MCP + OAuth——journey 的日历环节）；Phase 18 完成（活体部署环境——本阶段全部能力需活体验证）；Phase 19 非硬前置（截图 artifact 展示降级为日志即可）。
+
+---
+
+## 21-console-redesign 📋 待执行（设计定稿 2026-06-14，权威 = `docs/CONSOLE-REDESIGN.md`）
+
+**目标：** 把 Console 从"图本体论的忠实镜像"重做成"对人类友好的、丰富的'正在发生什么'投影"。英雄页 Now = 可缩放宇宙/森林（react-force-graph-2d），实时随系统啃任务而生长。
+
+**背景：** Phase 19 的 Console-UI 设计（Next.js + G6 / UI-SPEC.md）经 `/fuller` 重审被取代——8 个导航项几乎 1:1 等于引擎黑话（Topology/Kernel/Artifacts/Crystallized lessons），是给"已懂本体论的人"造的观测台。真实用户的心智是"我派的活在干吗？进展？卡住？干完？学到啥？"。设计已全部收口于 `docs/CONSOLE-REDESIGN.md`（§1–11 + 附录 A/B），本阶段是其执行弧。**不变量**：图 = SSOT、append-only、console 只读投影（除显式写面）、翻译只在表现层。
+
+### 核心交付物
+
+1. **后端只读端点**（纯 SELECT，可独立测，最便宜先做）：`GET /v1/forest`（根 scopes 按 channel 分组）、`GET /v1/scopes/:id/lineage`（scope_lineage 子树）、`GET /v1/emergence`（`procedural_memory` 列表）、`GET /v1/artifacts`（全局交付物列表，Workspace 用）
+2. **引擎切换**：移除 `@antv/g6`，`TopologyCanvas` → `ForestCanvas`（react-force-graph-2d + d3-force，Next.js `dynamic ssr:false`）。节点 2.5D 美术经 `nodeCanvasObject`；素材候选 AI Town / Kenney CC0 小人精灵（CONSOLE-REDESIGN §9，结构不变）
+3. **Now 分层 + 语义缩放**：L2 单树生长 → L1 星系聚类（channel）→ L0 宇宙总览（CONSOLE-REDESIGN §6）
+4. **实时接线**：`EventSource('/v1/stream')` 驱动动画 + REST 对账（SSE 脉冲 + REST 兜底，§6.3）；rAF 仅在缩进的 L2/L3 树，reduced-motion 在 JS 显式停 canvas 循环（附录 B）
+5. **IA / 词汇**：导航改人话名、删左栏 Scopes 列表、**删 `/alerts` 页**（Notification 奥卡姆删除）、**删 `/kernel` 页**（infra 遥测奥卡姆删除）；event_type→人话标签锁定（§9）
+6. **细节页**：Emergence feed（markdown + confidence 人话徽标，解除 `/skills` 误标混淆）、Plugins 页（外部 skill 增删改 + onboarding 接线）、Overview 富人话仪表盘（v1 现成 4 维纯前端 → v2 富维度按端点跟上）
+7. **零风险地基**（可最先摘）：附录 B 动效/tabular token + reduced-motion canvas 守则
+
+**与现有 ADR 的关系：** 取代 Phase 19 的 Console-UI 部分与 `docs/UI-SPEC.md`（已归档 `docs/archive/UI-SPEC-v1-phase3.md`）；新 ADR 可选（引擎切换 + IA 重构）。Workspace 页阻塞于 **22-workspace-project**。附录 A（可写 LLM 设置）是 console 唯一已知写例外，设计就绪未实现。
+
+**前置条件：** 无硬前置（端点是纯 SELECT，over 既有表）；活体数据建议 Phase 18 部署在前。
+
+---
+
+## 22-workspace-project 📋 待执行（设计定稿 2026-06-14，`docs/CONSOLE-REDESIGN.md` §11）
+
+**目标：** 引入 project/workspace 分层——99% 用户同时跑多 agent / 多 channel / 多项目，交付物需按项目归档。**引擎级工作**（非纯 UI），是 21 的 Workspace 页的硬前置。
+
+**背景：** 当前数据模型无 project/workspace 层，scope 是平的，artifact 平铺存 `<profile>/artifacts/<hash>`。但 project **不需要新一等实体**——它是图里记录的"工作文件夹"维度（observable fact），守住 SSOT 不变量（#1/#2/#4）。这也正是 Memex 哲学（discovered folder-clusters, not designed entities）。
+
+### 核心交付物
+
+1. **Project = scope 上的"工作文件夹/cwd"维度**：scope 带可观测字段（intent 元数据或新增列）；artifact 继承；Now 按它命名/上色分簇（"距离"即分簇）；Workspace 页按它分组交付物
+2. **per-channel LLM 配置**（当前缺失功能 = "agent 身份"）：每 channel 配各自 LLM → 多 agent × 多 project。与附录 A 全局单槽的关系待定（§9 B 类开放项）
+3. **onboarding 文件夹根设计**：每 channel/agent 的 workspace 文件夹结构
+4. **Bad-path 懒墓碑**（复用现成机制，零新增基础设施）：物理删 project 文件夹 / 硬删 agent → **图一行不改**（#2）；"没了"访问时检测、投影显归档/不可开；故意删除走一等 ADR-43 `erase`（墓碑事件）；意外删除 = 孤儿元数据 → 404/410。同名重建歧义：path+创建时刻 vs 同名即复用（待定）
+
+**与现有 ADR 的关系：** 复用 ADR-43（erase/crypto-shredding、artifact 404/410 现成处理）；新 ADR 待写：project 维度 schema + per-channel LLM 配置。
+
+**前置条件：** 无硬前置；解锁 21 的 Workspace 页。
+
+**待讨论（§9 B 类，未定）：** per-channel LLM 配置 schema/UI、Plugins 页设计、同名重建身份、onboarding 文件夹结构细节。
 
 ---
 

@@ -156,6 +156,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 - `GET /v1/scopes/:id/lineage` — 单任务的 `scope_lineage` 子树（L2）
   （现有 `/v1/scopes/:id/topology` 是 entity 级，不够用）
 - `GET /v1/emergence` — `procedural_memory` 列表（content 散文 + confidence + reinforcement_count + last_used_at），按 confidence/last_used 排序。现有 `/v1/memory/search` 是语义搜索、非 feed，不够用。**排在 Now 关键路径之后**（§10）
+- `GET /v1/artifacts` — 全局交付物列表（跨 scope/project，§11 Workspace 页用）。现有只有 `GET /v1/scopes/:id/artifacts`（单 scope），无全局列表。**排在 §11 引擎工作之后**
 
 **待决细节（不动结构地基）：**
 - Now 节点美术规格（每层 LOD 画什么、状态色板、生长动画曲线）。**结构不变**（森林/宇宙，react-force-graph-2d），此处仅是节点美术选型，推迟到 §10 步骤 2 定。**素材候选**（参考 AI Town / Generative Agents「Smallville」的"小人在干活/思考"视觉）：节点可经 `nodeCanvasObject` 渲染成俯视小人精灵（active 思考/敲击、idle、suspended 瘫倒）。素材：**Kenney Toon Characters / Tiny Town（CC0，免署名免付费——分发首选）**；AI Town 同款 LimeZu Modern Interiors（CC-BY，完整版付费）为备选。注：我们无持久 agent，小人映射到"活跃 scope/任务"（节点）或"channel 来源"（星系），非 RimWorld 式长期殖民者
