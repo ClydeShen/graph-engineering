@@ -420,8 +420,11 @@
 .mx-prose h1 { font-size: var(--text-xl); }
 .mx-prose h2 { font-size: var(--text-lg); }
 .mx-prose h3 { font-size: var(--text-md); }
-.mx-prose ul, .mx-prose ol { margin: 0.55em 0; padding-left: 1.4em; }
+/* Restore list markers — Tailwind preflight resets list-style to none. */
+.mx-prose ul { margin: 0.55em 0; padding-left: 1.4em; list-style: disc; }
+.mx-prose ol { margin: 0.55em 0; padding-left: 1.4em; list-style: decimal; }
 .mx-prose li { margin: 0.2em 0; }
+.mx-prose li::marker { color: var(--brass-500); }
 .mx-prose a { color: var(--glacier-400); text-decoration: underline; text-underline-offset: 2px; }
 .mx-prose strong { color: var(--text-heading); }
 .mx-prose blockquote {
