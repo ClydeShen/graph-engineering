@@ -115,6 +115,8 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 - **语义缩放 LOD**：`globalScale` 直接驱动——缩远画剪影、缩近画全细节。
 - **活气**：`linkDirectionalParticles` + `linkDirectionalParticleSpeed`，因果在树枝上流动。
 
+> 游戏化「手感」规格（动效 token、因果即动效、缩放惯性、LOD 美术、性能红线、reduced-motion canvas 守则）见**附录 B**。
+
 ---
 
 ## 7. 引擎决策记录（含翻案）
@@ -184,3 +186,90 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | 架构形状 | **单槽位 + 独立 embedding 轴**：`{ chat: {...}, embedding: {...} }`，不引入 hermes 式 primary/secondary 多档位 | Memex 是异步图执行运行时，无实时延迟驱动的快/慢模型分层需求；chat 与 embedding 在 ADR 22 中已是两个独立接口，分开配置同时修正"同一 `model` 字段同时服务两个命名空间"的缺陷 |
 | 跨进程一致性 | **gateway 进程内即时生效**（mutate 自身 `gatewayLlmProvider`）；**workers 下次重启后生效** | gateway 与 workers 各持独立 provider 实例；"重启后生效"顺着"凭证只在构造时读取一次"的不可变保证自然延伸，无需新建热重载基础设施 |
 | 软重启 | **明确不做，独立问题留存** | 会重新打开已被禁用的 `iii-exec` 块，且需把范围从"代码变更触发重启"扩大到"配置变更触发优雅重载"——独立的基础设施项目 |
+
+---
+
+## 附录 B — 游戏化 UX & 动效规格（gamer 视角）
+
+> 来源：2026-06-13 `/ui-ux-pro-max` 评审，受众设定为「挑剔 + 不懂技术 + 爱玩游戏」的操作者。**桌面 web 适配**：丢弃移动端专属规则（44pt 触控 / 安全区 / 底部导航），保留无障碍对比、动效语义、视觉层级、空状态、加载骨架等通用项。本附录**扩展 §6，不推翻**；建立在既有 observatory token 体系之上（不换调色板）。
+>
+> ⚠️ **未纳入（判为不现实，留待再讨论）**：Notification 的「呼吸信标」与 Emergence 的「成就解锁流」两个具体游戏化框法**未采纳**，不作为设计决定。Notification / Emergence 的形态仍是 §9 的开放待决项，需另开讨论后再定。
+
+### B.1 判断重心（trim tab）
+
+这类用户的判断 90% 压在 **Now 页的「手感」**——流畅度 + juice（视觉回馈密度）+ 一眼看懂的状态。IA 与词汇（§4/§5）是入场券，手感才是成败手。
+
+### B.2 设计系统 delta（建立在 observatory 之上）
+
+调色板不换。游戏感来自**动效语言 + 状态语义 + 美术纵深**。
+
+**状态色 → HUD 语义（复用现有 token；状态绝不只靠颜色，叠加形状 + 脉动节奏 —— 规则 `color-not-only`）**
+
+| 任务状态 | 现 token | HUD 含义 | 形状/节奏编码 |
+|---|---|---|---|
+| active/生长中 | `--glacier-500` | "在动脑" | 脉动光环 + 实心圆 |
+| converged/健康 | `--moss-500` | "干得好" | 稳定光晕 + 对勾微章 |
+| suspended/卡住 | `--rust-500` | "需要你" | 显著脉冲 + 感叹环（**具体交互形态待 Notification 讨论**）|
+| closed/完成 | `--ink-400` | "归档" | 暗淡 + 无脉动 |
+
+**需补的 token（零风险地基，无页面改动）**
+
+- **动效 token**（现 `materials.css` 仅有 `prefers-reduced-motion` 兜底，无节奏令牌；游戏 juice 须先统一节奏 —— 规则 `motion-consistency`）：
+  - `--dur-micro: 160ms` / `--dur-base: 240ms` / `--dur-enter: 320ms` / `--dur-exit: 200ms`（出场 ≈ 入场 × 0.65 —— 规则 `exit-faster-than-enter`）
+  - `--ease-out: cubic-bezier(.16,1,.3,1)`（入场）/ `--ease-in: cubic-bezier(.5,0,.75,0)`（出场）
+  - spring 曲线用于节点冒出（spring/physics 优先于线性 —— 规则 `spring-physics`）
+- **tabular figures**（HUD 计数/计时跳动防抖 —— 规则 `number-tabular`）：`font-variant-numeric: tabular-nums` 的数据字型变体。
+
+### B.3 Now 宇宙 juice 规格（补 §6）
+
+**① 因果即动效（每个动画 = 一个真实图事件，禁纯装饰 —— 规则 `motion-meaning`）**
+
+| 图事件 | 视觉 juice |
+|---|---|
+| `task_spawned` | 父节点弹出子节点：spring scale 0→1 + 根处粒子迸发 |
+| 边建立 | `linkDirectionalParticles` 沿枝流动（§6.5 已定）|
+| `memory_updated` | 节点莫斯绿一闪（crossfade 200ms）|
+| `scope_closed` | 收束脉冲 → 节点沉降变暗 |
+| `suspended` | 切换到显著脉冲状态（**视觉细节随 Notification 讨论定**）|
+
+**② 缩放手感（像宇宙模拟游戏，非阶跃切页）**
+
+- 滚轮带惯性 + 阻尼；语义 LOD 由 `globalScale` 驱动（§6.5）
+- 钻入用共享元素过渡（规则 `shared-element-transition`）：点星系 → 该簇放大充满视口，不闪白切页
+- 非聚焦层景深虚化 + 视差星空（§6.5 已列）
+
+**③ 节点 LOD 美术（落实 §9「Now 节点美术规格」待决项）**
+
+- L0 星系：发光圆盘，大小 = 活跃度，缓慢自转微光
+- L1 任务簇：剪影树冠 + 顶部状态色描边
+- L2 节点：等距圆角卡片 + 投影（2.5D），人话标签
+- 悬停：scale 1.03 + 升起阴影（规则 `scale-feedback`）；**点击才是主交互，不可只靠 hover**（规则 `hover-vs-tap` 桌面适配）
+
+**④ 性能红线（CRITICAL —— 规则组 §3 + §6.4）**
+
+- rAF 持续循环**只在 L2/L3 单树**（§6.4 已定）；L0/L1 仅事件触发微光
+- 每帧 < 16ms（规则 `main-thread-budget`）；节点 > 50 降级粒子
+- **`prefers-reduced-motion`：宇宙降为静态布局 + 状态色 + 离散刷新。** 注意 canvas 的 rAF 循环**不受 CSS 媒体查询管**，必须在 JS 里 `matchMedia('(prefers-reduced-motion: reduce)')` 显式停循环（规则 `reduced-motion` / `animation-optional`）——**最易漏的无障碍坑**。
+
+### B.4 跨页游戏化升级（已采纳部分）
+
+| 页 | 升级 | 状态 |
+|---|---|---|
+| **Overview（首屏）** | 改"指挥中心"：今天派了几个活 / 在跑 / 等你 / 系统学到几条；空数据 = 邀请卡「派个活儿，看它长起来」+ 种子演示（规则 `empty-states` / `empty-data-state`）| 采纳 |
+| **History** | 每条带状态色 + 一句话结果；点开可在 Now 重播那棵树的生长 | 采纳 |
+| **加载** | 所有 > 300ms 用骨架/微光，不用空轴或转圈（规则 `progressive-loading` / `loading-chart`）| 采纳 |
+| **Notification** | 形态待讨论（§9 开放项），**不预设信标方案** | 待讨论 |
+| **Emergence** | 翻译形态待讨论（§9 开放项），**不预设解锁流方案** | 待讨论 |
+
+### B.5 无障碍守门（CRITICAL，先于美观）
+
+1. **reduced-motion**：canvas rAF 循环须 JS 显式关（CSS 兜底管不到，见 B.3④）。
+2. **对比**：desaturated 调色板里 `--moss-500`/`--glacier-500` 直接作文字色可能 < 4.5:1；HUD 文字用 `--text-primary`，颜色只做状态点（沿用 token 注释里标好的 `*-solid` WCAG 变体）。
+3. **不靠颜色**：状态 = 色 + 形 + 脉动节奏三重编码（B.2）。
+
+### B.6 落地：作为 §10 各步的附加验收（不另开弧）
+
+- **§10 步骤 1 前置 / 现在可做（零风险）**：补 B.2 动效 + tabular token；本附录即设计固化。
+- **§10 步骤 2（引擎切换）**：节点 LOD 美术 + hover scale + spring 冒出。
+- **§10 步骤 3–4（分层 + 实时）**：B.3① 因果动效表 + 缩放惯性 + 共享元素过渡 + 性能降级 + reduced-motion canvas 守则。
+- **§10 步骤 6（细节页）**：Overview 指挥中心、空状态、加载骨架；Notification / Emergence **待各自讨论后再排**。
