@@ -10,39 +10,39 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { api, type HealthResponse, type ScopeSummary } from '@/lib/api';
+import { api, type HealthResponse } from '@/lib/api';
 import { Logo } from '@/components/Logo';
-import { Badge, Icon, IconButton, Input, StatusDot, type IconName } from '@/components/ds';
+import { Badge, Icon, IconButton, StatusDot, type IconName } from '@/components/ds';
 
+// Human-legible IA (CONSOLE-REDESIGN §5). Engine jargon (Topology/Kernel/Alerts/
+// Crystallized-lessons) is gone: Now = the living universe, Workspace = what was
+// made, Emergence = what was learned, Plugins = installable skills. Kernel +
+// Alerts pages are removed (Occam — §5 note).
 const NAV: Array<{ href: string; label: string; icon: IconName }> = [
+  { href: '/', label: 'Overview', icon: 'activity' },
+  { href: '/now', label: 'Now', icon: 'git-branch' },
   { href: '/chat', label: 'Chat', icon: 'terminal' },
-  { href: '/sessions', label: 'Sessions', icon: 'clock' },
-  { href: '/topology', label: 'Topology', icon: 'git-branch' },
-  { href: '/activity', label: 'Activity', icon: 'activity' },
-  { href: '/kernel', label: 'Kernel', icon: 'gauge' },
-  { href: '/alerts', label: 'Alerts', icon: 'triangle-alert' },
-  { href: '/artifacts', label: 'Artifacts', icon: 'box' },
-  { href: '/skills', label: 'Skills', icon: 'layers' },
+  { href: '/sessions', label: 'History', icon: 'clock' },
+  { href: '/artifacts', label: 'Workspace', icon: 'box' },
+  { href: '/emergence', label: 'Emergence', icon: 'zap' },
+  { href: '/skills', label: 'Plugins', icon: 'layers' },
+  { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
 
 const TITLES: Record<string, [string, string]> = {
-  '/': ['Overview', 'trail-mesh stats · events & scopes'],
-  '/chat': ['Conversation', 'memex terminal · every turn written to the trail'],
-  '/sessions': ['Sessions', 'every scope · conversation replay from the graph'],
-  '/topology': ['Causal topology', 'one scope · live projection of the trail'],
-  '/activity': ['Activity', 'trail-mesh analytics · events & scopes'],
-  '/kernel': ['Kernel telemetry', 'worker bus · concurrency & backlog'],
-  '/alerts': ['Suspended scopes', 'frozen trails awaiting reconciliation'],
-  '/artifacts': ['Artifacts', 'content-addressed blobs · scope projection'],
-  '/skills': ['Crystallized lessons', 'exported portable skill definitions'],
-  '/settings': ['Settings', 'active configuration · read-only projection'],
+  '/': ['Overview', 'what your system is up to right now'],
+  '/now': ['Now', 'the living universe — channels, tasks, growth'],
+  '/chat': ['Chat', 'talk to the system · every turn joins the trail'],
+  '/sessions': ['History', 'past tasks · replay any conversation'],
+  '/topology': ['Task tree', 'one task · its sub-tasks as they grow'],
+  '/artifacts': ['Workspace', 'what the system has made for you'],
+  '/emergence': ['Emergence', 'what the system has learned'],
+  '/skills': ['Plugins', 'installable skills · add or remove capabilities'],
+  '/settings': ['Settings', 'active configuration'],
 };
 
-const POLL: Record<string, string> = {
-  '/topology': '2000ms',
-  '/kernel': '2000ms',
-  '/alerts': '5000ms',
-};
+// No polling labels: Now/tree are SSE-driven (batch 8), the rest load once.
+const POLL: Record<string, string> = {};
 
 function Ribbon({ health, error }: { health: HealthResponse | null; error: boolean }) {
   const ok = !error && health?.engine_status === 'ok';
@@ -103,12 +103,7 @@ function Ribbon({ health, error }: { health: HealthResponse | null; error: boole
   );
 }
 
-function Rail({ pathname, suspendedCount, scopes }: { pathname: string; suspendedCount: number; scopes: ScopeSummary[] }) {
-  const [filter, setFilter] = useState('');
-  const filtered = filter.trim().length === 0
-    ? scopes
-    : scopes.filter((s) => s.scope_id.includes(filter) || (s.intent ?? '').toLowerCase().includes(filter.toLowerCase()));
-
+function Rail({ pathname }: { pathname: string }) {
   return (
     <nav
       style={{
@@ -125,7 +120,8 @@ function Rail({ pathname, suspendedCount, scopes }: { pathname: string; suspende
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {NAV.map((n) => {
-          const on = pathname.startsWith(n.href);
+          // '/' must match exactly, else Overview lights up on every route.
+          const on = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
           return (
             <Link
               key={n.href}
@@ -149,60 +145,9 @@ function Rail({ pathname, suspendedCount, scopes }: { pathname: string; suspende
             >
               <Icon name={n.icon} size={17} style={{ color: on ? 'var(--signal)' : 'var(--text-muted)' }} />
               <span>{n.label}</span>
-              {n.href === '/alerts' && suspendedCount > 0 ? (
-                <span style={{ marginLeft: 'auto' }}>
-                  <Badge tone="danger">{suspendedCount}</Badge>
-                </span>
-              ) : null}
             </Link>
           );
         })}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minHeight: 0 }}>
-        <span className="ds-label">Scopes</span>
-        <Input
-          icon={<Icon name="search" size={14} />}
-          placeholder="filter scopes…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'auto' }}>
-          {filtered.map((s) => (
-            <div
-              key={s.scope_id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 9,
-                padding: '8px 9px',
-                borderRadius: 'var(--radius-sm)',
-              }}
-            >
-              <StatusDot
-                tone={s.status === 'suspended' ? 'danger' : s.status === 'crystallized' ? 'idle' : 'ok'}
-                live={s.status === 'live'}
-              />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {(s.intent ?? '').slice(0, 28) || s.scope_id.slice(0, 8)}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-                  {s.scope_id.slice(0, 8)} · {s.status}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       <div
@@ -215,9 +160,9 @@ function Rail({ pathname, suspendedCount, scopes }: { pathname: string; suspende
           gap: 6,
         }}
       >
-        <span className="ds-label" style={{ fontSize: 9 }}>Trail Mesh · PostgreSQL</span>
+        <span className="ds-label" style={{ fontSize: 9 }}>Memex</span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-          append-only · pgvector HNSW
+          graph-native runtime
         </span>
       </div>
     </nav>
@@ -228,7 +173,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState(false);
-  const [scopes, setScopes] = useState<ScopeSummary[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -251,32 +195,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      try {
-        const r = await api.scopes();
-        if (alive) setScopes(r.scopes);
-      } catch {
-        // recent-scopes list is best-effort
-      }
-    };
-    void tick();
-    const id = setInterval(tick, 5000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
-
-  const [title, subtitle] = TITLES[pathname] ?? ['MemexOS Console', 'Trail Mesh console — read-only projection of the graph'];
+  const [title, subtitle] = TITLES[pathname] ?? ['Memex', 'a window into what your system is doing'];
   const poll = POLL[pathname];
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Ribbon health={health} error={healthError} />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <Rail pathname={pathname} suspendedCount={health?.suspended_count ?? 0} scopes={scopes} />
+        <Rail pathname={pathname} />
         <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div
             style={{

@@ -4,12 +4,12 @@
     "status": "in_progress",
     "started_at": "2026-06-14T01:00:00.000Z",
     "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-14T02:10:00.000Z"
+    "last_active": "2026-06-14T02:20:00.000Z"
   },
   "position": {
     "phase": "21-console-redesign",
     "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发。15 批次见 TaskList。设计 SSOT = docs/CONSOLE-REDESIGN.md。基线全绿。零回归 = 不新增失败。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次1-8 完成。批次8（SSE 实时）：useTrailPulse hook 订阅 /v1/stream(EventSource，ref 稳定) + TrailSseEvent 类型；UniverseCanvas/ForestCanvas 每脉冲 debounce 800ms REST reload（脉冲 lossy，REST 是真相，不破 SSOT）。typecheck 绿，console 12 测试过。下一步：批次9（IA/词汇：Shell.tsx 导航改人话名+加 Now/Emergence/Plugins/Workspace+删 Scopes 列表 Rail；删 /alerts /kernel 页）。"
+    "stopped_at": "批次1-9 完成。批次9（IA/词汇）：Shell 导航改人话名(Overview/Now/Chat/History/Workspace/Emergence/Plugins/Settings)+删左栏 Scopes 列表+删 /alerts /kernel 页+修 '/' active exact bug+去黑话标题/footer。保留 /topology 作 sessions deep-link 单树。typecheck 绿。注意：/emergence 导航现指向未建页(批次10建)。下一步：批次10（细节页：建 /emergence feed 页读 /v1/emergence + 把 /skills 重构为 Plugins + Overview 富人话仪表盘 v1 4维）。"
   }
 }
