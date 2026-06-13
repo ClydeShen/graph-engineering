@@ -16,6 +16,7 @@ Commands:
   onboard       First-run setup — writes ~/.memex/config.json (providers, gateway)
   chat          Open MemexTerminal — converse with the running gateway
                   -m "text" [--scope <id>]  non-interactive single turn (scriptable)
+  console       Open the dashboard (Console UI) in the browser; starts the stack if needed
   log           Tail the dev-stack logs (iii/workers/control-plane/gateway)
                   -n <N> last N lines (default 200) · --no-follow print and exit
   connect       Connect coding agents to the Graph Runtime (default)
@@ -55,7 +56,7 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   process.exit(0);
 }
 
-const KNOWN = ['onboard', 'chat', 'log', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp', 'capability', 'connect'] as const;
+const KNOWN = ['onboard', 'chat', 'console', 'log', 'doctor', 'backup', 'restore', 'service', 'skills', 'mcp', 'capability', 'connect'] as const;
 const requested = process.argv[2];
 // Unknown subcommands error out instead of silently falling through to
 // `connect` (P5: `memex chta` must not open the connect multiselect).
@@ -259,6 +260,7 @@ const entry =
   subcommand === 'onboard' ? runOnboard()
   // memex chat — MemexTerminal REPL (its module entry starts the session).
   : subcommand === 'chat' ? import('@graph/terminal').then(() => {})
+  : subcommand === 'console' ? import('./console.js').then((m) => m.runConsoleCommand())
   : subcommand === 'log' ? import('./log.js').then((m) => m.runLogCommand())
   : subcommand === 'doctor' ? runDoctorCommand()
   : subcommand === 'backup' ? runBackupCommand()

@@ -26,6 +26,7 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
 ];
 
 const TITLES: Record<string, [string, string]> = {
+  '/': ['Overview', 'trail-mesh stats · events & scopes'],
   '/chat': ['Conversation', 'memex terminal · every turn written to the trail'],
   '/sessions': ['Sessions', 'every scope · conversation replay from the graph'],
   '/topology': ['Causal topology', 'one scope · live projection of the trail'],

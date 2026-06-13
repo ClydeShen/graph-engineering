@@ -46,7 +46,7 @@ const PAGE = `<!doctype html>
 </header>
 <main>
   <section>
-    <h2>Live trail (SSE /v1/stream)</h2>
+    <h2>Live trail</h2>
     <div id="feed"></div>
   </section>
   <section>

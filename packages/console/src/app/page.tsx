@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation';
+import ActivityDashboard from '@/components/ActivityDashboard';
 
+// Home (localhost:3000/) is the stats overview — the dashboard people land on.
 export default function Home() {
-  redirect('/topology');
+  return <ActivityDashboard />;
 }
