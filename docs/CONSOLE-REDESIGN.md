@@ -38,7 +38,7 @@
 | 引擎内部（SSOT 保留） | 人类看到的 | 说明 |
 |---|---|---|
 | Scope / scope_id / hash | **任务**（task） | 隐藏 id 与 hash |
-| Crystallized Lesson | **Emergence** | 系统自学的东西；显示时翻成人话（图/文皆可，机器识别优先、表现层翻译） |
+| Crystallized Lesson | **Emergence** | 系统自学的东西。**结晶产物本就是 LLM 蒸馏的自然语言散文**（crystallize.worker：key insight + pattern + recommendation），无黑话可翻；"翻译"只剩呈现打磨。读路径见 §9 `GET /v1/emergence` |
 | 外部安装/预装技能 | **Skills**（住 Plugins 页） | 用户可随时增删改，不影响系统运行 |
 | Artifacts | **Workspace** | 功能待详设（§8） |
 | Sessions | **History** | 过去派过的任务，可回放 |
@@ -149,16 +149,17 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 
 ## 9. 落地前置 & 待决细节分支
 
-**前置（新建，read-only SELECT over `scope_lineage`）：**
+**前置（新建，read-only SELECT）：**
 - `GET /v1/forest` — 根 scopes 按 channel 分组（星系）+ 计数/状态（L0/L1 快照）
 - `GET /v1/scopes/:id/lineage` — 单任务的 `scope_lineage` 子树（L2）
   （现有 `/v1/scopes/:id/topology` 是 entity 级，不够用）
+- `GET /v1/emergence` — `procedural_memory` 列表（content 散文 + confidence + reinforcement_count + last_used_at），按 confidence/last_used 排序。现有 `/v1/memory/search` 是语义搜索、非 feed，不够用。**排在 Now 关键路径之后**（§10）
 
 **待决细节（不动结构地基）：**
 - Now 节点美术规格（每层 LOD 画什么、状态色板、生长动画曲线）
 - 森林顶部那行字具体说什么、吃什么数据
-- **Emergence**：机器学的东西怎么翻成人能懂（diagram / 文字 / 其他）
-- **Plugins** 页：技能列表 + 增删改 + onboarding 接线
+- ~~**Emergence**：机器学的东西怎么翻成人能懂~~ —— **已收口**：结晶产物本就是散文（伪命题）；Emergence = lessons feed，读 `GET /v1/emergence`（§9 前置），呈现打磨 = markdown 渲染 content + confidence 翻人话徽标（"已强化 ×N"/"正在淡忘"）+ 藏 hash
+- **Plugins** 页：技能列表 + 增删改 + onboarding 接线。**注**：当前 `/skills` 页误把 `/v1/skills` 的 SKILL.md 导出体标成 "Crystallized lesson"——拆分时把 SKILL.md 归 Plugins，结晶 lesson 归 Emergence，解除混淆
 - ~~**Notification** 右抽屉~~ —— **已收口删除**（§5 注：奥卡姆删独立面 + 删 `/alerts`）
 - **Overview 首屏自身仍带黑话**（"Total scopes"、event_type 原串、"trail mesh"）——按"去黑话"前提它也该翻译
 - **Workspace** 页功能（用户明确：之后再说）
@@ -173,7 +174,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 3. **Now L2→L0 逐层**：单树生长（L2）→ 星系聚类（L1，channel 分组）→ 宇宙总览（L0）+ 语义缩放
 4. **实时接线**：`EventSource('/v1/stream')` 驱动动画 + REST 对账
 5. **IA/词汇**：导航改名、删 Scopes 列表、Alerts→Notification 抽屉、Kernel→System
-6. **细节页**：Emergence 翻译、Plugins、Overview 去黑话、Workspace（最后）
+6. **细节页**：Emergence feed（`GET /v1/emergence` + markdown/confidence 呈现，解除 `/skills` 混淆）、Plugins、Overview 去黑话、Workspace（最后）
 
 ---
 
@@ -261,7 +262,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | **History** | 每条带状态色 + 一句话结果；点开可在 Now 重播那棵树的生长 | 采纳 |
 | **加载** | 所有 > 300ms 用骨架/微光，不用空轴或转圈（规则 `progressive-loading` / `loading-chart`）| 采纳 |
 | **Notification** | **已删**（§5 注：suspended 是无操作的系统故障，信号收敛到健康条徽标 + Now 节点色）| 删除 |
-| **Emergence** | 翻译形态待讨论（§9 开放项），**不预设解锁流方案** | 待讨论 |
+| **Emergence** | **已定**：lessons feed（`GET /v1/emergence`）；内容本就是散文，呈现打磨即可。"解锁流"游戏化框法仍不采纳 | 采纳（feed）|
 
 ### B.5 无障碍守门（CRITICAL，先于美观）
 
