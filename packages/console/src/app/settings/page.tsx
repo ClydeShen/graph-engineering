@@ -4,8 +4,9 @@
  * Settings — read-only projection of the active configuration (Hermes
  * Config/Models/Profiles condensed). Served by GET /v1/sys/config, which
  * redacts every secret (gateway.token → boolean, apiKey → ref|set|none).
- * Editing stays a CLI concern (memex onboard) until the UI-SPEC writable
- * LLM-settings exception lands — the Dashboard is a projection, not a writer.
+ * Editing stays a CLI concern (memex onboard) until the CONSOLE-REDESIGN
+ * writable LLM-settings exception lands (Appendix A) — the Dashboard is a
+ * projection, not a writer.
  */
 
 import { useEffect, useState } from 'react';

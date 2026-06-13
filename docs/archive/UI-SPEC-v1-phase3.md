@@ -1,3 +1,7 @@
+> ⚠️ **已归档（SUPERSEDED）· 2026-06-13** — 本文档是 Phase 3 的早期 Console 规格，**已被实际交付的 console（8 页 Next.js app-router，非此处的 3 页 Vite 方案）甩开**，前向设计方向以 `docs/CONSOLE-REDESIGN.md` 为准。其中唯一仍有效的"Phase 4+ LLM Provider/Model 设置（可写）"基线已收编至 `docs/CONSOLE-REDESIGN.md` 附录 A。此处仅作历史快照保留，**勿据此实现**。
+
+---
+
 # Graph-OS Console — UI Specification
 > 版本：v1.0 · 2026-06-03
 > 范围：Phase 3 实现参考。Phase 2 只需满足后端集成约束（见下文），前端不在 Phase 2 交付。

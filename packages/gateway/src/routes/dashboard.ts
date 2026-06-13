@@ -4,7 +4,7 @@
  * Self-contained HTML (no build step, no framework): SSE live trail feed via
  * /v1/stream + scope topology lookup via /v1/scopes/:id/topology. This is the
  * deliberately-cut-down increment per 11-PHASE-SPEC §7 ("砍 Dashboard 可视化的
- * 丰富度") — the full Console (Next.js + G6 per docs/UI-SPEC.md) remains a
+ * 丰富度") — the full Console (Next.js per docs/CONSOLE-REDESIGN.md) remains a
  * planned frontend project; this page proves the realtime data path end to end
  * and gives operators a zero-install live window.
  *

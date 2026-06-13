@@ -130,7 +130,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 
 ---
 
-## 8. 取代 UI-SPEC.md v1.0 的部分
+## 8. 取代 UI-SPEC.md v1.0（已归档）
 
 | UI-SPEC v1.0（过时） | 本设计 |
 |---|---|
@@ -139,7 +139,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | 三页架构（因果拓扑/内核指标/挂起告警） | **新 IA**（§5） |
 | 只读 MVP，无写入 | 含显式写面（Settings/Plugins/Notification） |
 
-> UI-SPEC.md 其余部分（Status Ribbon 设计、Web Worker 语法、Tailwind 冷色调）仍可参考。待后续统一收编进本文档或反向更新 UI-SPEC。
+> UI-SPEC.md 已于 2026-06-13 归档为 `docs/archive/UI-SPEC-v1-phase3.md`。唯一仍有效的「LLM Provider/Model 设置（可写）」基线已收编至本文档**附录 A**；其余（Status Ribbon / Web Worker 语法 / Tailwind 冷色调）作历史快照留在归档件，勿据此实现。
 
 ---
 
@@ -170,3 +170,17 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 4. **实时接线**：`EventSource('/v1/stream')` 驱动动画 + REST 对账
 5. **IA/词汇**：导航改名、删 Scopes 列表、Alerts→Notification 抽屉、Kernel→System
 6. **细节页**：Emergence 翻译、Plugins、Overview 去黑话、Workspace（最后）
+
+---
+
+## 附录 A — Settings 写能力基线：LLM Provider/Model（可写）
+
+> 来源：原 `docs/UI-SPEC.md` v1.0「Phase 4+ 设计基线」节，2026-06-13 收编至此（UI-SPEC 已归档为 `docs/archive/UI-SPEC-v1-phase3.md`）。这是 console「只读投影」的**唯一已知写例外**：设计已收敛至结构核心，但**尚未实现为 UI 写面**——当前 Settings 仍是只读投影，编辑走 `memex onboard` CLI。Plugins/Settings 写面落地时可直接据此实现，无需重新调研。
+
+| 维度 | 决定 | 依据 |
+|---|---|---|
+| 读写 | **可写** | `OpenAICompatibleProvider.chat()/embed()` 每次调用都现读 `this.config`（非构造时固化的 SDK client）；去掉 `readonly` + 加 setter 即可让单进程内实例热更新，成本接近零 |
+| 持久化 | **独立 JSON/YAML 配置文件**，不进 `.env`、不进 graph、不进 `iii-config.yaml` | `.env` 无法持久化 UI 输入；写入 graph 会让 API key 进不可变执行轨迹（审计/快照安全顾虑）；`iii-config.yaml` 实际不携带任何 LLM 字段 |
+| 架构形状 | **单槽位 + 独立 embedding 轴**：`{ chat: {...}, embedding: {...} }`，不引入 hermes 式 primary/secondary 多档位 | Memex 是异步图执行运行时，无实时延迟驱动的快/慢模型分层需求；chat 与 embedding 在 ADR 22 中已是两个独立接口，分开配置同时修正"同一 `model` 字段同时服务两个命名空间"的缺陷 |
+| 跨进程一致性 | **gateway 进程内即时生效**（mutate 自身 `gatewayLlmProvider`）；**workers 下次重启后生效** | gateway 与 workers 各持独立 provider 实例；"重启后生效"顺着"凭证只在构造时读取一次"的不可变保证自然延伸，无需新建热重载基础设施 |
+| 软重启 | **明确不做，独立问题留存** | 会重新打开已被禁用的 `iii-exec` 块，且需把范围从"代码变更触发重启"扩大到"配置变更触发优雅重载"——独立的基础设施项目 |

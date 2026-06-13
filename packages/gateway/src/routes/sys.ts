@@ -6,7 +6,8 @@
  * ever returning secrets: gateway.token and any resolved apiKey are replaced
  * with presence booleans. `${ENV_VAR}` references are shown verbatim (they name
  * an env var, they are not the secret). Editing config stays a CLI concern
- * (memex onboard) until the UI-SPEC writable LLM-settings exception lands.
+ * (memex onboard) until the CONSOLE-REDESIGN writable LLM-settings exception
+ * lands (docs/CONSOLE-REDESIGN.md Appendix A).
  *
  * @see packages/shared/src/llm/provider-profiles.ts — display + embedding caps
  * @see packages/shared/src/llm/from-config.ts — embedding endpoint resolution
