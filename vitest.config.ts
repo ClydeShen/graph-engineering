@@ -32,6 +32,12 @@ export default defineConfig({
   },
   test: {
     include: ['packages/**/*.test.ts', 'src/**/*.test.ts', 'tests/**/*.test.ts'],
-    env: loadDotenv(),
+    // Integration tests must never touch the dev DB. They run against
+    // TEST_DATABASE_URL (default graph_test); DATABASE_URL — which dev points at
+    // its own graph DB — is overridden here so a single shared .env can serve both.
+    env: (() => {
+      const e = loadDotenv();
+      return { ...e, DATABASE_URL: e.TEST_DATABASE_URL ?? e.DATABASE_URL ?? 'postgres://postgres:password@localhost:5432/graph_test' };
+    })(),
   },
 });
