@@ -43,7 +43,7 @@
 | Artifacts | **Workspace** | 功能待详设（§8） |
 | Sessions | **History** | 过去派过的任务，可回放 |
 | suspended scope | （无独立面）| 健康条 `suspended_count` 徽标 + Now 节点 rust 色。见 §5 注 |
-| Kernel / worker bus | **System** | 健康条点开的进阶视图 |
+| Kernel / worker bus | （无独立面）| **删 `/kernel` 页**（奥卡姆）。健康裁决留健康条（engine ok/degraded）；原始 slots/backlog 是开发者遥测，走 `memex log` / health 端点。见 §5 注 |
 
 > ⚠️ 名词迁移：`Skills` 从此**专指**外部可插拔技能；系统自学的东西改叫 `Emergence`。引擎内部仍叫 `Lesson` / crystallization。
 
@@ -59,7 +59,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 
 | 路由 | 人话名 | 来自 | 备注 |
 |---|---|---|---|
-| `/` | Overview | Activity 统计图 | **保留作首屏**（性能考量：长时间挂着活树会卡，故首屏用轻量图表） |
+| `/` | Overview | Activity 统计图 | **保留作首屏**（性能考量：长时间挂着活树会卡，故首屏用轻量图表）。去黑话 + 扩成丰富人话状态仪表盘，维度与 v1/v2 分批见 §9 |
 | `/now` | **Now** | 取代 `/topology` | 英雄页，见 §6。独立页，只在查看时实时渲染 |
 | `/chat` | Chat | Chat | 不变 |
 | `/history` | History | Sessions | 改名 |
@@ -71,9 +71,11 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 **删除 / 降级：**
 - 左栏 **"Scopes" 列表 → 整个删掉**（对人类无意义）
 - **Alerts / Notification → 整页删掉（奥卡姆）**，连同 `/alerts` 页一并移除。理由见下注
-- **Kernel → System**（健康条点开，进阶）
+- **Kernel → 整页删掉（奥卡姆）**，连同 `/kernel` 页移除。理由见下注
 
 > **为什么没有 Notification 面（2026-06-13 收口）：** 现有 `/alerts` 页核查后是**纯只读**的 suspended-scope 列表，零操作。而 `suspended` 在机制上是 Convergence Watchdog 的 OOM 降级故障（ADR-0024），**没有解挂写路径**——console 对它也无可操作。系统真正"问用户、等回答"的交互全发生在 **channel / terminal**（对话面），不在 console。故 console 不需要任何"通知你去操作"的面。崩溃信号已由两处覆盖：① 健康条 `suspended_count` 徽标（`Shell.tsx` 已有）；② Now 宇宙里 suspended 节点显 rust 色（§6），点入 L3 看原因/`frozen_at`。奥卡姆剃刀：删独立面，删 `/alerts`。恢复机制（解挂/重驱）是独立引擎待办，等 suspended 被证实常见到值得建时再议。
+
+> **为什么删 Kernel 页（2026-06-14 收口）：** `/kernel` 是纯基础设施遥测——DB 连接池槽位 + worker 队列积压折线。对"不懂技术"的受众无可操作意义。而首屏 Overview 仪表盘已覆盖"系统在发生什么"的需求。奥卡姆剃刀：删 `/kernel` 页。引擎健康裁决（ok/degraded）留在健康条；原始 slots/backlog 是开发者 debug 遥测，走 `memex log` 或 health 端点，不占 console 面。（注：健康条上的原始 `slots 3/8` 计数属"去黑话"范畴，随 Overview 去黑话一并处理。）
 
 ---
 
@@ -156,14 +158,17 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 - `GET /v1/emergence` — `procedural_memory` 列表（content 散文 + confidence + reinforcement_count + last_used_at），按 confidence/last_used 排序。现有 `/v1/memory/search` 是语义搜索、非 feed，不够用。**排在 Now 关键路径之后**（§10）
 
 **待决细节（不动结构地基）：**
-- Now 节点美术规格（每层 LOD 画什么、状态色板、生长动画曲线）
+- Now 节点美术规格（每层 LOD 画什么、状态色板、生长动画曲线）。**结构不变**（森林/宇宙，react-force-graph-2d），此处仅是节点美术选型，推迟到 §10 步骤 2 定。**素材候选**（参考 AI Town / Generative Agents「Smallville」的"小人在干活/思考"视觉）：节点可经 `nodeCanvasObject` 渲染成俯视小人精灵（active 思考/敲击、idle、suspended 瘫倒）。素材：**Kenney Toon Characters / Tiny Town（CC0，免署名免付费——分发首选）**；AI Town 同款 LimeZu Modern Interiors（CC-BY，完整版付费）为备选。注：我们无持久 agent，小人映射到"活跃 scope/任务"（节点）或"channel 来源"（星系），非 RimWorld 式长期殖民者
 - 森林顶部那行字具体说什么、吃什么数据
 - ~~**Emergence**：机器学的东西怎么翻成人能懂~~ —— **已收口**：结晶产物本就是散文（伪命题）；Emergence = lessons feed，读 `GET /v1/emergence`（§9 前置），呈现打磨 = markdown 渲染 content + confidence 翻人话徽标（"已强化 ×N"/"正在淡忘"）+ 藏 hash
 - **Plugins** 页：技能列表 + 增删改 + onboarding 接线。**注**：当前 `/skills` 页误把 `/v1/skills` 的 SKILL.md 导出体标成 "Crystallized lesson"——拆分时把 SKILL.md 归 Plugins，结晶 lesson 归 Emergence，解除混淆
 - ~~**Notification** 右抽屉~~ —— **已收口删除**（§5 注：奥卡姆删独立面 + 删 `/alerts`）
-- **Overview 首屏自身仍带黑话**（"Total scopes"、event_type 原串、"trail mesh"）——按"去黑话"前提它也该翻译
-- **Workspace** 页功能（用户明确：之后再说）
-- **System**（Kernel）进阶视图的取舍
+- ~~**Overview 首屏自身仍带黑话**~~ —— **已收口**：Overview = **丰富的人话状态仪表盘**（非裁剪）。组织原则：**每张卡回答一个人话问题，不堆原始指标**。维度按数据就绪度分批：
+  - **v1（现成，纯前端翻译+重组 `/v1/metrics/activity` + health，零新端点）**：① 任务状态（总任务/进行中/完成/撞墙了，替 scope）② 健康裁决（健康/忙/过载，替 `slots 3/8` 黑话）③ 活跃度（每天活动量 14 天 + 今天派了/完成几个）④ 动作类型分布（event_type **翻人话标签**，见下表）
+  - **v2（各带小后端）**：⑤ 来源（按 channel 分布，intent 前缀解析 / `/v1/forest`）⑥ 成效（完成率/撞墙率/冲突数/平均耗时）⑦ 学习（学到 N 条 + 最近一条，`/v1/emergence`）⑧ 基本细节（最近活动流，人话近事件）
+  - **event_type → 人话标签（锁定）**：`task_spawned`→开新活/派生子任务 · `plan_created`→制定计划 · `memory_updated`→记下/学到 · `scope_closed`→任务完成 · `conflict_detected`→撞冲突 · `sub_scope_resolved`→子任务完成。status：`active`→进行中 · `suspended`→撞墙了 · `closed`→完成 · `converged`→搞定。"trail mesh"→活动 · "event"→步骤/动作 · "scope"→任务
+- **Workspace** 页 —— **已定数据模型（引擎侧，非纯 UI）**：见 §11。
+- ~~**System**（Kernel）进阶视图的取舍~~ —— **已收口**：删 `/kernel` 页（§5 注，奥卡姆）；健康裁决留健康条，原始遥测走 `memex log`
 
 ---
 
@@ -173,8 +178,42 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 2. **引擎切换**：移除 g6，引入 `react-force-graph-2d`；`TopologyCanvas` → `ForestCanvas`（L2 单树先跑通）
 3. **Now L2→L0 逐层**：单树生长（L2）→ 星系聚类（L1，channel 分组）→ 宇宙总览（L0）+ 语义缩放
 4. **实时接线**：`EventSource('/v1/stream')` 驱动动画 + REST 对账
-5. **IA/词汇**：导航改名、删 Scopes 列表、Alerts→Notification 抽屉、Kernel→System
-6. **细节页**：Emergence feed（`GET /v1/emergence` + markdown/confidence 呈现，解除 `/skills` 混淆）、Plugins、Overview 去黑话、Workspace（最后）
+5. **IA/词汇**：导航改名、删 Scopes 列表、**删 Alerts/Notification 页**（§5 注）、**删 Kernel 页**（§5 注）
+6. **细节页**：Emergence feed（`GET /v1/emergence` + markdown/confidence 呈现，解除 `/skills` 混淆）、Plugins、Overview 富人话仪表盘（v1 现成 4 维纯前端 → v2 富维度按端点跟上，§9）、Workspace（阻塞于 §11 引擎工作，最后）
+
+---
+
+## 11. Workspace / Project 分层（引擎侧，非纯 UI）
+
+> 2026-06-14 `/fuller` 收口。受众现实：99% 用户同时跑多 agent / 多 channel / 多项目。需要 project/workspace 分层；交付物按项目归档。**这不是 UI 问题**——但也**不破不变量 #1/#2/#4**（见下）。
+
+### 11.1 核心模型：Project = 记在 scope 上的"工作文件夹"维度
+
+- **不是新一等实体、不是注册表。** project 是图里**记录的一个可观测事实**——scope 带一个"工作文件夹/cwd"字段（intent 元数据或新增列）。agent 建了 projectA，图就记下"此 scope 在 projectA 干活"。
+- **不破 SSOT**：project 是图里**记录的事实**，非投影层发明的概念（守 #1/#4）。这也正是 Memex 本命哲学——project 是 *discovered folder-clusters*，不是 *designed entities*。
+- **继承链**：artifact 继承 scope 的 project；Now 按它给簇**命名/上色**；Workspace 页按它**分组交付物**。
+- **"距离"即分簇**：projectA / projectB 子图天然弱连接、离得远；force-directed 的 Now 里**离得远的簇本身就是 project**，记录的文件夹名只是给簇贴标签。
+- onboarding 时为每个 channel/agent 设计文件夹根。
+
+### 11.2 Agent 身份：per-channel LLM 配置（当前缺失功能）
+
+- 每个 channel 配各自的 LLM = 一个独立"agent"。多 channel 接入 → 自然形成**多 agent × 多 project**。
+- **现状缺失**：附录 A 只设计了全局单槽 LLM 写面，**没有 per-channel LLM 选择**。这是要补的引擎/配置功能。
+
+### 11.3 Bad path：物理删除 / 硬删 agent（懒墓碑，复用现成机制）
+
+- **不变量 #2 是死的**：物理删 projectA 文件夹 / 硬删某 agent，**图一行不改**。trail 记的是"曾经发生过什么"，产物/agent 没了也不改写历史。
+- **姿态**：图 = 永久记录；磁盘/配置 = 可变活体状态；"没了"在**访问时检测**、在投影里显示为**归档/不可开**，**绝不写回图**。
+  - 删 projectA 文件夹 → Now/History 里成变暗的"已归档"簇，产物打不开。
+  - 硬删 agent → 过去的活留在图里、归属可查（intent 不可变），只是不再产出新活。
+- **复用现成机器**：artifacts 路由已有"内容缺磁盘→404""被 erase(ADR-43)→410 墓碑"。意外物理删除 = 孤儿元数据，呈现成"已归档（内容不可用）"；**故意删除**走一等的 ADR-43 `erase`（写墓碑事件）。零新增基础设施。
+- **同名重建歧义**：projectA 删后又建同名 → project 身份 = 路径 + 创建时刻，或接受"同名即复用"。
+
+### 11.4 引擎 vs console 拆分（Workspace 页阻塞于引擎工作）
+
+- **引擎侧（新增，前置）**：scope 的 project/cwd 字段 + artifact 继承 + per-channel LLM 配置 + onboarding 文件夹根设计 + bad-path 懒墓碑呈现。
+- **console 侧（投影）**：Workspace 页按 project 分组交付物；Now 按 project 命名分簇。
+- Workspace 页（§5/§10 步骤 6）**阻塞于** 11.1–11.3 的引擎工作；落点应是一个独立路线图条目，不是 console 重设计的细节。
 
 ---
 
