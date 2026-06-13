@@ -15,6 +15,20 @@ import { promisify } from 'util';
 
 export const MEMEX_CONTAINER_LABEL = 'memex.execute_bash';
 
+/**
+ * Default non-root user for contained execution (hardening). 65534:65534 is
+ * `nobody` in alpine and most base images. Combined with --cap-drop ALL +
+ * no-new-privileges + --read-only, this removes the last "root inside the
+ * container" foothold: even a neutered root is avoided entirely.
+ *
+ * hermes (tools/environments/docker.py) instead starts as root and lets the
+ * image's init drop privileges via s6-setuidgid (cap-adding SETUID/SETGID).
+ * Our images are init-less (`sh -lc` in alpine), so starting unprivileged
+ * directly via --user is the simpler equivalent. Override per-call when an
+ * image needs a specific user (e.g. a browser image with a fixed profile dir).
+ */
+export const DEFAULT_CONTAINER_USER = '65534:65534';
+
 export interface DockerExecOptions {
   image?: string;
   /** Default: no network. Explicit egress is an operator choice. */
@@ -23,6 +37,8 @@ export interface DockerExecOptions {
   cpus?: string;
   pidsLimit?: number;
   timeoutSeconds?: number;
+  /** Container user (uid[:gid]). Default: non-root (DEFAULT_CONTAINER_USER). */
+  user?: string;
 }
 
 /** hermes _BASE_SECURITY_ARGS parity (ADR-47 D-4). */
@@ -30,6 +46,7 @@ export function buildDockerRunArgs(command: string, opts: DockerExecOptions = {}
   return [
     'run', '--rm',
     '--label', MEMEX_CONTAINER_LABEL,
+    '--user', opts.user ?? DEFAULT_CONTAINER_USER,
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges',
     '--pids-limit', String(opts.pidsLimit ?? 256),

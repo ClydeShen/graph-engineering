@@ -154,6 +154,7 @@ describe('exec backend (ADR-47 D-4)', () => {
     expect(joined).toContain('--security-opt no-new-privileges');
     expect(joined).toContain('--pids-limit');
     expect(joined).toContain('--network none');
+    expect(joined).toContain('--user 65534:65534'); // non-root hardening — no root in container
     expect(joined).toContain('nosuid,noexec');
     expect(joined).toContain('--read-only');
     expect(joined).toContain(`--label ${MEMEX_CONTAINER_LABEL}`);

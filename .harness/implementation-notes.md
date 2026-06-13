@@ -886,3 +886,13 @@ L1 容器内命令照跑✓;**L2 egress 被断**(`wget: bad address` DNS 失败 
 **残留:** execute_bash 默认仍 local —— 生产要容器隔离需显式 `EXEC_BACKEND=docker`(doctor 已提示 prefer docker);
 镜像默认 alpine:3(`EXECUTE_BASH_IMAGE` 可覆盖,但 alpine 缺工具的命令会失败——容器化取舍);
 容器内 uid=0 被 cap-drop 阉割,加 `--user` 可更稳(browser 同此硬化缺口)。ADR-47/Phase-14 措辞现已与代码一致(声明为真)。
+
+### --user 非 root 硬化 (2026-06-13)
+
+承「容器内 uid=0」残留,补 `--user` 到 `buildDockerRunArgs`(execute_bash + browser 共用)。
+- `DEFAULT_CONTAINER_USER='65534:65534'`(nobody,alpine 及多数镜像都有),`opts.user` 可覆盖。
+- hermes(docker.py)的姿态不同:它**默认不加 --user**,而是 cap-add SETUID/SETGID 让镜像 init
+  经 s6-setuidgid 自降权——为它的 init 镜像设计。我们镜像无 init(`sh -lc` in alpine),
+  **直接以非 root 启动**是更简单的等效硬化。将来真 browser 镜像若需固定 profile 用户,经 opts.user 覆盖。
+- **活体验证**:`id: uid=65534(nobody)`(不再 root)、/tmp 仍可写(命令照跑)、/etc 仍只读。
+- Gate:tsc clean;security.test + browser-capability.test 各加 `--user` 断言;gateway 190 全绿。

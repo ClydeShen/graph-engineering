@@ -41,6 +41,7 @@ describe('buildBrowserRunArgs', () => {
     expect(s).toContain('--cap-drop ALL');
     expect(s).toContain('no-new-privileges');
     expect(s).toContain('--network bridge'); // browsers need egress; everything else stays locked
+    expect(s).toContain('--user 65534:65534'); // non-root hardening applies to the browser path too
     expect(s).toContain('memex-browser:test');
     expect(args.at(-1)).toBe('agent-browser snapshot');
   });
