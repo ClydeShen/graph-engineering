@@ -10,7 +10,8 @@
     "hono": "^4",
     "imapflow": "^1.0.193",
     "nodemailer": "^7.0.0",
-    "pg": "8.21.0"
+    "pg": "8.21.0",
+    "undici": "^6.26.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^7.0.0"

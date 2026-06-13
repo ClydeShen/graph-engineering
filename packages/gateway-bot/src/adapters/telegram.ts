@@ -1,3 +1,5 @@
+import { telegramFetch } from '../channel-http.js';
+
 interface TelegramUpdate {
   update_id: number;
   message?: {
@@ -9,7 +11,9 @@ interface TelegramUpdate {
 type OnMessage = (chatId: string, text: string, updateId: number) => Promise<string>;
 
 async function sendMessage(token: string, chatId: string, text: string): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  // telegramFetch = proxy + SNI-preserving IP fallback (channel-http.ts, ported
+  // from hermes). Reaches api.telegram.org on networks where plain fetch can't.
+  await telegramFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text }),
@@ -68,7 +72,7 @@ export async function startLongPoll(
   while (!signal?.aborted) {
     let updates: TelegramUpdate[] = [];
     try {
-      const res = await fetch(`${base}/getUpdates?timeout=30&offset=${offset}`, { signal });
+      const res = await telegramFetch(`${base}/getUpdates?timeout=30&offset=${offset}`, { signal });
       const data = (await res.json()) as { ok: boolean; result: TelegramUpdate[]; description?: string };
       if (!data.ok) {
         // ok:false (e.g. 401 from a bad token) — back off; otherwise this is a

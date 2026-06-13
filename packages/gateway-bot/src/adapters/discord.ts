@@ -1,7 +1,11 @@
 import { createPublicKey, verify } from 'crypto';
 import { Hono } from 'hono';
+import { channelDispatcher } from '../channel-http.js';
 
 type OnMessage = (chatId: string, text: string, interactionId: string) => Promise<string>;
+
+// Shared proxy dispatcher (DISCORD_PROXY → standard proxy env → system proxy).
+const discordDispatcher = () => channelDispatcher('DISCORD_PROXY', ['discord.com']);
 
 // Discord uses Ed25519 signatures. The plan text says "HMAC-SHA256" — that is a
 // misnomer; Discord's actual protocol is Ed25519 (X-Signature-Ed25519 header).
@@ -25,7 +29,8 @@ export async function sendToDiscord(webhookUrl: string, content: string): Promis
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
-  });
+    dispatcher: discordDispatcher(),
+  } as RequestInit);
 }
 
 export function buildDiscordApp(onMessage: OnMessage): Hono {
@@ -80,5 +85,6 @@ export async function registerSlashCommand(
         options: [{ name: 'text', description: 'Your message', type: 3, required: true }],
       },
     ]),
-  });
+    dispatcher: discordDispatcher(),
+  } as RequestInit);
 }

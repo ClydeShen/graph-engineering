@@ -43,11 +43,17 @@ if (existsSync('.env')) {
 }
 
 // ── Resolve bun — add ~/.bun/bin to PATH so cmd.exe finds it ─────────────────
+// Windows exposes the variable as `Path`, not `PATH`. Reading/writing `PATH`
+// on the spread env object then creates a SECOND key, and child processes end
+// up with a bun-only `PATH` that clobbers the real `Path` — so `npm` (resolved
+// by name, unlike the node-by-absolute-path services) is "not recognized" and
+// the console never starts. Update the existing key in place, whatever its case.
 const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
 const bunBin = join(home, '.bun', 'bin');
 const sep = process.platform === 'win32' ? ';' : ':';
-if (!appEnv.PATH?.includes(bunBin)) {
-  appEnv.PATH = bunBin + sep + (appEnv.PATH ?? '');
+const pathKey = Object.keys(appEnv).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+if (!(appEnv[pathKey] ?? '').includes(bunBin)) {
+  appEnv[pathKey] = bunBin + sep + (appEnv[pathKey] ?? '');
 }
 
 // ── Derive ports from env (never hardcode) ────────────────────────────────────

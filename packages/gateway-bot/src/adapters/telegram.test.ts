@@ -6,10 +6,15 @@ vi.stubGlobal('fetch', mockFetch);
 describe('Telegram long-poll adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // telegramFetch's proxy/IP-fallback machinery is exercised in
+    // channel-http.test.ts; disable it here so the long-poll tests assert
+    // poll/backoff behaviour against a single deterministic fetch per call.
+    process.env['MEMEX_TELEGRAM_DISABLE_FALLBACK_IPS'] = '1';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env['MEMEX_TELEGRAM_DISABLE_FALLBACK_IPS'];
   });
 
   it('calls onMessage for each update and sends reply via sendMessage', async () => {
