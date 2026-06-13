@@ -16,16 +16,25 @@ const answers: Record<string, unknown> = {};
 vi.mock('@clack/prompts', () => ({
   intro: vi.fn(),
   outro: vi.fn(),
+  note: vi.fn(),
   log: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), message: vi.fn(), error: vi.fn() },
   isCancel: () => false,
   // select answers are keyed by message, with 'select' as the catch-all default
   select: vi.fn((opts: { message: string }) =>
     Promise.resolve(answers[opts.message] ?? answers['select']),
   ),
-  text: vi.fn((opts: { message: string; initialValue?: string }) =>
-    Promise.resolve(answers[opts.message] ?? opts.initialValue ?? ''),
+  // Mirror clack's value resolution when the user accepts the suggestion:
+  // a typed answer wins, else the prefilled initialValue, else the Enter-on-empty
+  // defaultValue. (placeholder is a visual hint only, never a submitted value.)
+  text: vi.fn((opts: { message: string; initialValue?: string; defaultValue?: string }) =>
+    Promise.resolve(answers[opts.message] ?? opts.initialValue ?? opts.defaultValue ?? ''),
   ),
   confirm: vi.fn((opts: { message: string }) => Promise.resolve(answers[opts.message] ?? true)),
+  // The key is now pasted (password prompt) rather than named — default to a
+  // non-empty fake so a ${VAR} reference is produced and a .env line written.
+  password: vi.fn((opts: { message: string }) =>
+    Promise.resolve(answers[opts.message] ?? 'test-api-key'),
+  ),
   // Phase 18 prompts: presets default to none, telegram step defaults to skip
   // (per-test overrides via answers[message]).
   multiselect: vi.fn(() => Promise.resolve(answers['multiselect'] ?? [])),
@@ -36,38 +45,44 @@ import { loadMemexConfig } from '@graph/shared';
 
 const testDir = join(tmpdir(), `onboard-test-${process.pid}`);
 const configPath = join(testDir, 'config.json');
+const envPath = join(testDir, '.env');
 
-/** The ADR-55 optional-embedding prompt for providers without an embeddings endpoint. */
-const EMBEDDING_PROMPT_FRAGMENT = 'has no embeddings endpoint';
-
-function answerEmbeddingPrompt(value: boolean | string): void {
-  // confirm() message includes the provider display name — match by known prefix
-  answers[
-    `Anthropic (Claude) ${EMBEDDING_PROMPT_FRAGMENT}. Configure a separate one? (optional — skipping means lexical retrieval until one is added)`
-  ] = value;
-}
+/** Embedding is now a labelled select. These are the two message variants. */
+const EMBEDDING_SELECT_REUSE = 'How should Memex create embeddings? (powers semantic memory)';
+const EMBEDDING_SELECT_OTHER =
+  "Anthropic (Claude) can't create embeddings — pick a provider for semantic memory";
 
 beforeEach(() => {
   mkdirSync(testDir, { recursive: true });
+  // Keep the closing "is the Console live?" probe from making a real network
+  // call (which could hit a dev server on :3000 and even open a browser tab).
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
   for (const k of Object.keys(answers)) delete answers[k];
   answers['select'] = 'anthropic';
-  // Skip optional steps in the base flow tests.
+  // Skip optional steps in the base flow tests. The embedding select has no
+  // catch-all fallback (the 'anthropic' default isn't a valid choice), so each
+  // test answers the variant it triggers explicitly.
   answers['Connect a Telegram bot now? (optional)'] = false;
-  answerEmbeddingPrompt(false);
+  answers[EMBEDDING_SELECT_OTHER] = 'skip';
+  answers[EMBEDDING_SELECT_REUSE] = 'reuse';
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   rmSync(testDir, { recursive: true, force: true });
 });
 
 describe('runOnboard', () => {
   it('writes a config that loadMemexConfig accepts (anthropic + ${ENV} key reference)', async () => {
-    await runOnboard(configPath);
+    await runOnboard(configPath, envPath);
 
     expect(existsSync(configPath)).toBe(true);
     const raw = readFileSync(configPath, 'utf8');
     // API key stored as env reference, never a literal key
     expect(raw).toContain('${ANTHROPIC_API_KEY}');
+    // The pasted key lands in .env (gitignored), never in config.json
+    expect(readFileSync(envPath, 'utf8')).toContain('ANTHROPIC_API_KEY=test-api-key');
+    expect(raw).not.toContain('test-api-key');
 
     process.env['ANTHROPIC_API_KEY'] = 'resolved-key';
     const loaded = loadMemexConfig(configPath);
@@ -89,9 +104,9 @@ describe('runOnboard', () => {
   });
 
   it('anthropic + separate embedding provider writes an embedding section', async () => {
-    answerEmbeddingPrompt(true);
+    answers[EMBEDDING_SELECT_OTHER] = 'other';
     answers['Embedding provider'] = 'ollama';
-    await runOnboard(configPath);
+    await runOnboard(configPath, envPath);
 
     const loaded = loadMemexConfig(configPath);
     expect(loaded!.embedding).toMatchObject({ provider: 'ollama', model: 'nomic-embed-text' });
@@ -99,8 +114,8 @@ describe('runOnboard', () => {
 
   it('local provider (ollama) gets baseUrl, no apiKey, and an auto embedding section', async () => {
     answers['select'] = 'ollama';
-    answers['Generate a realtime API token? (required if the gateway is ever exposed beyond localhost)'] = false;
-    await runOnboard(configPath);
+    answers['Protect the gateway with an access token? (only needed if you expose it beyond this computer — press Enter to skip)'] = false;
+    await runOnboard(configPath, envPath);
 
     const loaded = loadMemexConfig(configPath);
     expect(loaded!.providers![0]).toMatchObject({
@@ -117,7 +132,7 @@ describe('runOnboard', () => {
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;
-    await runOnboard(configPath);
+    await runOnboard(configPath, envPath);
 
     expect(readFileSync(configPath + '.bak', 'utf8')).toContain('1234');
     expect(loadMemexConfig(configPath)!.gateway!.port).toBe(4000);

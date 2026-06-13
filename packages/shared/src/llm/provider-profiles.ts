@@ -140,6 +140,18 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     defaultEmbeddingModel: 'text-embedding-004',
   },
   {
+    name: 'nvidia',
+    displayName: 'NVIDIA NIM (build.nvidia.com)',
+    api: 'openai-completions',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    envVar: 'NVIDIA_API_KEY',
+    signupUrl: 'https://build.nvidia.com/',
+    defaultModel: 'meta/llama-3.1-8b-instruct',
+    // Chat-only here: NVIDIA's /embeddings needs an `input_type` (query/passage)
+    // param the generic OpenAI embedding path doesn't send, so we don't claim it.
+    supportsEmbedding: false,
+  },
+  {
     name: 'glm',
     displayName: 'z.ai / GLM (ZhipuAI)',
     api: 'openai-completions',
