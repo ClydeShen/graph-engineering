@@ -145,8 +145,9 @@ Phase 5 T3 已加入 `requires.bins / requires.env / always` frontmatter 字段�
 | TD-K | `wait_all_tasks` 2 秒轮询而非 LISTEN/NOTIFY | implementation-notes | **13** | 多 agent 并发等待时轮询延迟与 DB 压力放大 |
 | TD-L | Pi 沙箱预演（P1-B，OCC 预检，原"Phase 4 优化"未做） | 追踪表 P1-B | **13**（可选项） | 多 agent OCC 冲突率上升后才有收益，先观测再决定 |
 | TD-M | Gateway 依赖 Bun 运行时（与 Workers 的 Node 22 双运行时） | TECH_STACK §6 | **15** | 安装脚本/Docker 镜像必须显式处理双运行时 |
+| TD-N | 渠道接线/硬化遗留：① WebhookConnector 仍未接进 `GatewayBot.start()`（同 Slack/execute_bash 的"写好没接线"模式，后两者已接）；② Slack/Discord 无入站白名单（仅 Telegram 经 `channel-allowlist.ts` 硬化过）；③ Email/IMAP + macOS/Linux 安装未活体验证（本机 IMAP✗） | implementation-notes / memory(channel arc) / 2026-06-13~14 设计会话盘点 | **未排期**（接 12-connector-matrix 之后；①②是小接线，③需异机活体） | ①②是低成本一致性补强，可在任一触碰 gateway-bot 入口的工作里顺手清；③受本机环境限制，须等异机/CI 活体批次 |
 
-未编入项：CommandGate tier-3 LLM 审批（已在 Phase 14 #2）、env 两段式过滤（已在 Phase 14 #3）、G1 遍历代数（post-1.0 候选，无阻塞证据）。
+未编入项：CommandGate tier-3 LLM 审批（已在 Phase 14 #2）、env 两段式过滤（已在 Phase 14 #3）、G1 遍历代数（post-1.0 候选，无阻塞证据）。§7 channel 三决策（SOCKS/共享 webhook 宿主/自愈重连）已于 2026-06-13 评估降级/删除（单 operator+HTTP 代理），见 `docs/guides/channel-connectivity-hermes-deep-dive.md` §7，不再是待决。
 
 **Phase Spec（2026-06-11）：** Phase 09–14 各有一份 `​.planning/phases/<NN-name>/<NN>-PHASE-SPEC.md`——含设计要点、范围、DoR、DoD、前向铺路契约。**各阶段 discuss/planning 启动时必读**；DoR/DoD 跨阶段互锁（每阶段 DoR 引用上一阶段 DoD 门），前向契约条款是下一阶段 DoR 的核查清单。
 
