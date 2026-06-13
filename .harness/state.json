@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-12T02:00:00.000Z",
-    "last_session": "2026-06-12T10:59:45.097Z",
-    "last_active": "2026-06-12T10:59:45.097Z"
+    "last_session": "2026-06-13T14:30:00.000Z",
+    "last_active": "2026-06-13T14:30:00.000Z"
   },
   "position": {
     "phase": "20-autonomous-assistant",
     "active": "OOBE-FIX ARC COMPLETE (2026-06-12, commits f288b68b..8bbda07a): ADR-54/55/56 accepted+implemented. Conversation core (gateway-side stateless reply loop, WS user_message + REST /chat, memex_retrieve tool, text_delta live), memory resilience (fault taxonomy narrows ADR-39 lockout to true overflow, embedding=late projection w/ backlog+backfill worker, BM25 degraded retrieval), ProviderProfile registry (onboard/doctor/runtime derive from one table, config.json single authority, fallback chain active, port unified 4000), memex chat subcommand, N2/N3/N4/P3 fixed, OCC deadlock retry. 638 tests green x4 runs. Live smoke verified.",
     "resume_file": null,
-    "stopped_at": "OOBE arc done. REMAINING: live-environment batch with REAL LLM (user runs onboarding with real key/local model, then memex chat E2E), plus pre-existing live leftovers (3-platform installs, docker containment, /approve //answer /pair chat routing, Telegram/IMAP/OAuth live, journey 5a-5d live, iii pinning). FINDINGS-install-flow.md all 14 items closed. Post-1.0 candidates unchanged."
+    "stopped_at": "UI-CONSOLE ARC COMPLETE (2026-06-13, commits 6c376cfa..de4e62de): embedded assistant-ui chat in the Dashboard (server-side SSE bridge over the ADR-54 conversation core, never duplicating MemexTerminal); Hermes-parity read-only pages Sessions/Activity/Settings (GET /v1/metrics/activity + /v1/sys/config + /v1/scopes/:id/messages); first-run handoff (dev.mjs TTY boot lands in MemexTerminal, raw logs behind `memex log`); MemexTerminal REPL polish; markdown prose + embedding-pad(1536) fixes. Live-verified via agent-browser against local llama.cpp Qwen3-35B + BGE-M3. Unit suites green (root 72, gateway 127). DEFERRED: write/control pages (Env/Plugins/Cron/Profiles — need trust-isolation review); docs/UI-SPEC.md update. Prior OOBE/live-leftover items unchanged."
   }
 }
