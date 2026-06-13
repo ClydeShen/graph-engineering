@@ -785,6 +785,17 @@ Plans:
 
 **前置条件：** 无硬前置（端点是纯 SELECT，over 既有表）；活体数据建议 Phase 18 部署在前。
 
+**落地状态（2026-06-14，自主 GOAL — 批次 1-12 全绿）：**
+- ✅ 后端四只读端点：`/v1/forest`、`/v1/scopes/:id/lineage`、`/v1/emergence`、`/v1/artifacts`
+- ✅ 引擎切换：移除 `@antv/g6` → react-force-graph-2d（`ForestCanvas`，2.5D + 状态色 + LOD + reduced-motion JS 守则）
+- ✅ Now 宇宙 L0/L1（`UniverseCanvas`，星系=channel，点任务下钻 L2 树）+ `/now` 页
+- ✅ SSE 实时：`useTrailPulse` 订阅 `/v1/stream` + debounce REST 对账（脉冲 lossy，REST 真相）
+- ✅ IA/词汇：人话导航（Overview/Now/Chat/History/Workspace/Emergence/Plugins/Settings）+ 删左栏 Scopes 列表 + 删 `/alerts` `/kernel` 页 + 修 `/` active bug + 去黑话
+- ✅ 细节页：Emergence feed（`/v1/emergence` + confidence 翻人话）；`/skills` 解除 "Crystallized lesson" 误标；Overview 去黑话（任务状态卡 + event_type/status 人话标签）
+- ✅ 动效/tabular token 地基（附录 B）；附录 A 写能力地基（llm-overrides 文件 + provider 合并，零回归）
+- ✅ **全量 682 测试绿（基线 661 + 修 1 pre-existing + 新增 20），typecheck 绿，零回归**
+- ⬜ **剩余**：附录 A 写凭证 POST 端点 + Settings 写表单（安全敏感，需独立审查，§6.5 不 ship 半成品）；Now 节点小人美术选型（§9，AI Town/Kenney CC0）；Settings 反映 overrides；真 LLM + 浏览器活体验证
+
 ---
 
 ## 22-workspace-project 📋 待执行（设计定稿 2026-06-14，`docs/CONSOLE-REDESIGN.md` §11）

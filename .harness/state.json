@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "in_progress",
+    "status": "idle",
     "started_at": "2026-06-14T01:00:00.000Z",
-    "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-14T02:30:00.000Z"
+    "last_session": "2026-06-14T02:35:00.000Z",
+    "last_active": "2026-06-14T02:35:00.000Z"
   },
   "position": {
     "phase": "21-console-redesign",
-    "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发。15 批次见 TaskList。基线全绿。零回归 = 不新增失败。",
+    "active": "GOAL（/goal 自主）完成：ROADMAP 21 console-redesign 全弧 + 22 引擎地基 + TD-N + §7 + 附录A 地基。全量 682 测试绿，typecheck 绿，零回归。剩余（标注非阻塞）：附录A 写凭证 UI（安全审查）、Now 小人美术选型、活体验证。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次1-11 完成。批次11（附录A 写能力地基）：llm-overrides.ts(独立 JSON 单chat槽+独立embedding轴, read/write/纯merge, 4测试) + gateway 构造时 mergeLlmOverrides(无文件时identity零回归); shared 导出 + provider 接线。写凭证 POST 端点+Settings 写表单标注为安全敏感剩余(§6.5 不ship半成品)。typecheck 绿, 30 config 测试过。下一步：批次12 全量测试 + 零回归验证 + 报告 goal done。"
+    "stopped_at": "批次1-12 全部完成并各自 commit。全量 npm test = 682 passed / 101 files / 0 failed（基线 661+1修+20新）。typecheck 绿。13 个 commit 在 master（未 push）。剩余项见 ROADMAP 21 落地状态 ⬜。"
   }
 }
