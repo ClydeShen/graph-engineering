@@ -37,6 +37,18 @@
     linear-gradient(oklch(0.380 0.013 75 / 0.08) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0.380 0.013 75 / 0.08) 1px, transparent 1px);
   --graticule-size: 32px 32px;
+
+  /* ---- motion tokens (CONSOLE-REDESIGN 附录 B.2) ----
+     Unified rhythm so every animated surface shares one feel
+     (rule: motion-consistency). Durations climb micro→enter;
+     exit ≈ enter × 0.65 (rule: exit-faster-than-enter). */
+  --dur-micro: 160ms;   /* press / hover state flips                */
+  --dur-base:  240ms;   /* standard transitions                    */
+  --dur-enter: 320ms;   /* element / node entrance                 */
+  --dur-exit:  200ms;   /* exits — shorter than enter, feels snappy */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);    /* entrances (decelerate)        */
+  --ease-in:     cubic-bezier(0.5, 0, 0.75, 0);    /* exits (accelerate)            */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);/* node pop-in (overshoot/spring)*/
 }
 
 /* ---- utility classes ---- */
@@ -111,3 +123,10 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ⚠️ reduced-motion canvas 守则 (CONSOLE-REDESIGN 附录 B.3④ / B.5):
+   上面的媒体查询只压制 CSS animation/transition。它**管不到** <canvas>
+   里的 requestAnimationFrame 游戏循环（react-force-graph 的 rAF）。Now 的
+   画布组件必须在 JS 里显式读 matchMedia('(prefers-reduced-motion: reduce)')，
+   命中时停掉 rAF 持续循环、降为静态布局 + 状态色 + 离散刷新。这是最易漏的
+   无障碍坑——CSS 在此无能为力，留此注释作守门提醒。 */

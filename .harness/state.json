@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "idle",
-    "started_at": "2026-06-13T03:45:00.000Z",
+    "status": "in_progress",
+    "started_at": "2026-06-14T01:00:00.000Z",
     "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-13T10:00:00.000Z"
+    "last_active": "2026-06-14T01:30:00.000Z"
   },
   "position": {
-    "phase": "20-autonomous-assistant",
-    "active": "CONSOLE REDESIGN — DESIGN PHASE (2026-06-13, /fuller). Reframed the Console from a 1:1 mirror of the graph ontology into a human-legible projection. Produced docs/CONSOLE-REDESIGN.md (v2.0, design SSOT, supersedes UI-SPEC parts). Hero = new Now page: a zoomable 'universe' (galaxy=channel from scope_lineage.intent -> task tree -> node), SSE-pulse+REST-reconcile real-time, layered rAF render, react-force-graph-2d + 2.5D art. Engine decision reversed twice and FINALIZED to react-force-graph-2d (user compared real examples; g6 too flat/ugly; visual/UX over DRY; cost = remove g6 + rewrite TopologyCanvas). NO implementation code this session — design only; user chose to pause (C). TWO uncommitted batches in the tree: (1) pre-compaction onboarding+`memex console` UX (live-verified, never committed), (2) docs/CONSOLE-REDESIGN.md. Live stack shut down at session end (kill-port 3000 4000 4001).",
+    "phase": "21-console-redesign",
+    "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发 = ROADMAP 21-console-redesign + 22-workspace-project + TD-N + §7 supervisor 重连 + 附录 A 写面。15 批次任务清单在 TaskList。设计 SSOT = docs/CONSOLE-REDESIGN.md。测试基线 = 661 passed / 1 pre-existing fail（packages/console/src/lib/topology-diff.test.ts nodeColor 期望旧 hex 而实现已 oklch；该文件在批次6 重写域内，届时修）。零回归 = 不新增失败 + 批次6 修掉这个。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "Integrated work into master: c4f18946 feat(onboard) paste-key→.env+mask+NVIDIA, 00a10bf8 feat(console) memex console+stats home, a907ecda docs CONSOLE-REDESIGN. Cleaned stale worktree (sv-08-reviewfix, branch gsd-reviewfix/08-259 merged→deleted). master ahead of origin 22 (unpushed). Working tree clean apart from this harness commit."
+    "stopped_at": "批次1 完成（token 地基）：materials.css 加 --dur-*/--ease-* 动效 token + reduced-motion canvas 守则注释；typography.css 加 .ds-tabular。下一步：批次2 四个只读端点（forest/lineage/emergence/artifacts）。"
   }
 }

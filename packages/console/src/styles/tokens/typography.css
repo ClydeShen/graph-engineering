@@ -62,6 +62,13 @@
   --type-caption:   var(--weight-regular) var(--text-sm)/var(--leading-snug) var(--font-sans);
 }
 
+/* ---- tabular figures (CONSOLE-REDESIGN 附录 B.2 / rule: number-tabular) ----
+   HUD counters and timers jitter when digits have proportional widths;
+   tabular-nums locks every digit to the same advance so live-updating
+   numbers never shift layout. Apply to any element holding changing
+   numerals (Overview stat readouts, slot counts, durations). */
+.ds-tabular { font-variant-numeric: tabular-nums; }
+
 /* ---- label utility : the etched panel legend ---- */
 .ds-label {
   font-family: var(--font-mono);
