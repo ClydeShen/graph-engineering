@@ -109,10 +109,10 @@ What we have in `packages/gateway-bot/src/`:
 | Capability | hermes | us | Priority to close |
 |---|---|---|---|
 | Proxy resolution (HTTP) | ✅ | ✅ | — |
-| SOCKS proxy + rdns (GFW) | ✅ | ❌ | **P0** (needs dep decision) |
+| SOCKS proxy + rdns (GFW) | ✅ | ❌ | ~~P0~~ **DROPPED** (HTTP proxy avail; §7) |
 | Telegram IP fallback | ✅ | ✅ | — |
-| Shared inbound webhook host | ✅ (`webhook.py`/`api_server.py`) | ❌ (per-adapter Hono apps) | **P1** (unblocks all Family-B) |
-| Self-healing reconnect (Family A) | ✅ | ❌ | **P1** |
+| Shared inbound webhook host | ✅ (`webhook.py`/`api_server.py`) | ❌ (per-adapter Hono apps) | ~~P1~~ **DEFERRED** (YAGNI; §7) |
+| Self-healing reconnect (Family A) | ✅ | ◑ internal-only | ~~P1~~ **mostly done** (§7) |
 | Tuned keepalive limits | ✅ | ❌ | P3 |
 | Slack (Socket Mode) | ✅ | stub only | **P1** (Family A, GFW-friendly, high value) |
 | Matrix / Signal / WhatsApp / SMS / WeCom / DingTalk / Feishu / QQ | ✅ | ❌ | P2, per demand |
@@ -212,11 +212,43 @@ write surfaces.
 
 ## 7. Decisions that need a human (surfaced, not assumed)
 
+> **RESOLVED 2026-06-13 (`/fuller` evaluation).** These priorities were inherited
+> from hermes's broad, multi-tenant, GFW-heavy userbase. Re-evaluated against our
+> actual audience (single operator, locked in `docs/CONSOLE-REDESIGN.md`) and our
+> actual transport families. Trim-tab fact confirmed with the user: **the operator
+> has an HTTP proxy available (Clash/v2rayN mixed port or Windows system proxy),
+> not SOCKS-only.** Given that, all three structural items downgrade — **no
+> implementation is warranted now**:
+>
+> 1. **SOCKS dependency → DROPPED.** undici `ProxyAgent` is HTTP-CONNECT only, so a
+>    `socks://` URL would fail — but that path is only reached by a SOCKS-only
+>    operator. Windows system proxy is HTTP by design and Clash/Shadowrocket/v2rayN
+>    expose an HTTP/mixed port, so `resolveProxyUrl` never returns `socks://` here.
+>    *Config note instead of code:* point `*_PROXY` at the HTTP/mixed port, not the
+>    SOCKS port. Revisit only if a real SOCKS-only deployment appears (Option C).
+> 2. **Shared webhook host → DEFERRED (YAGNI).** Real architectural divergence
+>    (we run Discord :4001 + Telegram-webhook :4002 as separate Hono apps; hermes
+>    uses one aiohttp app), but the cost today is just two ports + two wirings.
+>    Build it when a 3rd Family-B channel is actually requested, per the original
+>    "wait" framing.
+> 3. **Self-healing reconnect → MOSTLY ALREADY DONE.** Every outbound (Family-A)
+>    connector already self-heals internally: Telegram long-poll (`while` loop +
+>    exp backoff 5s→5min), Slack Socket Mode (`slack-connector.ts` reconnect loop),
+>    Email (per-poll reconnect). The doc's "connector doesn't reconnect" overstated
+>    the gap for our current code. Only residue = a thin **supervisor-level** seam:
+>    if a connector's outer `start()` promise rejects wholesale (not the inner
+>    socket), `GatewayBot.start()` does not restart it. Optional robustness polish,
+>    not a P1.
+>
+> Items 3 (channel priority) and 4 (Signal packaging) below remain open **product**
+> choices (not technical gaps) — left as-is for when channel expansion is on the
+> table.
+
 1. **SOCKS dependency** (P0): add `socks-proxy-agent`/socks dispatcher to cover
    Clash/Shadowrocket SOCKS proxies? (hermes uses `aiohttp_socks`.) — *we have no socks
-   dep today.*
+   dep today.* — **DROPPED, see resolution above.**
 2. **Shared webhook host** (P1): build the single Hono inbound host now, or wait until a
-   Family-B channel is actually requested?
+   Family-B channel is actually requested? — **DEFERRED, see resolution above.**
 3. **Channel priority** (P2): which channels next? Recommended first = **Slack (Socket
    Mode)** — Family A, GFW-friendly, exercises the reconnect wrapper.
 4. **Signal packaging** (P2): are we willing to ship/spawn a `signal-cli` sidecar
