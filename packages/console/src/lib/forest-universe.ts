@@ -6,7 +6,7 @@
  */
 
 import type { ForestResponse } from './api.js';
-import { humanLabel } from './forest-graph.js';
+import { humanLabel } from '@/lib/forest-graph';
 
 export interface UniverseNode {
   id: string;
