@@ -22,6 +22,8 @@ import { ApprovalService, auxLlmTighten } from './approval.js';
 import {
   buildDockerRunArgs,
   approvalRequiredForBackend,
+  resolveExecBackend,
+  _resetDockerAvailability,
   MEMEX_CONTAINER_LABEL,
 } from './exec-backend.js';
 import { filterSubprocessEnv, isEnvWriteDenied } from '@graph/shared';
@@ -166,6 +168,21 @@ describe('exec backend (ADR-47 D-4)', () => {
     expect(approvalRequiredForBackend('local', hardline).blocked).toBe(true);
     expect(approvalRequiredForBackend('docker', dangerous)).toEqual({ blocked: false, requiresApproval: false });
     expect(approvalRequiredForBackend('local', dangerous)).toEqual({ blocked: false, requiresApproval: true });
+  });
+
+  it('resolveExecBackend defaults to local without probing docker (backward-compatible)', async () => {
+    const prev = process.env['EXEC_BACKEND'];
+    try {
+      delete process.env['EXEC_BACKEND'];
+      _resetDockerAvailability();
+      expect(await resolveExecBackend()).toBe('local');
+      process.env['EXEC_BACKEND'] = 'local';
+      expect(await resolveExecBackend()).toBe('local');
+    } finally {
+      if (prev === undefined) delete process.env['EXEC_BACKEND'];
+      else process.env['EXEC_BACKEND'] = prev;
+      _resetDockerAvailability();
+    }
   });
 });
 

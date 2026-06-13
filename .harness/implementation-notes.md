@@ -796,3 +796,93 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - Live-verified against local llama.cpp Qwen3-35B (chat 8080) + BGE-M3
   (embeddings 8082): /chat send→trail-write→reply→resume, MemexTerminal -m,
   handoff health-gate + terminal spawn, memex log tail.
+
+---
+
+## Channel-connectivity deep-dive — hermes DRY + UX (2026-06-13, /goal)
+
+Research/design deliverable (no code shipped this session — gated on decisions below):
+`docs/guides/channel-connectivity-hermes-deep-dive.md`.
+
+- **Core finding**: hermes's 20 adapters collapse to **3 transport families** —
+  (A) outbound-initiated (long-poll / persistent WS / SSE, no public URL, GFW-friendly),
+  (B) inbound webhook (needs public URL + ONE shared HTTP host), (C) local-daemon bridge
+  (signal-cli, BlueBubbles macOS server). Family decides connect mechanism + pairing UX,
+  not the brand.
+- **Shared transport seam (DRY)**: hermes centralizes `resolve_proxy_url` (✅ we ported →
+  `channel-http.ts:resolveProxyUrl`), `proxy_kwargs_for_bot` SOCKS+rdns (❌ GAP — no socks
+  dep; real for CN/Clash users), `TelegramFallbackTransport` IP-fallback (✅ ported →
+  `telegramFetch`), `platform_httpx_limits` keepalive (❌ not ported, low pri).
+- **Two patterns our connectors lack**: self-healing reconnect (exp backoff + jitter —
+  hermes ADDING_A_PLATFORM mandate; Slack `_restart_socket_mode`, Telegram pool-reset),
+  and a shared inbound webhook host (`webhook.py`/`api_server.py` → one Hono app,
+  `POST /webhooks/:platform` + per-connector verifier).
+- **UX honesty thesis**: last session's bug = valid token + unreachable network surfaced
+  as "pairing failed". Settings `Channels` panel today shows only config-presence
+  (`configured` bool from `sys/config`), never runs `check()`, never renders `check.detail`.
+  Spec'd a 4-state pill (Connected/Configured-not-connected/Needs-setup/Error) shared by
+  `memex doctor` + Dashboard, verbatim `check.detail`, per-family ChannelCard, and a
+  "Test connection" button that exposes the transport path used (proxy / IP-fallback /
+  sticky IP). Deferred building the live-check endpoint — it needs gateway wiring +
+  the §7 decisions, not a drive-by.
+- **Open decisions (need human)**: (1) add socks dep? (2) build shared webhook host now
+  or on-demand? (3) next channel = Slack Socket Mode (recommended)? (4) ship a signal-cli
+  sidecar? See deliverable §7.
+
+---
+
+## docker containment 活体验证 + execute_bash 接线发现 (2026-06-13, /goal fuller)
+
+**结论级发现(代码 research):`execute_bash` 的 docker 容器化从未接线。**
+`server.ts:491-498` 的 execute_bash 无条件走宿主 `child_process.exec`(CommandGate +
+scrubEnv),**没有 backend 选择逻辑**。`buildDockerRunArgs`/`ExecBackendKind`/
+`approvalRequiredForBackend` 的唯一真实消费者是 `browser` 工具(server.ts:729 真
+`execFile('docker', args)`)。即 ADR-47 D-4 / Phase 14「红线全绿」里
+"in-container commands ... cannot reach the host" 对 execute_bash **是假的** ——
+execute_bash 每条命令都到达宿主。Phase 14 绿灯靠的是 `approvalRequiredForBackend`
+的单测,而 execute_bash 永不调用它(CLAUDE.md §5 点名的 **Proxy Signal**)。
+> 边界澄清:execute_bash 非裸奔 —— 宿主路径有 CommandGate(硬拦+危险审批)+
+> scrubEnv 两道真实防御。缺的是容器化隔离那道。docker 容器化真实存在且接线,
+> 但只给了 browser,没给 execute_bash。设计意图本是 execute_bash→docker(network
+> none;doctor.ts:252 "prefer the docker backend";exec-backend default network='none'),
+> 接线遗失。
+
+**browser docker 容器化:8/8 活体验证通过(docker 29.4.3,本机,alpine:3 探针)。**
+用 browser 路径的确切参数向量跑逃逸套件(参数与镜像无关,故用 alpine 替镜像、
+探针替 agent-browser):
+- P1 根只读✓(/etc /root 写失败)  P2 /tmp 可写✓  **P3 /tmp noexec✓(唯一可写目录无法执行代码)**
+- P4 cap-drop ALL✓(`CapEff=0000000000000000`、chown denied)  P5 `NoNewPrivs:1`✓
+- P6 宿主隔离✓(无 /host、hostname=容器id)  P7 inspect✓(ReadonlyRootfs/CapDrop[ALL]/
+  no-new-privileges/PidsLimit256/Memory1g/NanoCpus1/**Binds=<no value>**/Tmpfs noexec 全落实)
+- P8 egress:browser=bridge **能**外联(可外泄,设计取舍;execute_bash=none)
+
+**残留(硬化缺口,非逃逸):** 容器内 `uid=0(root)`,被 cap-drop ALL 阉割(CapEff=0)
+故为零权限 root;加 `--user` 可更稳。
+
+**关账影响:** Phase 14/20 carried "docker exec containment verification (docker inspect)"
+—— **browser 路径已 live-done**。execute_bash 路径不是"待验"而是"未接线",转为待决策
+(A 改声明 / B 接线 docker backend),已有活体证据(地板是实的)。
+
+### B 决定落地:execute_bash 接线 docker backend + network=none 活体验证 (2026-06-13)
+
+承上「execute_bash 容器化未接线」发现,用户拍 B(接线代码对齐声明)。实现(外科手术式):
+- `exec-backend.ts` 新增 `resolveExecBackend()`(EXEC_BACKEND!=docker→'local' 不探测;
+  =docker 且 docker 可达→'docker';=docker 但不可达→**null=fail-closed**)+ `isDockerAvailable()`
+  (缓存 `docker version` 探测)+ `_resetDockerAvailability()` 测试缝。
+- `server.ts` execute_bash 重写:resolveExecBackend→fail-closed 拒绝(绝不静默回退宿主,
+  因 docker 后端绕过 dangerous 审批)→`approvalRequiredForBackend` 决策→docker 走
+  `execFile('docker', buildDockerRunArgs(cmd,{network:'none'}))`、local 走原 `exec`。
+  payload 记 backend;docker 内 dangerous 放行记 `approval_bypassed:true`。
+  类型收窄:`if (!verdict.allowed && (gate.blocked||gate.requiresApproval))`(GateVerdict 判别联合)。
+- **默认 backend=local,行为逐字不变**(EXEC_BACKEND 未设→不探 docker)——3 个原 execute_bash 测试 + 全 gateway 189 测试不破。
+
+**活体验证(走真实代码路径,非手敲参数;docker 29.4.3 本机):**
+`EXEC_BACKEND=docker` → `resolveExecBackend()`=docker✓;真 `buildDockerRunArgs` 的 `--network`=none✓;
+L1 容器内命令照跑✓;**L2 egress 被断**(`wget: bad address` DNS 失败 —— 注:验证脚本正则把错误信息里的
+"telegram" 误判成"reached net",实为 PASS);**L3 网络接口数=1(仅 loopback)= network=none 硬证据**
+(对比 browser bridge 有 eth0、P8 打通了 telegram)。fail-closed 是纯逻辑,单测覆盖未活体。
+
+**Gate:** tsc clean;security.test 18(+1 `resolveExecBackend` 默认 local 不变量);gateway 189 全绿。
+**残留:** execute_bash 默认仍 local —— 生产要容器隔离需显式 `EXEC_BACKEND=docker`(doctor 已提示 prefer docker);
+镜像默认 alpine:3(`EXECUTE_BASH_IMAGE` 可覆盖,但 alpine 缺工具的命令会失败——容器化取舍);
+容器内 uid=0 被 cap-drop 阉割,加 `--user` 可更稳(browser 同此硬化缺口)。ADR-47/Phase-14 措辞现已与代码一致(声明为真)。

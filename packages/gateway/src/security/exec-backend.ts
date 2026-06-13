@@ -10,6 +10,9 @@
  * Containers are labeled for the orphan reaper.
  */
 
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
 export const MEMEX_CONTAINER_LABEL = 'memex.execute_bash';
 
 export interface DockerExecOptions {
@@ -47,6 +50,41 @@ export function buildOrphanListArgs(): string[] {
 }
 
 export type ExecBackendKind = 'local' | 'docker';
+
+/** Cached docker-availability probe (one `docker version` per process). */
+let dockerAvailable: boolean | undefined;
+export async function isDockerAvailable(): Promise<boolean> {
+  if (dockerAvailable !== undefined) return dockerAvailable;
+  try {
+    await promisify(execFile)('docker', ['version', '--format', '{{.Server.Version}}'], {
+      timeout: 5000,
+    });
+    dockerAvailable = true;
+  } catch {
+    dockerAvailable = false;
+  }
+  return dockerAvailable;
+}
+
+/** Test seam: reset the cached probe between cases. */
+export function _resetDockerAvailability(): void {
+  dockerAvailable = undefined;
+}
+
+/**
+ * Resolve the execute_bash backend from EXEC_BACKEND (ADR-47 D-4).
+ *
+ * - unset / not 'docker' → 'local' (host exec, defense-in-depth — unchanged).
+ * - 'docker' + docker reachable → 'docker' (OS-level containment).
+ * - 'docker' + docker UNreachable → null = FAIL-CLOSED. We must NOT silently
+ *   fall back to host exec: the docker backend bypasses dangerous-pattern
+ *   approval (commands can't reach the host), so running on the host instead
+ *   would execute approval-bypassed commands directly on the host.
+ */
+export async function resolveExecBackend(): Promise<ExecBackendKind | null> {
+  if (process.env['EXEC_BACKEND'] !== 'docker') return 'local';
+  return (await isDockerAvailable()) ? 'docker' : null;
+}
 
 /**
  * Pattern-approval bypass rule (ADR-47 D-4): containerized commands skip the

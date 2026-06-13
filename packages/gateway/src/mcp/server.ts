@@ -42,6 +42,11 @@ import { ApprovalService } from '../security/approval.js';
 import { AskUserService } from '../security/ask-user.js';
 import { requestInstall, executeInstall, searchCapabilities } from '../security/acquisition.js';
 import { buildBrowserRunArgs } from '../security/browser-capability.js';
+import {
+  buildDockerRunArgs,
+  approvalRequiredForBackend,
+  resolveExecBackend,
+} from '../security/exec-backend.js';
 
 const SCRUB_KEYS = new Set([
   'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
@@ -468,44 +473,91 @@ export function buildMcpServer(pool: Pool): McpServer {
         const verdict = checkCommand(command);
         const entityId = randomUUID();
 
-        if (!verdict.allowed) {
-          // Write blocked-attempt audit event — failures are first-class graph events
+        // ADR-47 D-4: the backend decides containment. Fail-closed when docker is
+        // requested but unreachable — never silently run on the host, because the
+        // docker backend bypasses dangerous-pattern approval (contained commands
+        // can't reach the host; host exec with that bypass would be catastrophic).
+        const backend = await resolveExecBackend();
+        if (backend === null) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text:
+                  'BLOCKED: EXEC_BACKEND=docker but docker is unreachable. Refusing to fall ' +
+                  'back to host execution (fail-closed). Start docker or unset EXEC_BACKEND.',
+              },
+            ],
+          };
+        }
+
+        const gate = approvalRequiredForBackend(backend, verdict);
+        // (!verdict.allowed narrows the union; gate flags are only set when blocked.)
+        if (!verdict.allowed && (gate.blocked || gate.requiresApproval)) {
+          // Blocked-attempt audit — failures are first-class graph events.
           try {
             await occWrite(pool, {
               scopeId: scope_id,
               entityId,
               predecessorHash: predecessor_hash,
               eventType: 'memory_updated',
-              payload: { command, status: 'blocked', tier: verdict.tier, reason: verdict.reason },
+              payload: { command, status: 'blocked', tier: verdict.tier, reason: verdict.reason, backend },
             });
           } catch {
             // best-effort; must not suppress the block response
           }
-          const msg =
-            verdict.tier === 'hardline'
-              ? `BLOCKED (hardline): ${verdict.reason}. Cannot execute.`
-              : `BLOCKED (requires approval): ${verdict.reason}. Use the graph runtime console to approve.`;
+          const msg = gate.blocked
+            ? `BLOCKED (hardline): ${verdict.reason}. Cannot execute.`
+            : `BLOCKED (requires approval): ${verdict.reason}. Use the graph runtime console to approve.`;
           return { isError: true, content: [{ type: 'text' as const, text: msg }] };
         }
 
+        // A dangerous command reaching here ran CONTAINED (docker bypassed approval
+        // because it cannot reach the host) — mark it in the trail.
+        const ranContained = backend === 'docker' && !verdict.allowed;
+
         try {
-          const execAsync = promisify(exec);
-          const { stdout, stderr } = await execAsync(command, {
-            timeout: 30000,
-            maxBuffer: 512 * 1024,
-            cwd: EXECUTE_BASH_CWD,
-            env: scrubEnv(process.env),
-          });
+          let stdout: string;
+          let stderr: string;
+          if (backend === 'docker') {
+            const execFileAsync = promisify(execFile);
+            const args = buildDockerRunArgs(command, {
+              network: 'none', // execute_bash gets NO egress (contrast: browser=bridge)
+              ...(process.env['EXECUTE_BASH_IMAGE']
+                ? { image: process.env['EXECUTE_BASH_IMAGE'] }
+                : {}),
+            });
+            ({ stdout, stderr } = await execFileAsync('docker', args, {
+              timeout: 35000, // container spin-up + command
+              maxBuffer: 512 * 1024,
+            }));
+          } else {
+            const execAsync = promisify(exec);
+            ({ stdout, stderr } = await execAsync(command, {
+              timeout: 30000,
+              maxBuffer: 512 * 1024,
+              cwd: EXECUTE_BASH_CWD,
+              env: scrubEnv(process.env),
+            }));
+          }
           await occWrite(pool, {
             scopeId: scope_id,
             entityId,
             predecessorHash: predecessor_hash,
             eventType: 'memory_updated',
-            payload: { command, stdout, stderr, exit_code: 0 },
+            payload: {
+              command,
+              stdout,
+              stderr,
+              exit_code: 0,
+              backend,
+              ...(ranContained ? { tier: verdict.tier, approval_bypassed: true } : {}),
+            },
           });
           return {
             content: [
-              { type: 'text' as const, text: JSON.stringify({ stdout, stderr, exit_code: 0 }) },
+              { type: 'text' as const, text: JSON.stringify({ stdout, stderr, exit_code: 0, backend }) },
             ],
           };
         } catch (err) {
@@ -518,7 +570,7 @@ export function buildMcpServer(pool: Pool): McpServer {
                 entityId,
                 predecessorHash: predecessor_hash,
                 eventType: 'memory_updated',
-                payload: { command, stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code },
+                payload: { command, stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code, backend },
               });
             } catch {
               // best-effort
@@ -527,7 +579,7 @@ export function buildMcpServer(pool: Pool): McpServer {
               content: [
                 {
                   type: 'text' as const,
-                  text: JSON.stringify({ stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code }),
+                  text: JSON.stringify({ stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code, backend }),
                 },
               ],
             };
@@ -535,7 +587,7 @@ export function buildMcpServer(pool: Pool): McpServer {
           // Timeout or maxBuffer exceeded
           return {
             isError: true,
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: e.message ?? String(err) }) }],
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: e.message ?? String(err), backend }) }],
           };
         }
       },
