@@ -16,7 +16,9 @@ import { Badge, Icon, IconButton, Input, StatusDot, type IconName } from '@/comp
 
 const NAV: Array<{ href: string; label: string; icon: IconName }> = [
   { href: '/chat', label: 'Chat', icon: 'terminal' },
+  { href: '/sessions', label: 'Sessions', icon: 'clock' },
   { href: '/topology', label: 'Topology', icon: 'git-branch' },
+  { href: '/activity', label: 'Activity', icon: 'activity' },
   { href: '/kernel', label: 'Kernel', icon: 'gauge' },
   { href: '/alerts', label: 'Alerts', icon: 'triangle-alert' },
   { href: '/artifacts', label: 'Artifacts', icon: 'box' },
@@ -25,11 +27,14 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
 
 const TITLES: Record<string, [string, string]> = {
   '/chat': ['Conversation', 'memex terminal · every turn written to the trail'],
+  '/sessions': ['Sessions', 'every scope · conversation replay from the graph'],
   '/topology': ['Causal topology', 'one scope · live projection of the trail'],
+  '/activity': ['Activity', 'trail-mesh analytics · events & scopes'],
   '/kernel': ['Kernel telemetry', 'worker bus · concurrency & backlog'],
   '/alerts': ['Suspended scopes', 'frozen trails awaiting reconciliation'],
   '/artifacts': ['Artifacts', 'content-addressed blobs · scope projection'],
   '/skills': ['Crystallized lessons', 'exported portable skill definitions'],
+  '/settings': ['Settings', 'active configuration · read-only projection'],
 };
 
 const POLL: Record<string, string> = {
@@ -87,9 +92,11 @@ function Ribbon({ health, error }: { health: HealthResponse | null; error: boole
           <span style={{ color: 'var(--text-muted)' }}>slots </span>
           {health?.slots !== undefined ? `${activeSlots}/${maxSlots}` : '—'}
         </span>
-        <IconButton variant="ghost" aria-label="Settings">
-          <Icon name="settings" />
-        </IconButton>
+        <Link href="/settings" aria-label="Settings" style={{ display: 'inline-flex' }}>
+          <IconButton variant="ghost" aria-label="Settings">
+            <Icon name="settings" />
+          </IconButton>
+        </Link>
       </span>
     </header>
   );

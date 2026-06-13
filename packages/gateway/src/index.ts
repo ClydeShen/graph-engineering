@@ -41,6 +41,7 @@ import {
   type LLMProvider,
 } from '@graph/shared';
 import { buildChatRoute } from './routes/chat.js';
+import { buildSysConfigRoute } from './routes/sys.js';
 import { createDdlPool } from '@graph/control-plane/db/ddl-pool';
 import { logger } from '@shared/logger';
 import {
@@ -101,6 +102,7 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1/scopes', buildChatRoute(pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider));
   app.route('/v1/scopes', buildScopeReadRoute(pool, wMax));
   app.route('/v1', buildHealthRoute(pool));
+  app.route('/v1', buildSysConfigRoute());
   app.route('/v1', buildTopologyRoute(pool));
   app.route('/v1', buildMemoryRoute(pool, gatewayEmbeddingProvider));
   app.route('/v1', buildStreamRoute(pool));

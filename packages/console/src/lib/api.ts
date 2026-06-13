@@ -63,6 +63,44 @@ export interface ArtifactMeta {
   erased_at: string | null;
 }
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  at: string;
+}
+
+export interface ActivityMetrics {
+  by_type: Array<{ event_type: string; count: number }>;
+  by_day: Array<{ day: string; count: number }>;
+  scopes: Array<{ status: string; count: number }>;
+  totals: { events: number; scopes: number };
+}
+
+export interface SysConfig {
+  config_path: string;
+  profile: string | null;
+  config_present: boolean;
+  gateway: { port: number | null; websocket: boolean; token_set: boolean };
+  providers: Array<{
+    name: string;
+    display_name: string;
+    model: string;
+    priority: number;
+    base_url: string | null;
+    api: string;
+    local: boolean;
+    supports_embedding: boolean;
+    api_key: string;
+  }>;
+  embedding: {
+    configured: boolean;
+    source: string | null;
+    base_url: string | null;
+    model: string | null;
+  };
+  channels: Array<{ platform: string; configured: boolean; home_channel: string | null }>;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
@@ -77,4 +115,8 @@ export const api = {
   suspended: () => getJson<SuspendedScope[]>('/v1/scopes/audit/suspended'),
   artifacts: (scopeId: string) => getJson<ArtifactMeta[]>(`/v1/scopes/${encodeURIComponent(scopeId)}/artifacts`),
   artifactUrl: (hash: string) => `/v1/artifacts/${hash}`,
+  messages: (scopeId: string) =>
+    getJson<{ messages: ConversationMessage[] }>(`/v1/scopes/${encodeURIComponent(scopeId)}/messages`),
+  activity: () => getJson<ActivityMetrics>('/v1/metrics/activity'),
+  sysConfig: () => getJson<SysConfig>('/v1/sys/config'),
 };

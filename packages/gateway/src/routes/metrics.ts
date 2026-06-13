@@ -5,6 +5,7 @@
  *
  *   GET /v1/metrics/infra            — point-in-time infra gauge (poll 2s)
  *   GET /v1/scopes/audit/suspended   — suspended scope cards (poll 5s)
+ *   GET /v1/metrics/activity         — trail activity aggregation (Activity page)
  */
 
 import { Hono } from 'hono';
@@ -38,6 +39,55 @@ export function buildMetricsRoute(pool: Pool): Hono {
       });
     } catch {
       return c.json({ error: 'metrics unavailable' }, 503);
+    }
+  });
+
+  /**
+   * GET /v1/metrics/activity — trail activity aggregation for the Activity page.
+   * Projection over execution_event_log (the Trail Mesh), not a separate ledger:
+   *   by_type    total events per event_type (all time)
+   *   by_day     daily event counts for the last 14 days (UTC)
+   *   scopes     live / suspended / closed counts from scope_lineage
+   *   totals     events, scopes
+   * Read-only; erased events (ADR-47) excluded from counts.
+   */
+  app.get('/metrics/activity', async (c) => {
+    try {
+      const [byType, byDay, scopeStatus, totals] = await Promise.all([
+        pool.query<{ event_type: string; n: string }>(
+          `SELECT event_type, COUNT(*)::text AS n
+           FROM execution_event_log
+           WHERE erased_at IS NULL
+           GROUP BY event_type
+           ORDER BY COUNT(*) DESC`,
+        ),
+        pool.query<{ day: string; n: string }>(
+          `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+                  COUNT(*)::text AS n
+           FROM execution_event_log
+           WHERE erased_at IS NULL AND created_at > now() - interval '14 days'
+           GROUP BY 1 ORDER BY 1`,
+        ),
+        pool.query<{ status: string; n: string }>(
+          `SELECT status, COUNT(*)::text AS n FROM scope_lineage GROUP BY status`,
+        ),
+        pool.query<{ events: string; scopes: string }>(
+          `SELECT
+             (SELECT COUNT(*) FROM execution_event_log WHERE erased_at IS NULL)::text AS events,
+             (SELECT COUNT(*) FROM scope_lineage)::text AS scopes`,
+        ),
+      ]);
+      return c.json({
+        by_type: byType.rows.map((r) => ({ event_type: r.event_type, count: Number(r.n) })),
+        by_day: byDay.rows.map((r) => ({ day: r.day, count: Number(r.n) })),
+        scopes: scopeStatus.rows.map((r) => ({ status: r.status, count: Number(r.n) })),
+        totals: {
+          events: Number(totals.rows[0]?.events ?? 0),
+          scopes: Number(totals.rows[0]?.scopes ?? 0),
+        },
+      });
+    } catch {
+      return c.json({ error: 'activity unavailable' }, 503);
     }
   });
 

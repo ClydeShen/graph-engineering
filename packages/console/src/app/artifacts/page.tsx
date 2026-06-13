@@ -5,7 +5,7 @@
  * list a scope's artifacts, preview markdown/code/html inline, link binaries.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type ArtifactMeta } from '@/lib/api';
 import { ScopePicker } from '@/components/ScopePicker';
 import { Badge, Button, Icon, Input, Panel, Tag } from '@/components/ds';
@@ -17,6 +17,19 @@ export default function ArtifactsPage() {
   const [status, setStatus] = useState<string | null>(null);
 
   const load = async (scopeId: string) => {
+    void loadImpl(scopeId);
+  };
+
+  // Deep link from Sessions: /artifacts?scope=<id> pre-loads the scope.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('scope');
+    if (q !== null && q.length > 0) {
+      setInput(q);
+      void loadImpl(q);
+    }
+  }, []);
+
+  const loadImpl = async (scopeId: string) => {
     try {
       const list = await api.artifacts(scopeId);
       setItems(list);

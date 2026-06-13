@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopologyCanvas } from '@/components/TopologyCanvas';
 import { ScopePicker } from '@/components/ScopePicker';
 import { Button, Icon, Input } from '@/components/ds';
@@ -8,6 +8,15 @@ import { Button, Icon, Input } from '@/components/ds';
 export default function TopologyPage() {
   const [input, setInput] = useState('');
   const [scopeId, setScopeId] = useState('');
+
+  // Deep link from the Sessions page: /topology?scope=<id> pre-loads the scope.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('scope');
+    if (q !== null && q.length > 0) {
+      setInput(q);
+      setScopeId(q);
+    }
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', height: '100%' }}>
