@@ -42,7 +42,7 @@
 | 外部安装/预装技能 | **Skills**（住 Plugins 页） | 用户可随时增删改，不影响系统运行 |
 | Artifacts | **Workspace** | 功能待详设（§8） |
 | Sessions | **History** | 过去派过的任务，可回放 |
-| suspended scope | 🔔 **Notification** | 红徽标 + 右侧抽屉（Azure 式） |
+| suspended scope | （无独立面）| 健康条 `suspended_count` 徽标 + Now 节点 rust 色。见 §5 注 |
 | Kernel / worker bus | **System** | 健康条点开的进阶视图 |
 
 > ⚠️ 名词迁移：`Skills` 从此**专指**外部可插拔技能；系统自学的东西改叫 `Emergence`。引擎内部仍叫 `Lesson` / crystallization。
@@ -70,8 +70,10 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 
 **删除 / 降级：**
 - 左栏 **"Scopes" 列表 → 整个删掉**（对人类无意义）
-- **Alerts → 🔔 Notification 徽标 + 右抽屉**（不占顶层导航）
+- **Alerts / Notification → 整页删掉（奥卡姆）**，连同 `/alerts` 页一并移除。理由见下注
 - **Kernel → System**（健康条点开，进阶）
+
+> **为什么没有 Notification 面（2026-06-13 收口）：** 现有 `/alerts` 页核查后是**纯只读**的 suspended-scope 列表，零操作。而 `suspended` 在机制上是 Convergence Watchdog 的 OOM 降级故障（ADR-0024），**没有解挂写路径**——console 对它也无可操作。系统真正"问用户、等回答"的交互全发生在 **channel / terminal**（对话面），不在 console。故 console 不需要任何"通知你去操作"的面。崩溃信号已由两处覆盖：① 健康条 `suspended_count` 徽标（`Shell.tsx` 已有）；② Now 宇宙里 suspended 节点显 rust 色（§6），点入 L3 看原因/`frozen_at`。奥卡姆剃刀：删独立面，删 `/alerts`。恢复机制（解挂/重驱）是独立引擎待办，等 suspended 被证实常见到值得建时再议。
 
 ---
 
@@ -157,7 +159,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 - 森林顶部那行字具体说什么、吃什么数据
 - **Emergence**：机器学的东西怎么翻成人能懂（diagram / 文字 / 其他）
 - **Plugins** 页：技能列表 + 增删改 + onboarding 接线
-- **Notification** 右抽屉（Azure 式）的内容与交互
+- ~~**Notification** 右抽屉~~ —— **已收口删除**（§5 注：奥卡姆删独立面 + 删 `/alerts`）
 - **Overview 首屏自身仍带黑话**（"Total scopes"、event_type 原串、"trail mesh"）——按"去黑话"前提它也该翻译
 - **Workspace** 页功能（用户明确：之后再说）
 - **System**（Kernel）进阶视图的取舍
@@ -209,7 +211,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 |---|---|---|---|
 | active/生长中 | `--glacier-500` | "在动脑" | 脉动光环 + 实心圆 |
 | converged/健康 | `--moss-500` | "干得好" | 稳定光晕 + 对勾微章 |
-| suspended/卡住 | `--rust-500` | "需要你" | 显著脉冲 + 感叹环（**具体交互形态待 Notification 讨论**）|
+| suspended/崩了 | `--rust-500` | "撞墙了" | 显著脉冲 + 感叹环（仅 Now 节点视觉；无独立通知面，§5 注）|
 | closed/完成 | `--ink-400` | "归档" | 暗淡 + 无脉动 |
 
 **需补的 token（零风险地基，无页面改动）**
@@ -230,7 +232,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | 边建立 | `linkDirectionalParticles` 沿枝流动（§6.5 已定）|
 | `memory_updated` | 节点莫斯绿一闪（crossfade 200ms）|
 | `scope_closed` | 收束脉冲 → 节点沉降变暗 |
-| `suspended` | 切换到显著脉冲状态（**视觉细节随 Notification 讨论定**）|
+| `suspended` | 节点切 rust 色 + 显著脉冲（崩溃态；无独立通知面，§5 注）|
 
 **② 缩放手感（像宇宙模拟游戏，非阶跃切页）**
 
@@ -258,7 +260,7 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | **Overview（首屏）** | 改"指挥中心"：今天派了几个活 / 在跑 / 等你 / 系统学到几条；空数据 = 邀请卡「派个活儿，看它长起来」+ 种子演示（规则 `empty-states` / `empty-data-state`）| 采纳 |
 | **History** | 每条带状态色 + 一句话结果；点开可在 Now 重播那棵树的生长 | 采纳 |
 | **加载** | 所有 > 300ms 用骨架/微光，不用空轴或转圈（规则 `progressive-loading` / `loading-chart`）| 采纳 |
-| **Notification** | 形态待讨论（§9 开放项），**不预设信标方案** | 待讨论 |
+| **Notification** | **已删**（§5 注：suspended 是无操作的系统故障，信号收敛到健康条徽标 + Now 节点色）| 删除 |
 | **Emergence** | 翻译形态待讨论（§9 开放项），**不预设解锁流方案** | 待讨论 |
 
 ### B.5 无障碍守门（CRITICAL，先于美观）
