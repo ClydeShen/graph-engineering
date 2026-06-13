@@ -63,6 +63,53 @@ export interface ArtifactMeta {
   erased_at: string | null;
 }
 
+export interface ForestTask {
+  scope_id: string;
+  intent: string | null;
+  status: string;
+  created_at: string;
+  descendants: number;
+}
+
+export interface ForestGalaxy {
+  channel: string;
+  tasks: ForestTask[];
+  status_counts: Record<string, number>;
+}
+
+export interface ForestResponse {
+  galaxies: ForestGalaxy[];
+  total_roots: number;
+}
+
+export interface LineageNode {
+  scope_id: string;
+  parent_scope_id: string | null;
+  depth: number;
+  intent: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface LineageResponse {
+  root: string;
+  nodes: LineageNode[];
+}
+
+export interface EmergenceLesson {
+  id: string;
+  content: string | null;
+  intent: string | null;
+  confidence: number;
+  reinforcement_count: number;
+  last_used_at: string;
+  created_at: string;
+}
+
+export interface EmergenceResponse {
+  lessons: EmergenceLesson[];
+}
+
 export interface ConversationMessage {
   role: 'user' | 'assistant';
   text: string;
@@ -118,5 +165,10 @@ export const api = {
   messages: (scopeId: string) =>
     getJson<{ messages: ConversationMessage[] }>(`/v1/scopes/${encodeURIComponent(scopeId)}/messages`),
   activity: () => getJson<ActivityMetrics>('/v1/metrics/activity'),
+  forest: () => getJson<ForestResponse>('/v1/forest'),
+  lineage: (scopeId: string) =>
+    getJson<LineageResponse>(`/v1/scopes/${encodeURIComponent(scopeId)}/lineage`),
+  emergence: (limit = 100) => getJson<EmergenceResponse>(`/v1/emergence?limit=${limit}`),
+  allArtifacts: (limit = 200) => getJson<ArtifactMeta[]>(`/v1/artifacts?limit=${limit}`),
   sysConfig: () => getJson<SysConfig>('/v1/sys/config'),
 };

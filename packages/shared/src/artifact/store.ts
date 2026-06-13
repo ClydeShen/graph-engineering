@@ -97,6 +97,20 @@ export async function listArtifacts(pool: Pool, scopeId: string): Promise<Artifa
   return res.rows;
 }
 
+/** All artifacts across every scope (global Workspace list; newest first).
+ *  CONSOLE-REDESIGN §11 — the per-project grouping is applied in the projection
+ *  layer once the project/cwd dimension lands; this is the flat global feed. */
+export async function listAllArtifacts(pool: Pool, limit = 200): Promise<ArtifactMeta[]> {
+  const res = await pool.query<ArtifactMeta>(
+    `SELECT content_hash, scope_id, entity_id, kind, media_type,
+            byte_size::int AS byte_size, label,
+            created_at::text AS created_at, erased_at::text AS erased_at
+     FROM artifact ORDER BY created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return res.rows;
+}
+
 /** Metadata for one artifact hash (any provenance row, prefer non-erased). */
 export async function getArtifactMeta(pool: Pool, contentHash: string): Promise<ArtifactMeta | null> {
   const res = await pool.query<ArtifactMeta>(

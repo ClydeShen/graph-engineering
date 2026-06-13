@@ -20,6 +20,8 @@ import { Pool } from 'pg';
 import { buildScopesRoute } from './routes/scopes.js';
 import { buildEventsRoute } from './routes/events.js';
 import { buildScopeReadRoute } from './routes/scope-read.js';
+import { buildForestRoute } from './routes/forest.js';
+import { buildEmergenceRoute } from './routes/emergence.js';
 import { buildHealthRoute } from './routes/health.js';
 import { buildTopologyRoute } from './routes/topology.js';
 import { buildMemoryRoute } from './routes/memory.js';
@@ -106,6 +108,8 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   app.route('/v1', buildTopologyRoute(pool));
   app.route('/v1', buildMemoryRoute(pool, gatewayEmbeddingProvider));
   app.route('/v1', buildStreamRoute(pool));
+  app.route('/v1', buildForestRoute(pool));
+  app.route('/v1', buildEmergenceRoute(pool));
   app.route('/v1', buildSkillsRoute());
   app.route('/v1', buildArtifactsRoute(pool));
   app.route('/v1', buildMetricsRoute(pool));

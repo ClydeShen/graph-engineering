@@ -9,13 +9,26 @@
 
 import { Hono } from 'hono';
 import type { Pool } from 'pg';
-import { getArtifactMeta, listArtifacts, readArtifactContent } from '@graph/shared';
+import { getArtifactMeta, listArtifacts, listAllArtifacts, readArtifactContent } from '@graph/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH_RE = /^[0-9a-f]{64}$/;
 
 export function buildArtifactsRoute(pool: Pool): Hono {
   const app = new Hono();
+
+  // Global deliverables list (CONSOLE-REDESIGN §11 Workspace). Distinct path
+  // depth from /artifacts/:hash, so registration order doesn't matter.
+  app.get('/artifacts', async (c) => {
+    const rawLimit = Number(c.req.query('limit') ?? 200);
+    const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 200;
+    try {
+      return c.json(await listAllArtifacts(pool, limit));
+    } catch {
+      // migration 018 absent — an empty system has no artifacts
+      return c.json([]);
+    }
+  });
 
   app.get('/scopes/:id/artifacts', async (c) => {
     const id = c.req.param('id');
