@@ -47,3 +47,4 @@ data/
 packages/console/.next/
 packages/console/next-env.d.ts
 service-files/
+.harness/shots/

@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, type SuspendedScope } from '@/lib/api';
+import { Badge, Panel, StatusDot } from '@/components/ds';
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<SuspendedScope[]>([]);
@@ -31,20 +32,33 @@ export default function AlertsPage() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-gray-100">Suspended scopes</h1>
-      {error !== null && <p className="text-danger">{error}</p>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)' }}>
+      {error !== null ? <Badge tone="danger">{error}</Badge> : null}
       {alerts.length === 0 ? (
-        <p className="text-ok">none — all scopes healthy</p>
+        <StatusDot tone="ok" live>none — all scopes healthy</StatusDot>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--gutter)' }}>
           {alerts.map((a) => (
-            <div key={a.scope_id} className="border border-danger rounded bg-panel p-3 space-y-1">
-              <p className="text-danger break-all">{a.scope_id}</p>
-              <p>reason: {a.error_reason}</p>
-              <p>frozen: {a.frozen_at ?? '—'}</p>
-              <p>unconverged nodes: {a.unconverged_nodes_count}</p>
-            </div>
+            <Panel
+              key={a.scope_id}
+              variant="raised"
+              corners
+              eyebrow="Suspended scope"
+              actions={<Badge tone="danger" dot>frozen</Badge>}
+              title={a.scope_id.slice(0, 8)}
+              style={{ borderColor: 'var(--rust-600)' }}
+            >
+              <dl style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                <dt className="ds-label">scope_id</dt>
+                <dd style={{ wordBreak: 'break-all', color: 'var(--text-primary)' }}>{a.scope_id}</dd>
+                <dt className="ds-label">reason</dt>
+                <dd style={{ color: 'var(--rust-400)' }}>{a.error_reason}</dd>
+                <dt className="ds-label">frozen at</dt>
+                <dd>{a.frozen_at ?? '—'}</dd>
+                <dt className="ds-label">unconverged nodes</dt>
+                <dd>{a.unconverged_nodes_count}</dd>
+              </dl>
+            </Panel>
           ))}
         </div>
       )}

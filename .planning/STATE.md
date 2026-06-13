@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-06-12T02:50:57.471Z"
+last_updated: "2026-06-13T01:10:03.453Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -21,7 +21,9 @@ OAuthClientProvider, `memex mcp` CLI family, Claude Code / Hermes config
 compatibility. Builds on Phase 6 McpClientWorker + Phase 16 skills-guard.
 Phases 18–20 added 2026-06-12 (scenario-driven arc): 18 first-run-experience
 (WSL2 live install + onboarding expansion + capability presets w/ meta-skills
+
 + live-leftovers), 19 console-and-artifacts (artifact graph convention +
+
 UI-SPEC Console), 20 autonomous-assistant (agent self-install via approval,
 ask_user tool, credential vault, sandboxed browser capability —
 implementation-agnostic, bound via capability presets; tennis-court

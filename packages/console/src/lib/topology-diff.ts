@@ -31,13 +31,13 @@ export function diffTopology(
   return { addedNodes, addedEdges, unchanged: addedNodes.length === 0 && addedEdges.length === 0 };
 }
 
-/** UI-SPEC node color map (event_type → fill). */
+/** UI-SPEC node color map (event_type → fill), aligned to --node-* tokens. */
 export const NODE_COLOR_MAP: Record<string, string> = {
-  task_spawned: '#4A9EFF',
-  tool_invoked: '#7C5CFC',
-  memory_updated: '#3DD68C',
-  context_oom_throttled: '#FF4D4F',
-  scope_closed: '#888888',
+  task_spawned: 'oklch(0.650 0.052 230)', // --node-task / glacier-500
+  tool_invoked: 'oklch(0.585 0.062 332)', // --node-tool / mauve-500
+  memory_updated: 'oklch(0.640 0.072 136)', // --node-memory / moss-500
+  context_oom_throttled: 'oklch(0.595 0.135 40)', // --node-throttled / rust-500
+  scope_closed: 'oklch(0.640 0.015 78)', // --node-closed / ink-400
 };
 
-export const nodeColor = (eventType: string): string => NODE_COLOR_MAP[eventType] ?? '#555555';
+export const nodeColor = (eventType: string): string => NODE_COLOR_MAP[eventType] ?? 'oklch(0.470 0.014 76)'; // ink-500

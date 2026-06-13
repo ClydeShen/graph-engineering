@@ -1,0 +1,85 @@
+/* ============================================================
+   Spacing, radii, borders, motion — Memex
+   A precise 4px instrument grid. Corners stay crisp — these are
+   etched metal panels, not soft cards. Radii are restrained.
+   ============================================================ */
+
+:root {
+  /* spacing scale — 4px base grid */
+  --space-0:  0;
+  --space-px: 1px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+  --space-10: 128px;
+  --space-11: 192px;
+
+  /* semantic spacing */
+  --gutter:       var(--space-5);   /* gap between panels        */
+  --panel-pad:    var(--space-5);   /* interior panel padding    */
+  --panel-pad-sm: var(--space-4);
+  --stack:        var(--space-3);   /* vertical rhythm           */
+  --inline:       var(--space-2);   /* inline element gap        */
+  --field-pad-x:  var(--space-3);
+  --field-pad-y:  var(--space-2);
+
+  /* radii — crisp instruments, minimal rounding */
+  --radius-none: 0;
+  --radius-xs:   2px;
+  --radius-sm:   3px;
+  --radius-md:   5px;   /* default card / panel                 */
+  --radius-lg:   8px;
+  --radius-pill: 999px;
+
+  /* borders */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+  --hairline: var(--border-width) solid var(--border-hairline);
+  --rule:     var(--border-width) solid var(--border-default);
+
+  /* elevation — matte, analog. Engraving over float. */
+  --shadow-engrave:
+    inset 0 1px 0 oklch(0.935 0.020 86 / 0.04),
+    inset 0 -1px 0 oklch(0.145 0.008 70 / 0.45);
+  --shadow-inset:
+    inset 0 2px 6px oklch(0.13 0.008 70 / 0.55);
+  --shadow-panel:
+    0 1px 2px oklch(0.10 0.006 70 / 0.5),
+    0 2px 8px oklch(0.10 0.006 70 / 0.3);
+  --shadow-raised:
+    0 12px 32px -10px oklch(0.08 0.006 70 / 0.7),
+    0 2px 6px oklch(0.08 0.006 70 / 0.4);
+  --shadow-popover:
+    0 18px 48px -12px oklch(0.06 0.006 70 / 0.78);
+
+  /* signal glow — used sparingly for live indicators */
+  --glow-signal: 0 0 0 1px var(--signal-bg), 0 0 12px -2px var(--brass-500);
+  --glow-ok:     0 0 10px -2px var(--moss-500);
+  --glow-danger: 0 0 12px -2px var(--rust-500);
+
+  /* motion — slow, deliberate, observatory-calm */
+  --ease-standard: cubic-bezier(0.32, 0.08, 0.24, 1);
+  --ease-out:      cubic-bezier(0.16, 0.84, 0.32, 1);
+  --ease-in:       cubic-bezier(0.6, 0, 0.85, 0.5);
+  --dur-instant: 90ms;
+  --dur-fast:    160ms;
+  --dur-base:    260ms;
+  --dur-slow:    420ms;
+  --dur-drift:   900ms;  /* ambient telemetry sweeps */
+
+  /* layout */
+  --ribbon-h:  44px;
+  --rail-w:    232px;
+  --content-max: 1440px;
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-popover: 1000;
+  --z-modal: 2000;
+}

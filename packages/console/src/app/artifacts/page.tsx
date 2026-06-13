@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { api, type ArtifactMeta } from '@/lib/api';
 import { ScopePicker } from '@/components/ScopePicker';
+import { Badge, Button, Icon, Input, Panel, Tag } from '@/components/ds';
 
 export default function ArtifactsPage() {
   const [input, setInput] = useState('');
@@ -40,9 +41,9 @@ export default function ArtifactsPage() {
   };
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', height: '100%' }}>
       <form
-        className="flex gap-2"
+        style={{ display: 'flex', gap: 'var(--space-2)' }}
         onSubmit={(e) => {
           e.preventDefault();
           void load(input.trim());
@@ -54,52 +55,62 @@ export default function ArtifactsPage() {
             void load(id);
           }}
         />
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="scope_id (uuid)"
-          className="flex-1 bg-panel border border-line rounded px-3 py-1.5 outline-none focus:border-accent"
-        />
-        <button type="submit" className="px-4 py-1.5 bg-line rounded hover:bg-accent hover:text-black">
+        <div style={{ flex: 1 }}>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="scope_id (uuid)"
+          />
+        </div>
+        <Button type="submit" variant="primary" iconRight={<Icon name="arrow-right" size={15} />}>
           Load
-        </button>
+        </Button>
       </form>
-      {status !== null && <p className="text-gray-500">{status}</p>}
-      <div className="flex gap-4">
-        <ul className="w-96 shrink-0 space-y-2">
-          {items.map((a) => (
-            <li key={`${a.content_hash}-${a.scope_id}`}>
-              <button
-                onClick={() => void open(a)}
-                className={`w-full text-left border border-line rounded bg-panel p-2 hover:border-accent ${
-                  a.erased_at !== null ? 'opacity-50' : ''
-                }`}
-              >
-                <span className="text-gray-100">{a.label || a.content_hash.slice(0, 12)}</span>
-                <span className="block text-xs text-gray-500">
-                  {a.kind} · {a.byte_size} B · {a.created_at.slice(0, 19)}
-                  {a.erased_at !== null ? ' · ERASED' : ''}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex-1 border border-line rounded bg-panel p-3 overflow-auto min-h-64">
+      {status !== null ? <p className="ds-label">{status}</p> : null}
+      <div style={{ display: 'flex', gap: 'var(--gutter)', flex: 1, minHeight: 0 }}>
+        <Panel noBody style={{ width: 360, flexShrink: 0, overflow: 'auto' }}>
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--panel-pad)', margin: 0, listStyle: 'none' }}>
+            {items.map((a) => (
+              <li key={`${a.content_hash}-${a.scope_id}`}>
+                <button
+                  onClick={() => void open(a)}
+                  className="mx-btn"
+                  style={{
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 6,
+                    opacity: a.erased_at !== null ? 0.55 : 1,
+                  }}
+                >
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{a.label || a.content_hash.slice(0, 12)}</span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Tag>{a.kind}</Tag>
+                    <span className="ds-label">{a.byte_size} B · {a.created_at.slice(0, 19)}</span>
+                    {a.erased_at !== null ? <Badge tone="danger">erased</Badge> : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+        <Panel eyebrow="Preview" title={preview?.meta.label || preview?.meta.content_hash.slice(0, 12) || 'Artifact'} style={{ flex: 1, overflow: 'auto' }}>
           {preview === null ? (
-            <p className="text-gray-500">select an artifact</p>
+            <p className="ds-label">select an artifact</p>
           ) : preview.text !== null ? (
-            <pre className="whitespace-pre-wrap break-all text-xs">{preview.text}</pre>
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', margin: 0 }}>{preview.text}</pre>
           ) : (
             <a
               href={api.artifactUrl(preview.meta.content_hash)}
               target="_blank"
               rel="noreferrer"
-              className="text-accent underline"
+              style={{ color: 'var(--signal)' }}
             >
               open {preview.meta.media_type} ({preview.meta.byte_size} bytes)
             </a>
           )}
-        </div>
+        </Panel>
       </div>
     </div>
   );

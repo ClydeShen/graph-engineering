@@ -1,0 +1,113 @@
+/* ============================================================
+   Materials — Memex
+   The physical surface of the observatory: film grain, brushed
+   metal sheen, etched hairlines, dust. Procedural textures only
+   (SVG noise as data URI) — no raster assets required.
+   Also: base reset + body so any page linking this stylesheet
+   inherits the atmosphere.
+   ============================================================ */
+
+:root {
+  /* fine film grain — overlay at low opacity on the page base */
+  --texture-grain:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+
+  /* coarser dust for large fields */
+  --texture-dust:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.016' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23d)' opacity='0.6'/%3E%3C/svg%3E");
+
+  /* brushed-metal panel sheen — a faint top-lit vertical gradient */
+  --sheen-panel: linear-gradient(
+    180deg,
+    oklch(0.935 0.020 86 / 0.035) 0%,
+    oklch(0.935 0.020 86 / 0) 14%,
+    oklch(0.145 0.008 70 / 0) 86%,
+    oklch(0.145 0.008 70 / 0.22) 100%
+  );
+
+  /* atmospheric vignette for full-bleed observatory fields */
+  --vignette: radial-gradient(
+    120% 90% at 50% 0%,
+    oklch(0.27 0.013 74 / 0.55) 0%,
+    oklch(0.185 0.009 72 / 0) 55%
+  );
+
+  /* grid blueprint — faint plotting graticule for canvases */
+  --graticule:
+    linear-gradient(oklch(0.380 0.013 75 / 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.380 0.013 75 / 0.08) 1px, transparent 1px);
+  --graticule-size: 32px 32px;
+}
+
+/* ---- utility classes ---- */
+.ds-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--texture-grain);
+  background-size: 160px 160px;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.ds-panel {
+  background-color: var(--surface-panel);
+  background-image: var(--sheen-panel);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel), var(--shadow-engrave);
+}
+
+.ds-graticule {
+  background-image: var(--graticule);
+  background-size: var(--graticule-size);
+}
+
+/* ============================================================
+   Base reset + atmosphere
+   ============================================================ */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--bg-base);
+  background-image: var(--vignette);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font: var(--type-body);
+  font-feature-settings: "ss01", "cv05";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--signal-bg);
+  color: var(--bone-pure);
+}
+
+/* etched scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-600) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--ink-600);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-pill);
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-500); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

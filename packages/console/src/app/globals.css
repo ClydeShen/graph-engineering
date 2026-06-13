@@ -1,7 +1,9 @@
+@import '../styles/tokens/colors.css';
+@import '../styles/tokens/typography.css';
+@import '../styles/tokens/spacing.css';
+@import '../styles/tokens/materials.css';
+@import '../styles/ds-components.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-body {
-  @apply bg-surface text-gray-300 font-mono text-sm;
-}

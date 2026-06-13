@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, type ScopeSummary } from '@/lib/api';
+import { Select } from '@/components/ds';
 
 export function ScopePicker({ onPick }: { onPick: (scopeId: string) => void }) {
   const [scopes, setScopes] = useState<ScopeSummary[]>([]);
@@ -23,12 +24,12 @@ export function ScopePicker({ onPick }: { onPick: (scopeId: string) => void }) {
   if (error || scopes.length === 0) return null;
 
   return (
-    <select
+    <Select
       value=""
       onChange={(e) => {
         if (e.target.value.length > 0) onPick(e.target.value);
       }}
-      className="bg-panel border border-line rounded px-2 py-1.5 max-w-72 outline-none focus:border-accent text-gray-300"
+      style={{ maxWidth: 280 }}
     >
       <option value="">recent scopes…</option>
       {scopes.map((s) => (
@@ -37,6 +38,6 @@ export function ScopePicker({ onPick }: { onPick: (scopeId: string) => void }) {
           {s.status}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

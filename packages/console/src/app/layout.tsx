@@ -1,7 +1,25 @@
 import type { Metadata } from 'next';
+import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from 'next/font/google';
 import './globals.css';
-import { StatusRibbon } from '@/components/StatusRibbon';
-import { Nav } from '@/components/Nav';
+import { Shell } from '@/components/Shell';
+
+const grotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-grotesk',
+});
+
+const plexSans = IBM_Plex_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-plex-sans',
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-plex-mono',
+});
 
 export const metadata: Metadata = {
   title: 'MemexOS Console',
@@ -10,13 +28,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${grotesk.variable} ${plexSans.variable} ${plexMono.variable}`}>
       <body>
-        <StatusRibbon />
-        <div className="flex">
-          <Nav />
-          <main className="flex-1 p-4 min-h-screen">{children}</main>
-        </div>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );

@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Panel } from '@/components/ds';
 
 interface SkillRow {
   fingerprintId: string;
@@ -48,30 +49,32 @@ export default function SkillsPage() {
   };
 
   return (
-    <div className="space-y-3">
-      <h1 className="text-gray-100">Skills</h1>
-      {status !== null && <p className="text-gray-500">{status}</p>}
-      <div className="flex gap-4">
-        <ul className="w-96 shrink-0 space-y-2">
-          {skills.map((s) => (
-            <li key={s.fingerprintId}>
-              <button
-                onClick={() => void open(s)}
-                className="w-full text-left border border-line rounded bg-panel p-2 hover:border-accent"
-              >
-                <span className="text-gray-100">{s.name}</span>
-                <span className="block text-xs text-gray-500">{s.description}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex-1 border border-line rounded bg-panel p-3 overflow-auto min-h-64">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', height: '100%' }}>
+      {status !== null ? <p className="ds-label">{status}</p> : null}
+      <div style={{ display: 'flex', gap: 'var(--gutter)', flex: 1, minHeight: 0 }}>
+        <Panel noBody style={{ width: 360, flexShrink: 0, overflow: 'auto' }}>
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--panel-pad)', margin: 0, listStyle: 'none' }}>
+            {skills.map((s) => (
+              <li key={s.fingerprintId}>
+                <button
+                  onClick={() => void open(s)}
+                  className="mx-btn"
+                  style={{ width: '100%', justifyContent: 'flex-start', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}
+                >
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{s.name}</span>
+                  <span className="ds-label" style={{ textTransform: 'none', letterSpacing: 'var(--tracking-normal)' }}>{s.description}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+        <Panel eyebrow="Crystallized lesson" title={body?.name ?? 'SKILL.md'} style={{ flex: 1, overflow: 'auto' }}>
           {body === null ? (
-            <p className="text-gray-500">select a skill to load its SKILL.md (two-phase loading)</p>
+            <p className="ds-label">select a skill to load its SKILL.md (two-phase loading)</p>
           ) : (
-            <pre className="whitespace-pre-wrap break-all text-xs">{body.text}</pre>
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', margin: 0 }}>{body.text}</pre>
           )}
-        </div>
+        </Panel>
       </div>
     </div>
   );

@@ -1,0 +1,118 @@
+/* ============================================================
+   Colors — Memex
+   A weathered observatory palette: warm near-black inks rising
+   to bone parchment, with muted enamel accents — aged brass,
+   moss, rust, glacier blue, patina copper. No pure black, no
+   pure white, no neon. Every hue is desaturated as if seen
+   through dust and time.
+   Defined in oklch for perceptual evenness.
+   ============================================================ */
+
+:root {
+  /* ---- Ink scale : warm near-black -> bone parchment ---- */
+  --ink-1000: oklch(0.145 0.008 70);  /* deepest void / page base   #131109 */
+  --ink-900:  oklch(0.185 0.009 72);  /* base surface               #1b1812 */
+  --ink-850:  oklch(0.215 0.010 72);  /* panel                      #221e17 */
+  --ink-800:  oklch(0.250 0.011 73);  /* raised panel               #2a251d */
+  --ink-700:  oklch(0.305 0.012 74);  /* hairline / sunken edge     #362f25 */
+  --ink-600:  oklch(0.380 0.013 75);  /* strong border              #463d30 */
+  --ink-500:  oklch(0.470 0.014 76);  /* disabled text (exempt) / faint rule */
+  --ink-450:  oklch(0.550 0.014 76);  /* control border (WCAG 1.4.11, >=3:1) */
+  --ink-400:  oklch(0.640 0.015 78);  /* muted text (WCAG 1.4.3, >=4.5:1)   #918b82 */
+  --ink-300:  oklch(0.685 0.017 80);  /* secondary text             #8d7d65 */
+  --ink-200:  oklch(0.785 0.019 82);  /* dim body text              #a99878 */
+  --ink-100:  oklch(0.875 0.021 84);  /* body text                  #c8b896 */
+  --bone:     oklch(0.935 0.020 86);  /* primary text / parchment   #e8ddc4 */
+  --bone-pure:oklch(0.965 0.012 88);  /* highest-contrast headline  #f3ecdc */
+
+  /* ---- Accent : aged brass (the brand signal / energy hue) ---- */
+  --brass-700: oklch(0.520 0.085 75);
+  --brass-600: oklch(0.620 0.100 76);
+  --brass-500: oklch(0.730 0.110 77);  /* core brass  ~#c89a4e */
+  --brass-400: oklch(0.800 0.095 78);
+  --brass-300: oklch(0.870 0.070 79);
+  --brass-bg:  oklch(0.730 0.110 77 / 0.12);
+
+  /* ---- Moss : sage green, healthy / converged / ok ---- */
+  --moss-600: oklch(0.530 0.060 138);
+  --moss-500: oklch(0.640 0.072 136);  /* ~#8a9a6b */
+  --moss-400: oklch(0.740 0.072 135);
+  --moss-bg:  oklch(0.640 0.072 136 / 0.13);
+
+  /* ---- Rust : terracotta, alert / suspended / danger ---- */
+  --rust-600: oklch(0.500 0.120 38);
+  --rust-500: oklch(0.595 0.135 40);   /* ~#b25a3c */
+  --rust-400: oklch(0.685 0.120 42);
+  --rust-bg:  oklch(0.595 0.135 40 / 0.14);
+
+  /* ---- Glacier : faded Nordic blue, telemetry / info / tasks ---- */
+  --glacier-600: oklch(0.530 0.045 232);
+  --glacier-500: oklch(0.650 0.052 230);  /* ~#7f9bae */
+  --glacier-400: oklch(0.755 0.050 228);
+  --glacier-bg:  oklch(0.650 0.052 230 / 0.13);
+
+  /* ---- Patina : oxidized copper-teal, edges / structure ---- */
+  --patina-600: oklch(0.500 0.045 178);
+  --patina-500: oklch(0.600 0.050 176);   /* ~#5c7e76 */
+  --patina-400: oklch(0.700 0.048 174);
+
+  /* ---- Mauve : muted plum, tool invocations (rare) ---- */
+  --mauve-500: oklch(0.585 0.062 332);    /* ~#9b7a8e */
+  --mauve-400: oklch(0.685 0.058 330);
+
+  /* ============================================================
+     Semantic aliases — reference THESE in components, not raw scale
+     ============================================================ */
+
+  /* surfaces */
+  --bg-base:        var(--ink-1000);
+  --surface:        var(--ink-900);
+  --surface-panel:  var(--ink-850);
+  --surface-raised: var(--ink-800);
+  --surface-sunken: var(--ink-1000);
+  --surface-inset:  oklch(0.145 0.008 70 / 0.55);
+
+  /* text */
+  --text-primary:   var(--bone);
+  --text-heading:   var(--bone-pure);
+  --text-secondary: var(--ink-300);
+  --text-muted:     var(--ink-400);
+  --text-disabled:  var(--ink-500);
+  --text-inverse:   var(--ink-1000);
+
+  /* borders / rules */
+  --border-hairline: oklch(0.380 0.013 75 / 0.55);
+  --border-default:  var(--ink-700);
+  --border-strong:   var(--ink-600);
+  --border-control:  var(--ink-450);  /* form-field boundary, meets 3:1 */
+  --border-focus:    var(--brass-500);
+
+  /* brand signal */
+  --signal:          var(--brass-500);
+  --signal-strong:   var(--brass-400);
+  --signal-dim:      var(--brass-700);
+  --signal-bg:       var(--brass-bg);
+  --on-signal:       var(--ink-1000);
+
+  /* status */
+  --status-ok:      var(--moss-500);
+  --status-ok-bg:   var(--moss-bg);
+  --status-ok-solid:   var(--moss-500);   /* ink-1000 text -> 6.0:1  */
+  --status-warn:    var(--brass-500);
+  --status-warn-bg: var(--brass-bg);
+  --status-warn-solid: var(--brass-500);   /* ink-1000 text -> 8.2:1  */
+  --status-danger:  var(--rust-500);
+  --status-danger-bg: var(--rust-bg);
+  --status-danger-solid: var(--rust-600);  /* bone-pure text -> 5.8:1 */
+  --status-info:    var(--glacier-500);
+  --status-info-bg: var(--glacier-bg);
+  --status-info-solid: var(--glacier-500); /* ink-1000 text -> 6.2:1  */
+
+  /* topology event-type encoding (from console node colors, re-toned) */
+  --node-task:   var(--glacier-500);   /* task_spawned */
+  --node-tool:   var(--mauve-500);     /* tool_invoked */
+  --node-memory: var(--moss-500);      /* memory_updated */
+  --node-throttled: var(--rust-500);   /* context_oom_throttled */
+  --node-closed: var(--ink-400);       /* scope_closed */
+  --edge:        var(--patina-600);
+}

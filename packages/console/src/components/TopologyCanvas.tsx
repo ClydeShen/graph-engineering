@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type TopologyNode, type TopologyResponse } from '@/lib/api';
 import { diffTopology, nodeColor } from '@/lib/topology-diff';
+import { Panel } from '@/components/ds';
 
 interface G6GraphLike {
   addNodeData(nodes: unknown[]): void;
@@ -44,7 +45,7 @@ export function TopologyCanvas({ scopeId }: { scopeId: string }) {
           style: { labelText: (d: { id?: string }) => (d.id ?? '').slice(0, 8) },
           animation: { enter: 'fade' },
         },
-        edge: { style: { endArrow: true, stroke: '#444444' }, animation: { enter: 'fade' } },
+        edge: { style: { endArrow: true, stroke: 'oklch(0.500 0.045 178)' }, animation: { enter: 'fade' } },
         behaviors: ['zoom-canvas', 'drag-canvas', 'drag-element'],
       }) as unknown as G6GraphLike;
       graphRef.current = graph;
@@ -100,26 +101,33 @@ export function TopologyCanvas({ scopeId }: { scopeId: string }) {
   }, [scopeId]);
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-7rem)]">
-      <div className="flex-1 border border-line rounded bg-panel relative">
-        <div ref={containerRef} className="absolute inset-0" />
-        <span className="absolute bottom-2 left-2 text-xs text-gray-500">{status}</span>
-      </div>
-      <aside className="w-80 shrink-0 border border-line rounded bg-panel p-3 overflow-auto">
-        <h2 className="text-gray-100 mb-2">Inspector</h2>
+    <div style={{ display: 'flex', gap: 'var(--gutter)', flex: 1, minHeight: 0 }}>
+      <Panel variant="sunken" noBody style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <header className="mx-panel__hd">
+          <div className="mx-panel__hd-text">
+            <span className="mx-panel__eyebrow">Trail Mesh</span>
+            <span className="mx-panel__title">Causal graph</span>
+          </div>
+        </header>
+        <div className="mx-panel__body ds-graticule" style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+          <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+          <span className="ds-label" style={{ position: 'absolute', bottom: 8, left: 8, fontSize: 9 }}>{status}</span>
+        </div>
+      </Panel>
+      <Panel eyebrow="Inspector" title="Node detail" style={{ width: 320, flexShrink: 0, overflow: 'auto' }}>
         {selected === null ? (
-          <p className="text-gray-500">click a node</p>
+          <p className="ds-label">click a node</p>
         ) : (
-          <dl className="space-y-1 break-all">
-            <dt className="text-gray-500">version_hash</dt>
+          <dl style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', wordBreak: 'break-all', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+            <dt className="ds-label">version_hash</dt>
             <dd>{selected.id}</dd>
-            <dt className="text-gray-500">entity_id</dt>
+            <dt className="ds-label">entity_id</dt>
             <dd>{selected.entity_id}</dd>
-            <dt className="text-gray-500">event_type</dt>
+            <dt className="ds-label">event_type</dt>
             <dd style={{ color: nodeColor(selected.event_type) }}>{selected.event_type}</dd>
           </dl>
         )}
-      </aside>
+      </Panel>
     </div>
   );
 }

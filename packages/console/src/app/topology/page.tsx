@@ -3,15 +3,16 @@
 import { useState } from 'react';
 import { TopologyCanvas } from '@/components/TopologyCanvas';
 import { ScopePicker } from '@/components/ScopePicker';
+import { Button, Icon, Input } from '@/components/ds';
 
 export default function TopologyPage() {
   const [input, setInput] = useState('');
   const [scopeId, setScopeId] = useState('');
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', height: '100%' }}>
       <form
-        className="flex gap-2"
+        style={{ display: 'flex', gap: 'var(--space-2)' }}
         onSubmit={(e) => {
           e.preventDefault();
           setScopeId(input.trim());
@@ -23,20 +24,21 @@ export default function TopologyPage() {
             setScopeId(id);
           }}
         />
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="scope_id (uuid)"
-          className="flex-1 bg-panel border border-line rounded px-3 py-1.5 outline-none focus:border-accent"
-        />
-        <button type="submit" className="px-4 py-1.5 bg-line rounded hover:bg-accent hover:text-black">
+        <div style={{ flex: 1 }}>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="scope_id (uuid)"
+          />
+        </div>
+        <Button type="submit" variant="primary" iconRight={<Icon name="arrow-right" size={15} />}>
           Load
-        </button>
+        </Button>
       </form>
       {scopeId.length > 0 ? (
         <TopologyCanvas key={scopeId} scopeId={scopeId} />
       ) : (
-        <p className="text-gray-500">enter a scope id to render its causal topology</p>
+        <p className="ds-label">enter a scope id to render its causal topology</p>
       )}
     </div>
   );
