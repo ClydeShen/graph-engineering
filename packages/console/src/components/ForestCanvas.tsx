@@ -22,10 +22,11 @@
  * that single boundary, documented.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { toGraph, type GraphData } from '@/lib/forest-graph';
+import { useTrailPulse } from '@/lib/use-trail-pulse';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false }) as any;
@@ -51,23 +52,26 @@ export function ForestCanvas({ scopeId }: { scopeId: string }) {
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  useEffect(() => {
-    let alive = true;
+  const reload = useCallback(() => {
     api
       .lineage(scopeId)
       .then((r) => {
-        if (alive) {
-          setData(toGraph(r));
-          setError(null);
-        }
+        setData(toGraph(r));
+        setError(null);
       })
-      .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : 'load failed');
-      });
-    return () => {
-      alive = false;
-    };
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
   }, [scopeId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // Real-time: trail pulses trigger a debounced reconcile of this subtree (§6.3).
+  const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useTrailPulse(() => {
+    if (pulseTimer.current) clearTimeout(pulseTimer.current);
+    pulseTimer.current = setTimeout(reload, 800);
+  });
 
   useEffect(() => {
     const el = wrapRef.current;

@@ -110,6 +110,13 @@ export interface EmergenceResponse {
   lessons: EmergenceLesson[];
 }
 
+export interface TrailSseEvent {
+  event_type: string;
+  scope_id: string;
+  event_id?: number;
+  timestamp?: string;
+}
+
 export interface ConversationMessage {
   role: 'user' | 'assistant';
   text: string;

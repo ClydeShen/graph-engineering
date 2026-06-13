@@ -7,10 +7,11 @@
  * + reduced-motion discipline as ForestCanvas.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { toUniverseGraph, type UniverseData } from '@/lib/forest-universe';
+import { useTrailPulse } from '@/lib/use-trail-pulse';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false }) as any;
@@ -36,23 +37,27 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  useEffect(() => {
-    let alive = true;
+  const reload = useCallback(() => {
     api
       .forest()
       .then((r) => {
-        if (alive) {
-          setData(toUniverseGraph(r));
-          setError(null);
-        }
+        setData(toUniverseGraph(r));
+        setError(null);
       })
-      .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : 'load failed');
-      });
-    return () => {
-      alive = false;
-    };
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
   }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // Real-time: each trail pulse triggers a debounced REST reconcile (§6.3 —
+  // the pulse is lossy by design, REST is the truth).
+  const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useTrailPulse(() => {
+    if (pulseTimer.current) clearTimeout(pulseTimer.current);
+    pulseTimer.current = setTimeout(reload, 800);
+  });
 
   useEffect(() => {
     const el = wrapRef.current;
