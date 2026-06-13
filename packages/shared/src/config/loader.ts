@@ -74,12 +74,23 @@ const ProviderEntrySchema = z.object({
   priority: z.number().int().positive(),
 });
 
+/** Inferred type for one provider registry entry (loader-local — the public
+ *  provider type lives in ./llm). */
+type ConfigProviderEntry = z.infer<typeof ProviderEntrySchema>;
+
 /** Per-channel config: token plus the Phase 12 home_channel delivery slot. */
 const ChannelEntrySchema = z
   .object({
     token: z.string().optional(),
     /** Phase 12 DeliveryRouter: default delivery target for this platform. */
     home_channel: z.string().optional(),
+    /**
+     * Per-channel LLM (CONSOLE-REDESIGN §11.2 — "agent identity"): references a
+     * providers[].name. Unset → the channel uses the global default provider.
+     * This is the config SEAM; gateway-bot provider routing consumes it (full
+     * wiring is ROADMAP 22-workspace-project).
+     */
+    llm: z.string().optional(),
   })
   .passthrough();
 
@@ -160,6 +171,24 @@ export const MemexConfigSchema = z.object({
 
 /** Inferred type for the parsed Memex config. */
 export type MemexConfig = z.infer<typeof MemexConfigSchema>;
+
+/**
+ * Resolve which provider a channel should use (CONSOLE-REDESIGN §11.2 —
+ * per-channel LLM / "agent identity"). Returns the providers[] entry whose
+ * `name` matches the channel's `llm` field, or undefined when the channel has
+ * no override (the caller then falls back to the global default — typically the
+ * priority-ordered providers[0]). Pure; this is the resolution SEAM that
+ * gateway-bot provider routing consumes (full wiring is ROADMAP
+ * 22-workspace-project).
+ */
+export function resolveChannelProvider(
+  config: MemexConfig | null,
+  platform: string,
+): ConfigProviderEntry | undefined {
+  const llmName = config?.channels?.[platform]?.llm;
+  if (llmName === undefined || llmName === '') return undefined;
+  return config?.providers?.find((p) => p.name === llmName);
+}
 
 /**
  * Replaces all ${VAR_NAME} placeholders in the raw JSON string with

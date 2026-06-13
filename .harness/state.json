@@ -4,12 +4,12 @@
     "status": "in_progress",
     "started_at": "2026-06-14T01:00:00.000Z",
     "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-14T01:35:00.000Z"
+    "last_active": "2026-06-14T01:40:00.000Z"
   },
   "position": {
     "phase": "21-console-redesign",
     "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发 = ROADMAP 21 + 22 + TD-N + §7 + 附录 A。15 批次见 TaskList。设计 SSOT = docs/CONSOLE-REDESIGN.md。测试基线 = 661 passed / 1 pre-existing fail（console topology-diff.test nodeColor hex→oklch 脱节；批次6 修）。零回归 = 不新增失败 + 批次6 修这个。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次2 完成（四只读端点）：forest.ts(/v1/forest + /v1/scopes/:id/lineage)、emergence.ts(/v1/emergence)、artifacts.ts 加全局 /v1/artifacts + store.ts listAllArtifacts；接线 index.ts + console api.ts；forest 纯函数测试 4 绿；typecheck 绿。下一步：批次3 引擎22（project 维度记 scope + per-channel LLM + onboarding 文件夹 + 懒墓碑）——先对比 hermes per-channel LLM 再定。"
+    "stopped_at": "批次1(token)✓ 批次2(四端点)✓ 批次3(引擎22 轻量地基)✓ — migration 022 project 列 + nestScope 可选 project 参数 + config ChannelEntry.llm + resolveChannelProvider seam（4 测试绿，typecheck 绿）；深度集成留 ROADMAP 22 TODO。下一步：批次4 TD-N（WebhookConnector 接线 + Slack/Discord 白名单）。"
   }
 }

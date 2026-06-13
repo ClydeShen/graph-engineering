@@ -58,6 +58,7 @@ export async function nestScope(
   intent: string,
   parentScopeId?: string,
   depth = 0,
+  project?: string,
 ): Promise<NestScopeResult> {
   if (depth > MAX_CHILD_SCOPE_DEPTH) {
     throw new Error(
@@ -111,11 +112,23 @@ export async function nestScope(
     `);
 
     // ── Phase 2: INSERT scope_lineage ────────────────────────────────────────
-    await client.query(
-      `INSERT INTO scope_lineage (scope_id, parent_scope_id, depth, intent)
-       VALUES ($1, $2, $3, $4)`,
-      [scopeId, parentScopeId ?? null, depth, intent],
-    );
+    // project (CONSOLE-REDESIGN §11.1) is an optional workspace dimension. When
+    // omitted the original 4-column INSERT runs unchanged — zero-regression for
+    // every current caller and safe even before migration 022. The 5-column form
+    // is taken only when a caller explicitly passes a project (requires 022).
+    if (project !== undefined) {
+      await client.query(
+        `INSERT INTO scope_lineage (scope_id, parent_scope_id, depth, intent, project)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [scopeId, parentScopeId ?? null, depth, intent, project],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO scope_lineage (scope_id, parent_scope_id, depth, intent)
+         VALUES ($1, $2, $3, $4)`,
+        [scopeId, parentScopeId ?? null, depth, intent],
+      );
+    }
 
     // ── Phase 3: INSERT plan_created event with pgcrypto version_hash ────────
     const insertResult = await client.query<{ version_hash: string }>(

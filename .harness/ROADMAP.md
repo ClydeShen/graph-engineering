@@ -804,7 +804,13 @@ Plans:
 
 **前置条件：** 无硬前置；解锁 21 的 Workspace 页。
 
-**待讨论（§9 B 类，未定）：** per-channel LLM 配置 schema/UI、Plugins 页设计、同名重建身份、onboarding 文件夹结构细节。
+**落地状态（2026-06-14，自主 GOAL 批次3 — 轻量可扩展地基已落）：**
+- ✅ migration 022：`scope_lineage.project` 列（纯加列，NULL = 现行为，零回归）
+- ✅ `nestScope` 可选 `project` 参数（条件 INSERT：不传则走原 4 列 SQL，零回归且 migrate 前安全）
+- ✅ config `ChannelEntry.llm` 字段 + `resolveChannelProvider()` seam（per-channel LLM「agent 身份」，4 单测绿）
+- ⬜ **剩余深度集成 TODO**：execute_bash cwd 检测→填充 project；gateway-bot 按 `resolveChannelProvider` 路由 provider；onboarding 文件夹根生成；forest 端点按 project 分组；同名重建身份。
+
+**待讨论（§9 B 类，未定）：** per-channel LLM 配置 schema/UI 终态、Plugins 页设计、同名重建身份、onboarding 文件夹结构细节。
 
 ---
 
