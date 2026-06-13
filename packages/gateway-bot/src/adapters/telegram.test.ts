@@ -48,6 +48,55 @@ describe('Telegram long-poll adapter', () => {
     expect(body.text).toBe('task-id-abc');
   });
 
+  it('backs off and de-dupes the log on repeated transport failures', async () => {
+    const ac = new AbortController();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let callCount = 0;
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('getUpdates')) {
+        callCount++;
+        if (callCount >= 3) ac.abort();
+        throw new Error('fetch failed');
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    const onMessage = vi.fn();
+    const { startLongPoll } = await import('./telegram.js');
+    await startLongPoll('fake-token', onMessage, ac.signal, { baseDelayMs: 1 });
+
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(callCount).toBeGreaterThanOrEqual(3);
+    // De-dup: identical "fetch failed" reason logs once, not once per retry.
+    const pollFails = errSpy.mock.calls.filter(([m]) => String(m).includes('poll failing'));
+    expect(pollFails.length).toBe(1);
+    // The message is actionable, not undici's bare "fetch failed".
+    expect(String(pollFails[0]![0])).toContain('cannot reach api.telegram.org');
+  });
+
+  it('backs off on ok:false (bad token) instead of tight-looping', async () => {
+    const ac = new AbortController();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let callCount = 0;
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('getUpdates')) {
+        callCount++;
+        if (callCount >= 2) ac.abort();
+        return { ok: true, json: async () => ({ ok: false, description: 'Unauthorized' }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    const onMessage = vi.fn();
+    const { startLongPoll } = await import('./telegram.js');
+    await startLongPoll('bad-token', onMessage, ac.signal, { baseDelayMs: 1 });
+
+    expect(onMessage).not.toHaveBeenCalled();
+    const pollFails = errSpy.mock.calls.filter(([m]) => String(m).includes('poll failing'));
+    expect(pollFails.length).toBe(1);
+    expect(String(pollFails[0]![0])).toContain('Unauthorized');
+  });
+
   it('skips updates with no text or chat', async () => {
     const ac = new AbortController();
     let callCount = 0;
