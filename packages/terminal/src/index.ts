@@ -76,11 +76,24 @@ async function main(): Promise<void> {
   }
 
   // ── Interactive REPL ───────────────────────────────────────────────────────
-  console.log(`memex-terminal → ${gatewayUrl}`);
+  // Observatory palette (mirrors scripts/dev.mjs): brass signal, dim chrome.
+  // Colour is suppressed when stdout is not a TTY (piped/agent runs stay clean).
+  const tty = process.stdout.isTTY === true;
+  const C = tty
+    ? { reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m', brass: '\x1b[38;5;179m', moss: '\x1b[38;5;108m', rust: '\x1b[38;5;167m' }
+    : { reset: '', dim: '', bold: '', brass: '', moss: '', rust: '' };
+
   const session = await client.createScope(`session:terminal:${Date.now()}`);
-  console.log(`scope ${session.scope_id}`);
   await client.connect();
   client.subscribe(session.scope_id);
+
+  console.log(`
+  ${C.brass}${C.bold}✦ MemexTerminal${C.reset}  ${C.dim}— talk to the memex; every turn is written to the trail${C.reset}
+  ${C.dim}gateway ${C.reset}${gatewayUrl}   ${C.dim}scope ${C.reset}${session.scope_id.slice(0, 8)}
+  ${C.dim}/quit to exit${C.reset}
+`);
+
+  const PROMPT = `${C.brass}memex ❯${C.reset} `;
 
   client.onTrailEvent((evt) => {
     // text_delta = streamed reply chunk (ADR 54) — render as assistant text,
@@ -94,31 +107,34 @@ async function main(): Promise<void> {
     // echoing those back is pure noise in a chat surface (UX-audit U15).
     // Other trail events (task_spawned, conflicts, …) stay visible.
     if (evt.event_type === 'memory_updated') return;
-    console.log(`  ⟶ [${evt.event_type}] ${JSON.stringify(evt.payload)}`);
+    console.log(`  ${C.dim}⟶ [${evt.event_type}] ${JSON.stringify(evt.payload)}${C.reset}`);
   });
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'memex> ' });
+  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: PROMPT });
   rl.prompt();
   // Turns run strictly one at a time. With piped stdin all lines (and EOF)
   // arrive at once — without this chain, /quit or stream close would drop
   // in-flight messages (UX-audit U8).
   let chain: Promise<void> = Promise.resolve();
   const runTurn = async (text: string): Promise<void> => {
+    // Assistant marker prints before the await so streamed deltas append to it.
+    process.stdout.write(`${C.moss}◆${C.reset} `);
     try {
       const result = await client.sendUserMessage(text);
       if (result.suspended) {
-        console.log('  (scope suspended)');
+        console.log(`${C.rust}(scope suspended)${C.reset}`);
       } else if (result.error !== undefined) {
-        console.log(`  ✗ ${result.error}`);
+        console.log(`${C.rust}✗ ${result.error}${C.reset}`);
       } else if (result.reply !== undefined) {
         // Deltas already streamed via onTrailEvent — close the line.
         console.log('');
       } else {
-        console.log(`  ✓ recorded ${result.version_hash?.slice(0, 12) ?? '?'}`);
+        console.log(`${C.dim}✓ recorded ${result.version_hash?.slice(0, 12) ?? '?'}${C.reset}`);
       }
     } catch (err) {
-      console.error('  ✗', err instanceof Error ? err.message : err);
+      console.error(`${C.rust}✗`, err instanceof Error ? err.message : err, C.reset);
     }
+    console.log('');
     rl.prompt();
   };
   rl.on('line', (line) => {
