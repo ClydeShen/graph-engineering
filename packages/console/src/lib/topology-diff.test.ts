@@ -33,8 +33,10 @@ describe('diffTopology', () => {
 
 describe('nodeColor', () => {
   it('maps known event types and falls back for unknown', () => {
-    expect(nodeColor('task_spawned')).toBe('#4A9EFF');
-    expect(nodeColor('context_oom_throttled')).toBe('#FF4D4F');
-    expect(nodeColor('whatever')).toBe('#555555');
+    // Colors migrated from raw hex to observatory oklch tokens (--node-*); the
+    // test now asserts the live token values the implementation returns.
+    expect(nodeColor('task_spawned')).toBe('oklch(0.650 0.052 230)');
+    expect(nodeColor('context_oom_throttled')).toBe('oklch(0.595 0.135 40)');
+    expect(nodeColor('whatever')).toBe('oklch(0.470 0.014 76)');
   });
 });

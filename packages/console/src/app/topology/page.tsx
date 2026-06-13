@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TopologyCanvas } from '@/components/TopologyCanvas';
+import { ForestCanvas } from '@/components/ForestCanvas';
 import { ScopePicker } from '@/components/ScopePicker';
 import { Button, Icon, Input } from '@/components/ds';
 
@@ -45,9 +45,9 @@ export default function TopologyPage() {
         </Button>
       </form>
       {scopeId.length > 0 ? (
-        <TopologyCanvas key={scopeId} scopeId={scopeId} />
+        <ForestCanvas key={scopeId} scopeId={scopeId} />
       ) : (
-        <p className="ds-label">enter a scope id to render its causal topology</p>
+        <p className="ds-label">enter a task id to watch its tree grow</p>
       )}
     </div>
   );
