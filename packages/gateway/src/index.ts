@@ -39,6 +39,8 @@ import {
   loadMemexConfig,
   buildEmbeddingProvider,
   buildChatProvider,
+  readLlmOverrides,
+  mergeLlmOverrides,
   DEFAULT_GATEWAY_PORT,
   type LLMProvider,
 } from '@graph/shared';
@@ -62,13 +64,18 @@ const DEFAULT_W_MAX = 4096;
 // NO infra chat path here (the ADR-54 conversation core has its own chat
 // provider). ADR 55/56: nullable, config-driven — null means the semantic
 // index runs degraded (lexical retrieval); the conversation never blocks.
-const gatewayEmbeddingProvider = buildEmbeddingProvider(loadMemexConfig());
+// Appendix A: merge the standalone llm-overrides.json (when present) over the
+// config before building providers. Identity when no overrides file exists, so
+// every install without one is unchanged. Read once at construction — workers
+// pick up edits on next restart (Appendix A: no hot-reload infra).
+const resolvedConfig = () => mergeLlmOverrides(loadMemexConfig(), readLlmOverrides());
+const gatewayEmbeddingProvider = buildEmbeddingProvider(resolvedConfig());
 
 // Conversation chat provider (ADR 54): null when nothing is configured at all —
 // the conversation core then answers with onboarding guidance instead of
 // dialing a non-existent localhost default.
 function buildGatewayChatProvider(): LLMProvider | null {
-  const config = loadMemexConfig();
+  const config = resolvedConfig();
   const hasConfigProviders = (config?.providers?.length ?? 0) > 0;
   const hasEnvProvider =
     process.env['LLM_BASE_URL'] !== undefined || process.env['LLM_API_KEY'] !== undefined;

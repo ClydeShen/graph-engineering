@@ -4,12 +4,12 @@
     "status": "in_progress",
     "started_at": "2026-06-14T01:00:00.000Z",
     "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-14T02:25:00.000Z"
+    "last_active": "2026-06-14T02:30:00.000Z"
   },
   "position": {
     "phase": "21-console-redesign",
-    "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发。15 批次见 TaskList。设计 SSOT = docs/CONSOLE-REDESIGN.md。基线全绿。零回归 = 不新增失败。附录 A 写面注意：§6.5 'Do not ship half-built write surfaces'——批次11 做完整'写文件+重启生效'闭环（非半成品），进程内热 mutate 留 TODO。",
+    "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发。15 批次见 TaskList。基线全绿。零回归 = 不新增失败。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次1-10 完成。批次10（细节页）：/emergence feed 页(读 /v1/emergence + confidence 翻人话徽标)；/skills 解除 'Crystallized lesson' 误标→'Skill'；Overview 去黑话(卡片=总任务/进行中/完成/撞墙了 + event_type/status 人话标签映射 + eyebrow 人话)。typecheck 绿，console 12 测试过。下一步：批次11（附录A 可写 LLM 设置：POST 写独立配置文件+重启生效 + Settings 写表单）。"
+    "stopped_at": "批次1-11 完成。批次11（附录A 写能力地基）：llm-overrides.ts(独立 JSON 单chat槽+独立embedding轴, read/write/纯merge, 4测试) + gateway 构造时 mergeLlmOverrides(无文件时identity零回归); shared 导出 + provider 接线。写凭证 POST 端点+Settings 写表单标注为安全敏感剩余(§6.5 不ship半成品)。typecheck 绿, 30 config 测试过。下一步：批次12 全量测试 + 零回归验证 + 报告 goal done。"
   }
 }
