@@ -38,6 +38,26 @@ function tone(t: string): string {
   return TYPE_TONE[t] ?? 'oklch(0.600 0.050 176)';
 }
 
+// event_type / status → human labels (CONSOLE-REDESIGN §9 locked mapping). The
+// Overview is the de-jargoned landing page; engine strings never reach the eye.
+const TYPE_LABEL: Record<string, string> = {
+  task_spawned: 'started work',
+  plan_created: 'made a plan',
+  memory_updated: 'learned / noted',
+  scope_closed: 'finished a task',
+  conflict_detected: 'hit a conflict',
+  sub_scope_resolved: 'finished a sub-task',
+};
+const typeLabel = (t: string): string => TYPE_LABEL[t] ?? t;
+
+const STATUS_LABEL: Record<string, string> = {
+  active: 'in progress',
+  suspended: 'hit a wall',
+  closed: 'done',
+  converged: 'wrapped up',
+};
+const statusLabel = (s: string): string => STATUS_LABEL[s] ?? s;
+
 export default function ActivityDashboard() {
   const [data, setData] = useState<ActivityMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +85,9 @@ export default function ActivityDashboard() {
 
   const live = data?.scopes.find((s) => s.status === 'active')?.count ?? 0;
   const suspended = data?.scopes.find((s) => s.status === 'suspended')?.count ?? 0;
+  const done = (data?.scopes ?? [])
+    .filter((s) => s.status === 'closed' || s.status === 'converged')
+    .reduce((n, s) => n + s.count, 0);
   const maxType = Math.max(1, ...(data?.by_type.map((t) => t.count) ?? [1]));
 
   return (
@@ -72,13 +95,13 @@ export default function ActivityDashboard() {
       {error !== null ? <Badge tone="danger">{error}</Badge> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'var(--gutter)' }}>
-        <Panel><Readout label="Total events" value={data?.totals.events.toLocaleString() ?? '—'} /></Panel>
-        <Panel><Readout label="Total scopes" value={data?.totals.scopes.toLocaleString() ?? '—'} /></Panel>
-        <Panel><Readout label="Live scopes" value={live} tone="ok" /></Panel>
-        <Panel><Readout label="Suspended" value={suspended} tone={suspended > 0 ? 'danger' : 'default'} /></Panel>
+        <Panel><Readout label="Total tasks" value={data?.totals.scopes.toLocaleString() ?? '—'} /></Panel>
+        <Panel><Readout label="In progress" value={live} tone="ok" /></Panel>
+        <Panel><Readout label="Done" value={done.toLocaleString()} tone="info" /></Panel>
+        <Panel><Readout label="Hit a wall" value={suspended} tone={suspended > 0 ? 'danger' : 'default'} /></Panel>
       </div>
 
-      <Panel eyebrow="Trail mesh" title="Events per day · last 14 days">
+      <Panel eyebrow="Activity" title="How busy it's been · last 14 days">
         <div style={{ height: 240 }}>
           <ResponsiveContainer>
             <BarChart data={data?.by_day ?? []}>
@@ -97,14 +120,14 @@ export default function ActivityDashboard() {
       </Panel>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 'var(--gutter)' }}>
-        <Panel eyebrow="Composition" title="Events by type">
+        <Panel eyebrow="Composition" title="What it's been doing">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {(data?.by_type ?? []).map((t) => (
               <div key={t.event_type} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: tone(t.event_type) }} />
-                    {t.event_type}
+                    {typeLabel(t.event_type)}
                   </span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{t.count.toLocaleString()}</span>
                 </div>
@@ -113,16 +136,16 @@ export default function ActivityDashboard() {
                 </div>
               </div>
             ))}
-            {data !== null && data.by_type.length === 0 ? <p className="ds-label">no events yet</p> : null}
+            {data !== null && data.by_type.length === 0 ? <p className="ds-label">nothing yet</p> : null}
           </div>
         </Panel>
 
-        <Panel eyebrow="Scopes" title="Status mix">
+        <Panel eyebrow="Tasks" title="Where they stand">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             {(data?.scopes ?? []).map((s) => (
               <Meter
                 key={s.status}
-                label={s.status}
+                label={statusLabel(s.status)}
                 value={s.count}
                 max={data?.totals.scopes ?? 1}
                 tone={s.status === 'suspended' ? 'danger' : s.status === 'active' ? 'ok' : 'info'}

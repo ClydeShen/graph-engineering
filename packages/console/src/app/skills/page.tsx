@@ -68,7 +68,7 @@ export default function SkillsPage() {
             ))}
           </ul>
         </Panel>
-        <Panel eyebrow="Crystallized lesson" title={body?.name ?? 'SKILL.md'} style={{ flex: 1, overflow: 'auto' }}>
+        <Panel eyebrow="Skill" title={body?.name ?? 'SKILL.md'} style={{ flex: 1, overflow: 'auto' }}>
           {body === null ? (
             <p className="ds-label">select a skill to load its SKILL.md (two-phase loading)</p>
           ) : (
