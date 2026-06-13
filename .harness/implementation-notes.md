@@ -896,3 +896,23 @@ L1 容器内命令照跑✓;**L2 egress 被断**(`wget: bad address` DNS 失败 
   **直接以非 root 启动**是更简单的等效硬化。将来真 browser 镜像若需固定 profile 用户,经 opts.user 覆盖。
 - **活体验证**:`id: uid=65534(nobody)`(不再 root)、/tmp 仍可写(命令照跑)、/etc 仍只读。
 - Gate:tsc clean;security.test + browser-capability.test 各加 `--user` 断言;gateway 190 全绿。
+
+### Slack 活体闭环:接线 + Socket Mode/ack-before-dispatch 活体验证 (2026-06-13)
+
+**第三次「未接线」同类发现:** `SlackConnector`(Phase 12 写好+单测过)从未被 `GatewayBot.start()`
+实例化 —— 入口只手接了 Telegram/Discord/Email。`WebhookConnector` 同样未接。`ConnectorRegistry`
+只被 DeliveryRouter(出站)用,入站没走它。修复:照 Email 范式在 `gateway-bot/src/index.ts` 接 Slack
+(SLACK_APP_TOKEN+SLACK_BOT_TOKEN 在场→check(auth.test)→start()→dispatchMessage,sessionKey=slack:<chat>)。
+
+**活体验证(真实 SlackConnector.start() 路径,本机直连 slack.com):**
+- 自验 1–3:auth.test→bot @memex(U0BA827GTSR)/team Memex;apps.connections.open→WSS url（Socket Mode 已开）;
+  WSS 首帧=hello。
+- **ack-before-dispatch 决定性证据**(可注入 wsFactory 包真 socket + 故意 sleep 4s 压力):
+  `← IN events_api envelope_id=X text="hi"`(56.368)→ `→ OUT ack envelope_id=X`(56.368 同毫秒)→
+  `onMessage`(56.369,后于 ack)→ sleep 4s 窗口内**同 envelope_id 零重投** → chat.postMessage 回复(用户目视确认）。
+  即:ack 严格先于 dispatch，且 ack 被 Slack 接受（否则 4s 内必重投）。这是单测测不到的部分。
+- Gate:tsc clean;gateway-bot 62 测试绿（默认无 SLACK_* env，既有行为不变）。
+
+**残留:** ① SlackConnector 用裸 fetch，**不走 channel-http 的代理/IP 回退**（Telegram/Discord 走了）——
+slack.com 一般不被墙故本次直连成功，但 GFW/代理环境下是 DRY 缺口，应让 Slack 也路由过 channelDispatcher。
+② 无白名单门禁（任何能私信 bot 的人都得到回复）——生产缺口，归信任隔离待办。③ WebhookConnector 仍未接线。

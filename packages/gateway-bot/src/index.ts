@@ -41,6 +41,27 @@ export class GatewayBot {
       serve({ fetch: app.fetch, port: discordPort });
     }
 
+    // Slack (Phase 12 Socket Mode connector — outbound WSS, no inbound port;
+    // same posture as Telegram long-poll). Started here so SLACK_* env actually
+    // brings the connector up — it was implemented + unit-tested but never wired
+    // into this entrypoint.
+    const slackAppToken = process.env['SLACK_APP_TOKEN'];
+    const slackBotToken = process.env['SLACK_BOT_TOKEN'];
+    if (slackAppToken && slackBotToken) {
+      const { SlackConnector } = await import('./connectors/slack-connector.js');
+      const slack = new SlackConnector({ appToken: slackAppToken, botToken: slackBotToken });
+      const check = await slack.check();
+      if (check.ok) {
+        void slack.start(async (evt) => {
+          const sessionKey = buildSessionKey('slack', evt.chat_id);
+          return dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
+        });
+        console.log('[gateway-bot] slack connector (Socket Mode) started');
+      } else {
+        console.error(`[gateway-bot] slack configured but check failed: ${check.detail ?? ''}`);
+      }
+    }
+
     // Email (Phase 18: production binding of the Phase 12 transport seam).
     // Lazy imports: installs without email config never load imapflow/nodemailer.
     const { makeEmailTransportFromEnv } = await import('./connectors/email-transport.js');
