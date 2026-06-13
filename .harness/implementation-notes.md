@@ -759,3 +759,40 @@ Deliberate. All usage data is already in the graph; eval metrics consume the led
 - onboarding gate 非 TTY 跳过（打印 memex onboard 指引，env-only boot）——背景启动不再卡死
 - bin launcher（上一提交）+ 本批 = Claude Code 多终端调试原语齐备：
   background `npm run dev` / `memex chat -m` / doctor / REST/WS / psql / dev.log
+
+## ui-console session (2026-06-13) — embedded chat + first-run handoff
+
+- **Console ds redesign committed** (6c376cfa): the uncommitted working-tree
+  redesign (ds/ design system, Shell chrome, token files, 5 pages migrated) was
+  verified rendering via agent-browser and committed. Fixed a build-breaking
+  `@import` order in globals.css (CSS @import must precede @tailwind base).
+- **Embedded chat page** (b41c95e3): /chat = assistant-ui LocalRuntime over the
+  ADR-54 conversation core. Decision: chat is embedded in the Dashboard (user's
+  literal Option C from the paused fuller session), NOT a duplicate of
+  MemexTerminal — they share ONE responder (gateway conversation core). The
+  console adds a server-side SSE bridge (/api/chat) that holds gateway.token
+  server-side and re-emits text_delta; the browser never sees the token. New
+  GET /v1/scopes/:id/messages projects conversation.user/assistant events for
+  session resume.
+- **Embedding dim padding** (b41c95e3): schema is vector(1536) but BGE-M3 emits
+  1024 / Gemini 768. Padded zero-fill to 1536 at the provider boundary
+  (openai-compatible.provider.ts) — inserts failed silently otherwise. Cosine
+  ordering preserved among same-model vectors. Existing 50 rows were 1536 (prior
+  Gemini/OpenAI), so no migration needed.
+- **Next 15→16**: assistant-ui 0.14 imports React 19.2 `useEffectEvent`; Next
+  15.5 bundles React 19.1 → runtime TypeError. Bumped console to next@16.
+- **First-run handoff (dev.mjs)**: after the stack is healthy, an interactive
+  TTY boot clears the firehose and drops into MemexTerminal (the conversation),
+  matching the goal "onboarding 完成后出现 MemexTerminal 对话而不是 iii log".
+  Component logs keep flowing to the ~/.memex/logs/dev.log sink. Gated on
+  `process.stdin.isTTY` + absence of `--logs` / `MEMEX_DEV_LOGS=1` — agent/CI
+  (non-TTY) boots keep streaming, which is what they need. SIGINT handler is
+  retained through handoff (Windows children aren't job-linked; shutdown() is
+  idempotent and reaps services on Ctrl+C).
+- **`memex log`** (new CLI command): tails ~/.memex/logs/dev.log (-n N,
+  --no-follow). This is the explicit, opt-in surface for the raw iii/component
+  logs — the conversation is the default surface, the log firehose is behind a
+  command, per the goal.
+- Live-verified against local llama.cpp Qwen3-35B (chat 8080) + BGE-M3
+  (embeddings 8082): /chat send→trail-write→reply→resume, MemexTerminal -m,
+  handoff health-gate + terminal spawn, memex log tail.

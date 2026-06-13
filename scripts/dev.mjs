@@ -27,6 +27,12 @@ function sinkLine(line) {
   logSink.write(line.replace(ANSI_RE, '') + '\n');
 }
 
+// Foreground log gate (ADR 56 D-5 first-run experience). During boot, component
+// lines stream to the terminal so the user watches services come up. After the
+// stack is healthy we hand off to MemexTerminal and route lines to the sink
+// only — the raw firehose lives in `memex log`, not the conversation surface.
+let foregroundLogs = true;
+
 // ── Load .env ─────────────────────────────────────────────────────────────────
 const appEnv = { ...process.env };
 if (existsSync('.env')) {
@@ -86,13 +92,13 @@ function attachLineBuffer(tag, color, stream) {
     buf = parts.pop();
     for (const line of parts) {
       const out = fmtLine(tag, color, line);
-      if (out) { console.log(out); sinkLine(out); }
+      if (out) { if (foregroundLogs) console.log(out); sinkLine(out); }
     }
   });
   stream.on('end', () => {
     if (buf.trim()) {
       const out = fmtLine(tag, color, buf);
-      if (out) { console.log(out); sinkLine(out); }
+      if (out) { if (foregroundLogs) console.log(out); sinkLine(out); }
     }
   });
 }
@@ -241,11 +247,80 @@ async function boot() {
   }));
 }
 
-boot();
-
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
-process.on('SIGINT', () => {
-  console.log(`\n${C.dim}  Ctrl+C — shutting down all services...${C.reset}`);
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${C.dim}  shutting down all services...${C.reset}`);
   for (const p of procs) p.kill('SIGTERM');
   setTimeout(() => process.exit(0), 500);
-});
+}
+process.on('SIGINT', shutdown);
+
+// ── Poll the gateway until it answers /v1/sys/health (or give up) ─────────────
+async function waitForHealth(port, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/v1/sys/health`, {
+        signal: AbortSignal.timeout(1500),
+      });
+      if (res.ok) return true;
+    } catch {
+      /* not up yet */
+    }
+    await wait(700);
+  }
+  return false;
+}
+
+// ── First-run handoff: boot logs → MemexTerminal conversation ─────────────────
+// Only in an interactive TTY. Agent/CI boots (piped stdin) and `--logs` /
+// MEMEX_DEV_LOGS=1 keep the streaming firehose, which is what they want.
+const wantHandoff =
+  process.stdin.isTTY &&
+  !process.argv.includes('--logs') &&
+  !appEnv.MEMEX_DEV_LOGS;
+
+async function handoffToTerminal() {
+  const ok = await waitForHealth(gatewayPort, 60000);
+  if (!ok) {
+    console.log(`${C.yellow}  gateway did not become healthy in 60s — staying in log view.${C.reset}`);
+    console.log(`${C.dim}  (inspect: memex log)${C.reset}`);
+    return; // keep streaming logs; user can debug
+  }
+
+  // Quiet the firehose and clear into a calm landing for the conversation.
+  foregroundLogs = false;
+  process.stdout.write('\x1b[2J\x1b[H'); // clear screen
+  console.log(`
+${C.bold}${C.cyan}  MemexOS${C.reset}  ${C.dim}is live${C.reset}
+  ${C.dim}────────────────────────────────────────${C.reset}
+  ${C.dim}dashboard ${C.reset} http://localhost:3000
+  ${C.dim}gateway   ${C.reset} http://localhost:${gatewayPort}
+  ${C.dim}logs      ${C.reset} ${C.dim}memex log${C.reset}  ${C.dim}(iii · workers · control-plane · gateway)${C.reset}
+  ${C.dim}────────────────────────────────────────${C.reset}
+  ${C.dim}Talk to the memex below. Ctrl+C exits and stops the stack.${C.reset}
+`);
+
+  // Keep dev.mjs's own SIGINT handler: on Ctrl+C the whole foreground group is
+  // signalled, and shutdown() (idempotent) must reap the services — the spawned
+  // children are not job-linked to this process on Windows. The child terminal
+  // also receives SIGINT and exits; term.on('exit') calls the same shutdown.
+  const term = spawn(
+    process.execPath,
+    ['--import', 'tsx/esm', 'packages/terminal/src/index.ts'],
+    { stdio: 'inherit', env: appEnv, shell: false },
+  );
+  term.on('exit', shutdown);
+}
+
+boot()
+  .then(() => {
+    if (wantHandoff) return handoffToTerminal();
+  })
+  .catch((err) => {
+    console.error('boot failed:', err);
+    shutdown();
+  });
