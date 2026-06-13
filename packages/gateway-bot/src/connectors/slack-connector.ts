@@ -16,6 +16,9 @@ import type {
   ConnectorCheckResult,
   ChannelMessageEvent,
 } from '@graph/types/connector';
+import { channelDispatcher } from '../channel-http.js';
+
+const SLACK_API_HOST = 'slack.com';
 
 interface SlackEnvelope {
   envelope_id?: string;
@@ -63,7 +66,15 @@ export class SlackConnector implements ConnectorAdapter {
   constructor(private readonly opts: SlackConnectorOptions) {}
 
   private get fetchFn(): typeof fetch {
-    return this.opts.fetchFn ?? fetch;
+    if (this.opts.fetchFn) return this.opts.fetchFn;
+    // DRY with Telegram/Discord: route Slack API calls through channelDispatcher
+    // (SLACK_PROXY → standard proxy env → system proxy) instead of bare fetch,
+    // so proxy/restricted networks reach slack.com.
+    return ((...args: Parameters<typeof fetch>) =>
+      fetch(args[0], {
+        ...args[1],
+        dispatcher: channelDispatcher('SLACK_PROXY', [SLACK_API_HOST]),
+      } as RequestInit)) as typeof fetch;
   }
 
   async check(): Promise<ConnectorCheckResult> {
@@ -101,7 +112,15 @@ export class SlackConnector implements ConnectorAdapter {
       throw new Error(`connections.open failed: ${body.error ?? 'no url'}`);
     }
 
-    const factory = this.opts.wsFactory ?? ((url: string) => new WebSocket(url) as unknown as SlackWsLike);
+    const factory =
+      this.opts.wsFactory ??
+      ((url: string) => {
+        // undici's WebSocket accepts a WebSocketInit ({ dispatcher }) at runtime
+        // (per undici docs); the DOM lib type only declares `protocols`, hence the
+        // cast. Routes the Socket Mode socket through the same proxy as the API.
+        const init = { dispatcher: channelDispatcher('SLACK_PROXY', [new URL(url).host]) };
+        return new WebSocket(url, init as unknown as string[]) as unknown as SlackWsLike;
+      });
     const ws = factory(body.url);
 
     return new Promise<void>((resolve) => {

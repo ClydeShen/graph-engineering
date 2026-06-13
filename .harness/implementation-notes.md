@@ -916,3 +916,16 @@ L1 容器内命令照跑✓;**L2 egress 被断**(`wget: bad address` DNS 失败 
 **残留:** ① SlackConnector 用裸 fetch，**不走 channel-http 的代理/IP 回退**（Telegram/Discord 走了）——
 slack.com 一般不被墙故本次直连成功，但 GFW/代理环境下是 DRY 缺口，应让 Slack 也路由过 channelDispatcher。
 ② 无白名单门禁（任何能私信 bot 的人都得到回复）——生产缺口，归信任隔离待办。③ WebhookConnector 仍未接线。
+
+### Slack 残留 1 收口:fetch + WSS 改走 channelDispatcher (2026-06-13)
+
+SlackConnector 原用裸 fetch / 裸 WebSocket(无代理/IP 回退,DRY 缺口 vs TG/Discord)。改:
+- 默认 fetchFn 包一层 `dispatcher: channelDispatcher('SLACK_PROXY', ['slack.com'])`(auth.test/
+  connections.open/chat.postMessage 全覆盖);注入式 fetchFn(测试)不变。
+- 默认 wsFactory 改 `new WebSocket(url, { dispatcher: channelDispatcher('SLACK_PROXY', [host]) })`
+  —— undici WebSocket 运行时接受 WebSocketInit{dispatcher}(ctx7 查 undici 官方文档确认),DOM lib
+  类型只声明 protocols 故 `as unknown as string[]` cast;注入式 wsFactory 不变。
+- 两条都改:只改 fetch 不改 WSS 的话,代理用户 API 通了 socket 仍连不上 = 白改。
+- 活体验证(无代理→channelDispatcher 返回 primary Agent):check()→auth.test ok、connections.open
+  via dispatcher→WSS url、**WSS via dispatcher→hello**。三条全通,直连 slack.com 未受影响。
+- Gate:tsc clean(RequestInfo 类型本项目不可用,改 `Parameters<typeof fetch>`);gateway-bot 62 测试绿。
