@@ -4,12 +4,12 @@
     "status": "in_progress",
     "started_at": "2026-06-14T01:00:00.000Z",
     "last_session": "2026-06-13T10:00:00.000Z",
-    "last_active": "2026-06-14T01:45:00.000Z"
+    "last_active": "2026-06-14T01:50:00.000Z"
   },
   "position": {
     "phase": "21-console-redesign",
     "active": "GOAL（/goal 自主）：完成所有已讨论未开工开发 = ROADMAP 21 + 22 + TD-N + §7 + 附录 A。15 批次见 TaskList。设计 SSOT = docs/CONSOLE-REDESIGN.md。测试基线 = 661 passed / 1 pre-existing fail（console topology-diff.test nodeColor hex→oklch 脱节；批次6 修）。零回归 = 不新增失败 + 批次6 修这个。",
     "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次1(token)✓ 2(四端点)✓ 3(引擎22地基)✓ 4(TD-N)✓ — Webhook 接进 GatewayBot.start()(serves :MEMEX_WEBHOOK_PORT/hooks/inbound) + Slack/Discord 入站白名单(DRY channel-allowlist)；typecheck 绿，gateway-bot 73 测试过。下一步：批次5 §7 supervisor 级重连 wrapper。"
+    "stopped_at": "批次1-5 完成（token / 四端点 / 引擎22地基 / TD-N 渠道接线 / §7 supervisor 重连）。后端+渠道全绿，gateway-bot 73 测试过，typecheck 绿。下一步：批次6（UI 重头）= 移除 @antv/g6 + 装 react-force-graph-2d + d3-force + TopologyCanvas→ForestCanvas 森林渲染器 + 修 topology-diff.test pre-existing 失败。UI 批次需 ui-ux-pro-max 规则。"
   }
 }

@@ -5,6 +5,38 @@ import { startLongPoll, startWebhook } from './adapters/telegram.js';
 import { buildDiscordApp, registerSlashCommand } from './adapters/discord.js';
 import { parseAllowlist, isChatAuthorized, allowlistStartupWarning } from './channel-allowlist.js';
 
+/**
+ * Supervisor for long-running outbound connector loops (channel deep-dive §7).
+ * Connectors handle socket-level reconnects internally; this guards the thin
+ * residual case where the whole start() promise rejects — restart with
+ * exponential backoff instead of silently dying. A clean resolve (e.g. aborted)
+ * resets the counter and does not restart-storm.
+ */
+function superviseConnector(
+  name: string,
+  start: () => Promise<void>,
+  baseDelayMs = 5_000,
+  maxDelayMs = 300_000,
+): void {
+  let failures = 0;
+  const run = (): void => {
+    start()
+      .then(() => {
+        failures = 0;
+      })
+      .catch((err: unknown) => {
+        failures += 1;
+        const delay = Math.min(baseDelayMs * 2 ** (failures - 1), maxDelayMs);
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[${name}] connector loop failed (attempt ${failures}) — restarting in ${Math.round(delay / 1000)}s: ${reason}`,
+        );
+        setTimeout(run, delay);
+      });
+  };
+  run();
+}
+
 export class GatewayBot {
   constructor(private readonly pool: Pool) {}
 
@@ -75,7 +107,7 @@ export class GatewayBot {
       const slack = new SlackConnector({ appToken: slackAppToken, botToken: slackBotToken });
       const check = await slack.check();
       if (check.ok) {
-        void slack.start(async (evt) => {
+        superviseConnector('slack', () => slack.start(async (evt) => {
           if (!isChatAuthorized(evt.chat_id, slackAllowlist).allowed) {
             if (evt.chat_id !== lastDeniedSlack) {
               console.warn(`[slack] denied unauthorized chat ${evt.chat_id}`);
@@ -85,7 +117,7 @@ export class GatewayBot {
           }
           const sessionKey = buildSessionKey('slack', evt.chat_id);
           return dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
-        });
+        }));
         console.log('[gateway-bot] slack connector (Socket Mode) started');
       } else {
         console.error(`[gateway-bot] slack configured but check failed: ${check.detail ?? ''}`);
@@ -101,11 +133,11 @@ export class GatewayBot {
       const email = new EmailConnector({ transport: emailTransport });
       const check = await email.check();
       if (check.ok) {
-        void email.start(async (evt) => {
+        superviseConnector('email', () => email.start(async (evt) => {
           // chat_id = thread anchor (TD-E semantics: replies continue the session scope)
           const sessionKey = buildSessionKey('email', evt.chat_id);
           return dispatchMessage(sessionKey, evt.text, this.pool, evt.message_id);
-        });
+        }));
         console.log('[gateway-bot] email connector polling');
       } else {
         console.error(`[gateway-bot] email configured but check failed: ${check.detail ?? ''}`);
