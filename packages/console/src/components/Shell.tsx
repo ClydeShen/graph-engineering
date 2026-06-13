@@ -15,6 +15,7 @@ import { Logo } from '@/components/Logo';
 import { Badge, Icon, IconButton, Input, StatusDot, type IconName } from '@/components/ds';
 
 const NAV: Array<{ href: string; label: string; icon: IconName }> = [
+  { href: '/chat', label: 'Chat', icon: 'terminal' },
   { href: '/topology', label: 'Topology', icon: 'git-branch' },
   { href: '/kernel', label: 'Kernel', icon: 'gauge' },
   { href: '/alerts', label: 'Alerts', icon: 'triangle-alert' },
@@ -23,6 +24,7 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
 ];
 
 const TITLES: Record<string, [string, string]> = {
+  '/chat': ['Conversation', 'memex terminal · every turn written to the trail'],
   '/topology': ['Causal topology', 'one scope · live projection of the trail'],
   '/kernel': ['Kernel telemetry', 'worker bus · concurrency & backlog'],
   '/alerts': ['Suspended scopes', 'frozen trails awaiting reconciliation'],

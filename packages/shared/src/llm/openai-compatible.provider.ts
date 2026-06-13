@@ -112,8 +112,22 @@ export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider,
 
     const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
     return {
-      vector: data.data[0]?.embedding ?? [],
+      vector: padToSchemaDims(data.data[0]?.embedding ?? []),
       countedAgainstBudget: false,
     };
   }
+}
+
+/**
+ * The Trail Mesh stores embeddings as vector(1536) (migration 003). Providers
+ * emit whatever their model produces (BGE-M3 1024, Gemini 768, OpenAI 1536) —
+ * zero-padding to the schema width keeps inserts valid and preserves cosine
+ * ordering among vectors from the same model; longer vectors are truncated.
+ */
+const SCHEMA_EMBEDDING_DIMS = 1536;
+
+function padToSchemaDims(vector: number[]): number[] {
+  if (vector.length === 0 || vector.length === SCHEMA_EMBEDDING_DIMS) return vector;
+  if (vector.length > SCHEMA_EMBEDDING_DIMS) return vector.slice(0, SCHEMA_EMBEDDING_DIMS);
+  return vector.concat(new Array(SCHEMA_EMBEDDING_DIMS - vector.length).fill(0));
 }

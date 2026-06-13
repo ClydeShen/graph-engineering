@@ -51,6 +51,44 @@ export function buildScopeReadRoute(pool: Pool, wMax: number): Hono {
   });
 
   /**
+   * GET /v1/scopes/:id/messages — conversation projection (ADR 54).
+   * Replays the scope's conversation.user / conversation.assistant events
+   * (memory_updated payloads) in trail order so chat clients can resume a
+   * session. Erased events (ADR-47) are excluded.
+   * Response: { scope_id, messages: [{ role, text, at }] }
+   */
+  app.get('/:id/messages', async (c) => {
+    const id = c.req.param('id');
+    const invalid = validateScopeIdParam(c, id);
+    if (invalid) return invalid;
+
+    const result = await pool.query<{ payload: string; created_at: string }>(
+      `SELECT payload, created_at
+       FROM execution_event_log
+       WHERE scope_id = $1 AND event_type = 'memory_updated' AND erased_at IS NULL
+       ORDER BY id ASC`,
+      [id],
+    );
+
+    const messages: Array<{ role: 'user' | 'assistant'; text: string; at: string }> = [];
+    for (const row of result.rows) {
+      try {
+        const p = JSON.parse(row.payload) as { kind?: string; text?: string };
+        if (typeof p.text !== 'string') continue;
+        if (p.kind === 'conversation.user') {
+          messages.push({ role: 'user', text: p.text, at: row.created_at });
+        } else if (p.kind === 'conversation.assistant') {
+          messages.push({ role: 'assistant', text: p.text, at: row.created_at });
+        }
+      } catch {
+        /* non-JSON payload — not a conversation event */
+      }
+    }
+
+    return c.json({ scope_id: id, messages });
+  });
+
+  /**
    * GET /v1/scopes/:id
    * Response: { scope_id, status, context }
    *
