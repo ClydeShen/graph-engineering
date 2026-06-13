@@ -17,6 +17,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+// d3-force-3d ships with react-force-graph-2d; forceCollide spreads overlapping
+// nodes so dense galaxies stay legible instead of piling onto each other.
+import { forceCollide } from 'd3-force-3d';
 import { api } from '@/lib/api';
 import { toUniverseGraph, type UniverseData } from '@/lib/forest-universe';
 import { useTrailPulse } from '@/lib/use-trail-pulse';
@@ -63,6 +66,8 @@ function Overlay({ children, danger }: { children: React.ReactNode; danger?: boo
 
 export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: string) => void }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
   const [data, setData] = useState<UniverseData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: 480 });
@@ -128,6 +133,17 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
 
   const ready = error === null && data !== null && data.nodes.length > 0;
 
+  // Spread overlapping nodes: galaxies claim more room than their orbiting tasks.
+  // Re-applied whenever the graph reloads (the engine is re-created with new data).
+  useEffect(() => {
+    if (!ready) return;
+    const fg = fgRef.current;
+    if (!fg) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fg.d3Force('collide', forceCollide((n: any) => (n.kind === 'galaxy' ? 28 : 13)));
+    fg.d3ReheatSimulation?.();
+  }, [ready, data]);
+
   return (
     <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       {error !== null ? (
@@ -140,10 +156,17 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
 
       {ready ? (
         <ForceGraph2D
+          ref={fgRef}
           graphData={data}
           width={size.w}
           height={size.h}
           backgroundColor="transparent"
+          // Keep redrawing so hover highlight + SSE reloads repaint (the highlight
+          // pattern needs this; default true pauses the loop between interactions).
+          autoPauseRedraw={false}
+          // Frame the whole universe once the layout settles — without this the
+          // default zoom leaves nodes clustered off-centre and clipped.
+          onEngineStop={() => fgRef.current?.zoomToFit(reduced ? 0 : 500, 48)}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           linkColor={(l: any) =>
             highlight && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target))

@@ -24,6 +24,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { forceCollide } from 'd3-force-3d';
 import { api } from '@/lib/api';
 import { toGraph, type GraphData } from '@/lib/forest-graph';
 import { useTrailPulse } from '@/lib/use-trail-pulse';
@@ -69,6 +70,8 @@ function Overlay({ children, danger }: { children: React.ReactNode; danger?: boo
 
 export function ForestCanvas({ scopeId }: { scopeId: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: 480 });
@@ -131,6 +134,15 @@ export function ForestCanvas({ scopeId }: { scopeId: string }) {
 
   const ready = error === null && data !== null && data.nodes.length > 0;
 
+  // Spread overlapping task nodes (all radius 6 → collide at 12).
+  useEffect(() => {
+    if (!ready) return;
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force('collide', forceCollide(12));
+    fg.d3ReheatSimulation?.();
+  }, [ready, data]);
+
   return (
     <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       {error !== null ? (
@@ -143,10 +155,13 @@ export function ForestCanvas({ scopeId }: { scopeId: string }) {
 
       {ready ? (
         <ForceGraph2D
+          ref={fgRef}
           graphData={data}
           width={size.w}
           height={size.h}
           backgroundColor="transparent"
+          autoPauseRedraw={false}
+          onEngineStop={() => fgRef.current?.zoomToFit(reduced ? 0 : 500, 48)}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           linkColor={(l: any) =>
             highlight && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target))
