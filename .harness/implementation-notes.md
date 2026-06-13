@@ -929,3 +929,37 @@ SlackConnector 原用裸 fetch / 裸 WebSocket(无代理/IP 回退,DRY 缺口 vs
 - 活体验证(无代理→channelDispatcher 返回 primary Agent):check()→auth.test ok、connections.open
   via dispatcher→WSS url、**WSS via dispatcher→hello**。三条全通,直连 slack.com 未受影响。
 - Gate:tsc clean(RequestInfo 类型本项目不可用,改 `Parameters<typeof fetch>`);gateway-bot 62 测试绿。
+
+### 硬化 Telegram:入站 allowlist 边缘门 + webhook secret (2026-06-13)
+
+承接 Slack 残留 ②(无白名单门禁)—— Telegram 同病且更危险:`TELEGRAM_BOT_TOKEN` 一设,
+**任何找到 @memememex_bot 的人都能直达 dispatchMessage → 会话核心 →(execute_bash)**。trim tab =
+入站 allowlist 边缘门。不重复造轮子:港 hermes 姿态(roam_retrieve→`gateway/run.py
+GatewayRunner._is_user_authorized` + `TestAllowlistStartupCheck`),只港核心,不全量搬 900-token 多平台巨函数。
+
+**hermes 姿态(忠实移植):** allowlist 设了→只放行列内(其余丢弃,**fail-closed at the edge**);
+空→放行所有但 start() 打**一次性安全告警**(开放 agent 不该静默全网可达);`*`→显式 allow-all 且消告警。
+
+**改动:**
+- `channel-allowlist.ts`(新,channel-agnostic 故 Slack/Discord 后可复用——hermes 也是单一授权路径):
+  `parseAllowlist` / `isChatAuthorized`(返回 {allowed, reason}) / `allowlistStartupWarning`。
+- `adapters/telegram.ts` `startLongPoll`:加 `allowlist` option;启动告警;**dispatch 前**门控,
+  未授权 chat 直接 `continue`(去重日志 `lastDeniedChat`,防 spammer 刷屏)——**永不到达 onMessage/agent**。
+- `startWebhook`:同 allowlist 门 + `TELEGRAM_WEBHOOK_SECRET`(setWebhook 带 secret_token,
+  POST 校验 `X-Telegram-Bot-Api-Secret-Token`,拒伪造 update);顺带 setWebhook 裸 fetch→telegramFetch
+  (GFW 可达性,同 Slack 残留①的 DRY)。
+- `index.ts`:读 `TELEGRAM_ALLOWED_CHATS` 接线进两条路径。`.env.example`:补 3 个 Telegram 变量文档。
+
+**Gate:** root tsc clean;gateway-bot 73 测试绿(原 62 + allowlist 11:纯逻辑 7 + 适配器 deny-not-dispatched/
+allow-dispatched/启动告警 3 + …)。
+
+**活体闭环(真实 DM + 真实网络 + 出货代码):** 一次性 harness 跑真 getUpdates(telegramFetch 到达
+api.telegram.org,bot @memememex_bot),对同一条真实入站消息跑两次出货的 `isChatAuthorized`:
+- `← IN chat=513580037 text="123"`
+- vs deny-list `['999999']` → **allowed=false reason=denied**(会被丢弃,不到 agent)
+- vs allow-list `['513580037']` → **allowed=true reason=listed**(放行)
+- → OUT 回复用户目视确认。verdict=PASS。门的两条边都对真实 Telegram 输入验过。harness 用后即删。
+
+**残留:** ① webhook secret 校验**未活体**(本机无公网 URL/未跑 webhook 模式)= unverified-live,
+落地条件=有公网入口时 POST 带/不带 secret 各一次。② allowlist 仅 gate chat_id(DM 即 user);群组按
+from.id 细分留作 YAGNI,需要时再加。③ Slack/Discord 仍未上同一个门(channel-allowlist.ts 已备好复用)。

@@ -3,6 +3,7 @@ import { buildSessionKey } from './session.js';
 import { dispatchMessage } from './router.js';
 import { startLongPoll, startWebhook } from './adapters/telegram.js';
 import { buildDiscordApp, registerSlashCommand } from './adapters/discord.js';
+import { parseAllowlist } from './channel-allowlist.js';
 
 export class GatewayBot {
   constructor(private readonly pool: Pool) {}
@@ -27,10 +28,13 @@ export class GatewayBot {
     };
 
     if (telegramToken) {
+      // Edge allowlist: only these chat IDs reach the agent. Empty = allow all
+      // (start() warns). See channel-allowlist.ts (hermes posture).
+      const telegramAllowlist = parseAllowlist(process.env['TELEGRAM_ALLOWED_CHATS']);
       if (telegramWebhookUrl) {
-        void startWebhook(telegramToken, telegramWebhookUrl, 4002, onTelegramMessage);
+        void startWebhook(telegramToken, telegramWebhookUrl, 4002, onTelegramMessage, telegramAllowlist);
       } else {
-        void startLongPoll(telegramToken, onTelegramMessage);
+        void startLongPoll(telegramToken, onTelegramMessage, undefined, { allowlist: telegramAllowlist });
       }
     }
 

@@ -102,6 +102,85 @@ describe('Telegram long-poll adapter', () => {
     expect(String(pollFails[0]![0])).toContain('Unauthorized');
   });
 
+  it('drops messages from chats not in the allowlist (never dispatched to the agent)', async () => {
+    const ac = new AbortController();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let callCount = 0;
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('getUpdates')) {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: true,
+            json: async () => ({
+              ok: true,
+              result: [{ update_id: 7, message: { chat: { id: 999 }, text: 'let me in' } }],
+            }),
+          };
+        }
+        ac.abort();
+        return { ok: true, json: async () => ({ ok: true, result: [] }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    const onMessage = vi.fn();
+    const { startLongPoll } = await import('./telegram.js');
+    await startLongPoll('fake-token', onMessage, ac.signal, { allowlist: ['123'] });
+
+    // Unauthorized chat never reaches the agent core, and no reply is sent.
+    expect(onMessage).not.toHaveBeenCalled();
+    const sendCall = mockFetch.mock.calls.find(([url]) => String(url).includes('sendMessage'));
+    expect(sendCall).toBeUndefined();
+    expect(warnSpy.mock.calls.some(([m]) => String(m).includes('unauthorized chat 999'))).toBe(true);
+  });
+
+  it('dispatches messages from a chat that is in the allowlist', async () => {
+    const ac = new AbortController();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let callCount = 0;
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('getUpdates')) {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: true,
+            json: async () => ({
+              ok: true,
+              result: [{ update_id: 8, message: { chat: { id: 123 }, text: 'hi' } }],
+            }),
+          };
+        }
+        ac.abort();
+        return { ok: true, json: async () => ({ ok: true, result: [] }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    const onMessage = vi.fn().mockResolvedValue('pong');
+    const { startLongPoll } = await import('./telegram.js');
+    await startLongPoll('fake-token', onMessage, ac.signal, { allowlist: ['123'] });
+
+    expect(onMessage).toHaveBeenCalledWith('123', 'hi', 8);
+  });
+
+  it('warns at startup when no allowlist is configured', async () => {
+    const ac = new AbortController();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('getUpdates')) {
+        ac.abort();
+        return { ok: true, json: async () => ({ ok: true, result: [] }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    const { startLongPoll } = await import('./telegram.js');
+    await startLongPoll('fake-token', vi.fn(), ac.signal);
+
+    expect(warnSpy.mock.calls.some(([m]) => String(m).includes('TELEGRAM_ALLOWED_CHATS'))).toBe(true);
+  });
+
   it('skips updates with no text or chat', async () => {
     const ac = new AbortController();
     let callCount = 0;

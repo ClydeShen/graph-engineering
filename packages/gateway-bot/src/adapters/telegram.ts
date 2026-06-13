@@ -1,4 +1,5 @@
 import { telegramFetch } from '../channel-http.js';
+import { isChatAuthorized, allowlistStartupWarning } from '../channel-allowlist.js';
 
 interface TelegramUpdate {
   update_id: number;
@@ -37,6 +38,12 @@ export interface LongPollOptions {
   baseDelayMs?: number;
   /** Backoff ceiling. */
   maxDelayMs?: number;
+  /**
+   * Authorized chat IDs (TELEGRAM_ALLOWED_CHATS). Empty = allow all (with a
+   * startup warning); '*' = explicit allow-all. Unlisted chats are dropped at
+   * the edge — they never reach the agent. See channel-allowlist.ts.
+   */
+  allowlist?: string[];
 }
 
 export async function startLongPoll(
@@ -49,9 +56,12 @@ export async function startLongPoll(
   const base = `https://api.telegram.org/bot${token}`;
   const baseDelay = opts.baseDelayMs ?? 5_000;
   const maxDelay = opts.maxDelayMs ?? 300_000; // 5-min ceiling
+  const allowlist = opts.allowlist ?? [];
   // Startup marker — without it a live channel is indistinguishable from a
   // dead one in the logs (UX-audit U14/U20 verification hatch).
   console.log('[telegram] long-poll started');
+  const warning = allowlistStartupWarning('telegram', 'TELEGRAM_ALLOWED_CHATS', allowlist);
+  if (warning) console.warn(warning);
 
   // Exponential backoff with log de-duplication: a misconfigured token or a
   // machine with no route to api.telegram.org otherwise floods `memex log`
@@ -59,6 +69,7 @@ export async function startLongPoll(
   // every reason change, then only a periodic heartbeat — never every retry.
   let failures = 0;
   let lastReason = '';
+  let lastDeniedChat = ''; // de-dup denied-chat logs (an unauthorized spammer must not flood the log)
   const backoff = async (reason: string): Promise<void> => {
     failures += 1;
     const delay = Math.min(baseDelay * 2 ** (failures - 1), maxDelay);
@@ -101,6 +112,16 @@ export async function startLongPoll(
       const text = update.message?.text ?? '';
       const chatId = String(update.message?.chat?.id ?? '');
       if (chatId && text) {
+        // Edge authorization: an unlisted chat is dropped here — it never
+        // reaches dispatchMessage / the agent core (which can run execute_bash).
+        if (!isChatAuthorized(chatId, allowlist).allowed) {
+          if (chatId !== lastDeniedChat) {
+            console.warn(`[telegram] dropped message from unauthorized chat ${chatId} (not in TELEGRAM_ALLOWED_CHATS)`);
+            lastDeniedChat = chatId;
+          }
+          offset = update.update_id + 1;
+          continue;
+        }
         try {
           const reply = await onMessage(chatId, text, update.update_id);
           await sendMessage(token, chatId, reply);
@@ -118,11 +139,19 @@ export async function startWebhook(
   webhookUrl: string,
   port: number,
   onMessage: OnMessage,
+  allowlist: string[] = [],
 ): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+  const warning = allowlistStartupWarning('telegram', 'TELEGRAM_ALLOWED_CHATS', allowlist);
+  if (warning) console.warn(warning);
+  // secret_token: Telegram echoes it in X-Telegram-Bot-Api-Secret-Token on every
+  // webhook POST, so the endpoint can reject forged updates from anyone who
+  // learns the URL. Ported from hermes's webhook validation. Optional — only
+  // enforced when TELEGRAM_WEBHOOK_SECRET is set.
+  const secret = process.env['TELEGRAM_WEBHOOK_SECRET']?.trim();
+  await telegramFetch(`https://api.telegram.org/bot${token}/setWebhook`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: webhookUrl }),
+    body: JSON.stringify({ url: webhookUrl, ...(secret ? { secret_token: secret } : {}) }),
   });
 
   const { Hono } = await import('hono');
@@ -130,10 +159,14 @@ export async function startWebhook(
   const app = new Hono();
 
   app.post('/telegram/webhook', async (c) => {
+    // Reject forged updates: the secret must match what Telegram echoes back.
+    if (secret && c.req.header('x-telegram-bot-api-secret-token') !== secret) {
+      return c.json({ ok: false }, 403);
+    }
     const update = (await c.req.json()) as TelegramUpdate;
     const text = update.message?.text ?? '';
     const chatId = String(update.message?.chat?.id ?? '');
-    if (chatId && text) {
+    if (chatId && text && isChatAuthorized(chatId, allowlist).allowed) {
       const reply = await onMessage(chatId, text, update.update_id);
       await sendMessage(token, chatId, reply);
     }
