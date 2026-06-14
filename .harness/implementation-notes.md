@@ -987,3 +987,25 @@ from.id 细分留作 YAGNI,需要时再加。③ Slack/Discord 仍未上同一�
 
 **残留(unverified-live):** 真实 onboarding 未跑活体(本机 LLM key 此前被吊销,待用户配新 key 后验证
 真实 provider 的 `/models` 选单)。`docs/USER_MANUAL.md` §5.1 向导步骤已同步新顺序。
+
+### Embedding provider breadth (same session)
+
+**触发:** 用户在 NVIDIA(不能 embed)→ embedding picker 只看到 3 个(OpenAI/Ollama/Gemini),要求增加。
+
+**根因:** picker 过滤 `supportsEmbedding && defaultEmbeddingModel !== undefined` —— 把"能 embed"和
+"有推荐模型名"混为一谈,挡掉了已标 `supportsEmbedding:true` 但无默认模型的 5 个(vllm/lmstudio/
+llamacpp/omlx/custom)。
+
+**改动:**
+- picker 过滤放宽为 `p.supportsEmbedding`;无默认模型者标 `(choose a model)`,选中后用 `selectModel`
+  (复用 chat 的 fetch /models 选单)补问模型。`custom` 还需补问 baseUrl → 成为任意 OpenAI-compatible
+  embeddings 端点(Voyage/Cohere/Jina…)的逃生口,写入 `embedding.baseUrl`。
+- `selectModel` 泛化:`(api, baseUrl, secret, recommended, purpose)`,chat/embedding 共用。
+- 加 GLM `embedding-3`(supportsEmbedding→true)—— 模型名经 LangChain/Spring AI/langchain4j 多源印证。
+
+**有据不加(防 fabricate):** DeepSeek(官方仓库还在 *请求* embedding API;"deepseek-embedding-v2"
+仅见第三方博客)、Kimi/OpenRouter/Anthropic(确无)、NVIDIA(`/embeddings` 需 `input_type`,要改 embed
+管线,超范围 —— 沿用既有注释的排除理由)。
+
+**结果:** embedding picker 从 3 → 9 个 provider。`provider-profiles.test.ts`「hosted 必须有默认模型」
+对 GLM 仍绿;新增 custom-embedding 用例。20 测试绿,root tsc clean。

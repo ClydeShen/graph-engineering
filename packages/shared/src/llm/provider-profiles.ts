@@ -158,7 +158,10 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     baseUrl: 'https://api.z.ai/api/paas/v4',
     envVar: 'GLM_API_KEY',
     signupUrl: 'https://z.ai/',
-    supportsEmbedding: false,
+    // embedding-3 is ZhipuAI's embedding model, served on the same /embeddings
+    // path (attested by LangChain / Spring AI / langchain4j integrations).
+    supportsEmbedding: true,
+    defaultEmbeddingModel: 'embedding-3',
   },
   {
     name: 'kimi',

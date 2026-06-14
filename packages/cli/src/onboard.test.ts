@@ -154,6 +154,39 @@ describe('runOnboard', () => {
     expect(loaded!.providers![0]!.model).toBe('gpt-4o-mini');
   });
 
+  it('allows a custom OpenAI-compatible embedding endpoint (no built-in default)', async () => {
+    answers['select'] = 'anthropic'; // chat provider can't embed
+    answers[EMBEDDING_SELECT_OTHER] = 'other';
+    answers['Embedding provider'] = 'custom';
+    answers['Embedding endpoint base URL (OpenAI-compatible)'] = 'https://api.voyageai.com/v1';
+    // custom needs no model default → onboarding lists models and we pick one
+    answers['Which embedding model?'] = 'voyage-3';
+    // endpoint needs no key in this test → blank paste skips the .env write
+    answers[
+      'Paste your Custom (any OpenAI-compatible endpoint) API key — leave blank if the endpoint needs none'
+    ] = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url).includes('/models')
+          ? Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve({ data: [{ id: 'voyage-3' }, { id: 'voyage-3-lite' }] }),
+            })
+          : Promise.reject(new Error('offline')),
+      ),
+    );
+
+    await runOnboard(configPath, envPath);
+
+    const loaded = loadMemexConfig(configPath);
+    expect(loaded!.embedding).toMatchObject({
+      provider: 'custom',
+      model: 'voyage-3',
+      baseUrl: 'https://api.voyageai.com/v1',
+    });
+  });
+
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;

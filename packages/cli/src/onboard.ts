@@ -22,6 +22,7 @@ import {
   PROVIDER_PROFILES,
   fetchModels,
   getProviderProfile,
+  type LLMApi,
   type MemexConfig,
   type ProviderProfile,
 } from '@graph/shared';
@@ -95,47 +96,50 @@ async function collectApiKey(
 const MANUAL_MODEL = '__manual__';
 
 /** Free-text model entry — the fallback when the live list is empty. */
-async function promptModelText(profile: ProviderProfile): Promise<string> {
+async function promptModelText(
+  recommended: string | undefined,
+  message = 'Model name',
+): Promise<string> {
   const model = await text({
-    message: 'Model name',
+    message,
     // placeholder shows the suggestion as a grey hint (no need to delete it);
     // defaultValue means pressing Enter on an empty line accepts the suggestion.
-    placeholder: profile.defaultModel,
-    ...(profile.defaultModel !== undefined ? { defaultValue: profile.defaultModel } : {}),
-    validate: (v) =>
-      v.length === 0 && profile.defaultModel === undefined ? 'model is required' : undefined,
+    placeholder: recommended,
+    ...(recommended !== undefined ? { defaultValue: recommended } : {}),
+    validate: (v) => (v.length === 0 && recommended === undefined ? 'model is required' : undefined),
   });
   bail(model);
   return model as string;
 }
 
 /**
- * Resolve the chat model: list what the provider actually serves (key already
- * in hand) and let the user PICK, recommended pinned on top — Hermes' `hermes
- * model` picker flow. Falls back to free-text when the list can't be fetched
- * (offline, no key, an endpoint without /models).
+ * Resolve a model: list what the provider actually serves (key already in hand)
+ * and let the user PICK, recommended pinned on top — Hermes' `hermes model`
+ * picker flow. Falls back to free-text when the list can't be fetched (offline,
+ * no key, an endpoint without /models). Used for both the chat model and an
+ * embedding provider that ships no canonical default.
  */
 async function selectModel(
-  profile: ProviderProfile,
+  api: LLMApi,
   baseUrl: string | undefined,
   apiKeySecret: string | undefined,
+  recommended: string | undefined,
+  purpose: 'chat' | 'embedding' = 'chat',
 ): Promise<string> {
+  const textMessage = purpose === 'embedding' ? 'Embedding model name' : 'Model name';
   const sp = spinner();
   sp.start('Listing available models…');
-  const models = await fetchModels(profile, baseUrl, apiKeySecret);
+  const models = await fetchModels({ api }, baseUrl, apiKeySecret);
   sp.stop(
     models.length > 0
       ? `Found ${models.length} model${models.length === 1 ? '' : 's'}`
       : "Couldn't list models — enter one by name",
   );
-  if (models.length === 0) return promptModelText(profile);
+  if (models.length === 0) return promptModelText(recommended, textMessage);
 
-  const rec =
-    profile.defaultModel !== undefined && models.includes(profile.defaultModel)
-      ? profile.defaultModel
-      : undefined;
+  const rec = recommended !== undefined && models.includes(recommended) ? recommended : undefined;
   const picked = await select({
-    message: 'Which model should Memex use?',
+    message: purpose === 'embedding' ? 'Which embedding model?' : 'Which model should Memex use?',
     options: [
       ...(rec !== undefined ? [{ value: rec, label: rec, hint: 'recommended' }] : []),
       ...[...models]
@@ -147,7 +151,7 @@ async function selectModel(
     ...(rec !== undefined ? { initialValue: rec } : {}),
   });
   bail(picked);
-  return picked === MANUAL_MODEL ? promptModelText(profile) : (picked as string);
+  return picked === MANUAL_MODEL ? promptModelText(recommended, textMessage) : (picked as string);
 }
 
 export async function runOnboard(
@@ -202,7 +206,12 @@ export async function runOnboard(
     apiKeySecret = collected?.secret;
   }
 
-  const model = await selectModel(profile, customBaseUrl ?? profile.baseUrl, apiKeySecret);
+  const model = await selectModel(
+    profile.api,
+    customBaseUrl ?? profile.baseUrl,
+    apiKeySecret,
+    profile.defaultModel,
+  );
 
   // ── Embeddings (semantic memory index) ───────────────────────────────────
   // Optional system-wide (ADR 55): skipping means keyword retrieval until added.
@@ -235,30 +244,58 @@ export async function runOnboard(
   if (embChoice === 'reuse') {
     embeddingSection = { provider: profile.name, model: profile.defaultEmbeddingModel! };
   } else if (embChoice === 'other') {
-    const embeddable = PROVIDER_PROFILES.filter(
-      (p) => p.supportsEmbedding && p.defaultEmbeddingModel !== undefined,
-    );
+    // Every embedding-capable profile is offered (ADR 56 conservative flag).
+    // Those with a canonical default show it; self-hosted/custom ones say so and
+    // ask for the model below. `custom` is the escape hatch for any other
+    // OpenAI-compatible embeddings endpoint (Voyage, Cohere, Jina, …).
+    const embeddable = PROVIDER_PROFILES.filter((p) => p.supportsEmbedding);
     const embPick = await select({
       message: 'Embedding provider',
       options: embeddable.map((p) => ({
         value: p.name,
-        label: `${p.displayName} (${p.defaultEmbeddingModel})`,
+        label:
+          p.defaultEmbeddingModel !== undefined
+            ? `${p.displayName} (${p.defaultEmbeddingModel})`
+            : `${p.displayName} (choose a model)`,
       })),
     });
     bail(embPick);
     const embProfile = getProviderProfile(embPick as string)!;
+
+    // custom has no built-in endpoint — ask for it; others derive from the profile.
+    let embBaseUrl = embProfile.baseUrl;
+    if (embProfile.baseUrl === undefined && embProfile.name === 'custom') {
+      const url = await text({
+        message: 'Embedding endpoint base URL (OpenAI-compatible)',
+        validate: (v) => (/^https?:\/\//.test(v) ? undefined : 'http(s):// URL required'),
+      });
+      bail(url);
+      embBaseUrl = url as string;
+    }
+
     // Reuse the LLM key if it's the same provider; otherwise collect this one
     // the same paste→.env way so users can bring their preferred embedding key.
     let embKeyRef: string | undefined;
-    if (embProfile.envVar !== undefined) {
-      embKeyRef =
-        embProfile.name === profile.name
-          ? apiKeyRef
-          : (await collectApiKey(embProfile, embProfile.name, envPath))?.ref;
+    let embKeySecret: string | undefined;
+    if (embProfile.name === profile.name) {
+      embKeyRef = apiKeyRef;
+      embKeySecret = apiKeySecret;
+    } else if (embProfile.envVar !== undefined || embProfile.name === 'custom') {
+      const collected = await collectApiKey(embProfile, embProfile.name, envPath);
+      embKeyRef = collected?.ref;
+      embKeySecret = collected?.secret;
     }
+
+    // Use the canonical embedding model when the profile has one; otherwise list
+    // the endpoint's models (key in hand) and let the user pick.
+    const embModel =
+      embProfile.defaultEmbeddingModel ??
+      (await selectModel(embProfile.api, embBaseUrl, embKeySecret, undefined, 'embedding'));
+
     embeddingSection = {
       provider: embProfile.name,
-      model: embProfile.defaultEmbeddingModel!,
+      model: embModel,
+      ...(embProfile.baseUrl === undefined && embBaseUrl !== undefined ? { baseUrl: embBaseUrl } : {}),
       ...(embKeyRef !== undefined ? { apiKey: embKeyRef } : {}),
     };
   }
