@@ -30,8 +30,8 @@ export async function runConsoleCommand(): Promise<void> {
     return;
   }
 
-  console.log('Console not running — starting the stack (npm run dev)…');
-  console.log('(run this from the repo root; press Ctrl-C to stop everything)\n');
+  console.log('Memex is not running — starting it…');
+  console.log('(run from the repo root; press Ctrl-C to stop everything)\n');
   // Delegate to the canonical launcher; inherit stdio so logs stream and the
   // MemexTerminal handoff keeps working on this terminal.
   const child = spawn('npm', ['run', 'dev'], { stdio: 'inherit', shell: true });

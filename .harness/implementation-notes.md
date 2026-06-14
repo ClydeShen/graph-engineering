@@ -1134,3 +1134,19 @@ fetchModels 已做版本检测(所以选单能列 121 个)——但运行时 emb
 防再次被静默隐藏。**审计结论:flag 维度只有 OpenRouter 一处误分类,现已穷尽。**
 
 **Gate:** provider-profiles 9 + onboard 10 = 19 绿,root tsc clean。
+
+### Onboarding Next-steps: product command, not the dev launcher (2026-06-14)
+
+**触发:** 用户指出一键应用的 onboarding 收尾提示 `Start Memex: npm run dev` 暴露了开发者命令,不该给终端用户看 `npm run`。
+
+**修复(外科):** onboarding "Next steps" 第 2 步 `npm run dev` → **`memex console`**(已存在的产品命令:
+拉起整栈 + 开浏览器,内部委托 dev stack)。顺带合并原"start + 手动开 URL"两步为一步。同一泄漏在
+`console.ts:33` 用户可见输出("starting the stack (npm run dev)…")——因现在把用户导向 `memex console`,
+该行成下游,一并改为"starting it…",保留真实的 repo-root 约束提示。代码注释里的 `npm run dev` 保留(面向
+开发者)。USER_MANUAL §Running 的 `npm run dev` 不动(dev/operator 文档,语境正确)。
+
+**残留 finding(未修,更大产品缺口):** `memex console` 底层仍 spawn `npm run dev`,需 repo-root + npm —
+真正"一键打包"(无 repo 依赖的 `memex start`)是 deploy 弧的事(ROADMAP 15-deploy),非本次范围。
+capability 预设的 follow-up(`npm install -g agent-browser`)是该工具自身安装方式,非我们的命令,保留。
+
+**Gate:** onboard 10 测试绿(note 被 mock,不锚文本),root tsc clean。

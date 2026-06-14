@@ -477,16 +477,15 @@ export async function runOnboard(
   );
 
   // Getting-started guide — the actual reason most people re-read this screen.
-  // Grounded in docs/QUICKSTART.md: doctor → npm run dev (auto-opens chat) →
-  // open the Console → connect a channel. `npm run dev` brings the whole stack
-  // up and drops you into chat, so we do NOT tell people to run `memex chat`.
+  // Present the product's OWN commands, never the dev launcher: `memex console`
+  // brings the whole stack up and opens the app (it delegates to the dev stack
+  // internally), so it replaces the old "npm run dev + open the URL" two-step.
   note(
     [
       `1  Check setup    ${' '}memex doctor`,
-      `2  Start Memex    ${' '}npm run dev`,
-      `     ↳ brings the stack up and drops you into chat`,
-      `3  Open the app   ${' '}${consoleUrl}`,
-      `4  Add a channel  ${' '}memex connect`,
+      `2  Start Memex    ${' '}memex console`,
+      `     ↳ brings the whole stack up and opens the app (${consoleUrl})`,
+      `3  Add a channel  ${' '}memex connect`,
       ...(followUps.length > 0
         ? ['', 'Finish installing the skills you picked:', ...followUps.map((f) => `   ${f}`)]
         : []),
