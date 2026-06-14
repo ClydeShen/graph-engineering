@@ -21,6 +21,17 @@ describe('PROVIDER_PROFILES registry (ADR 56)', () => {
     expect(getProviderProfile('anthropic')!.supportsEmbedding).toBe(false);
   });
 
+  it('openrouter and nvidia declare embedding support (flag-drift regression guard)', () => {
+    // Both were once wrongly chat-only; locking the corrected flags so a future
+    // edit can't silently hide them from the embedding picker again.
+    expect(getProviderProfile('openrouter')!.supportsEmbedding).toBe(true);
+    expect(getProviderProfile('openrouter')!.defaultEmbeddingModel).toBe(
+      'openai/text-embedding-3-small',
+    );
+    expect(getProviderProfile('nvidia')!.supportsEmbedding).toBe(true);
+    expect(getProviderProfile('nvidia')!.defaultEmbeddingModel).toBe('baai/bge-m3');
+  });
+
   it('embedding-capable profiles with a hosted baseUrl declare a default embedding model', () => {
     for (const p of PROVIDER_PROFILES) {
       if (p.supportsEmbedding && p.baseUrl !== undefined && !p.local) {

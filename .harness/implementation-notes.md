@@ -1120,3 +1120,17 @@ fetchModels 已做版本检测(所以选单能列 121 个)——但运行时 emb
 不动(base 恒裸,不属翻倍类,改即 scope creep)。
 
 **Gate:** llm 全套 54 测试绿(含新 6),root tsc clean。Anthropic/local/DeepSeek 行为不变。
+
+### Flag-drift audit close-out: OpenRouter + MiniMax (same session)
+
+完成 supportsEmbedding 全量审计(5 个标 false 的 provider 逐一核实):
+- anthropic=false ✓(无端点)· deepseek=false ✓(无端点,官方仓库仍在请求)· kimi=false ✓(无原生端点)
+- **openrouter=false ✗→true**:2025 标准化了 OpenAI 形 /embeddings(curl 401=存在;翻倍 404)。默认
+  `openai/text-embedding-3-small`。**flag 漂移**(注册表写早了,OpenRouter 后来才加)。
+- minimax=false ✓ **但属 nuanced**:embo-01 存在却需 query/db 类型参数(非对称,同 nvidia nv-embedqa),
+  对称 embed() 满足不了。在 profile 注释写明"非疏漏",防未来被天真"修正"。
+
+回归护栏:provider-profiles.test 锁 openrouter+nvidia 的 supportsEmbedding/defaultEmbeddingModel,
+防再次被静默隐藏。**审计结论:flag 维度只有 OpenRouter 一处误分类,现已穷尽。**
+
+**Gate:** provider-profiles 9 + onboard 10 = 19 绿,root tsc clean。

@@ -72,7 +72,11 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     envVar: 'OPENROUTER_API_KEY',
     signupUrl: 'https://openrouter.ai/keys',
     defaultModel: 'anthropic/claude-sonnet-4-6',
-    supportsEmbedding: false, // chat-only router
+    // OpenRouter standardized an OpenAI-shaped /embeddings endpoint (2025);
+    // text-embedding-3-small is the cheap, ubiquitous default (others: -3-large,
+    // qwen/qwen3-embedding-8b). Was wrongly chat-only here — flag drift.
+    supportsEmbedding: true,
+    defaultEmbeddingModel: 'openai/text-embedding-3-small',
   },
   {
     name: 'ollama',
@@ -183,6 +187,11 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     baseUrl: 'https://api.minimax.io/v1',
     envVar: 'MINIMAX_API_KEY',
     signupUrl: 'https://www.minimax.io/',
+    // NOT an oversight: MiniMax's embo-01 is ASYMMETRIC — it requires a
+    // type param (query vs db) the generic OpenAI /embeddings path doesn't
+    // send, same class as NVIDIA's nv-embedqa. Our symmetric embed() can't
+    // satisfy it, so we don't claim support. (Re-evaluate if embed() learns
+    // an input_type, see implementation-notes.)
     supportsEmbedding: false,
   },
   {
