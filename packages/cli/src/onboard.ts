@@ -92,6 +92,43 @@ async function collectApiKey(
   return { ref: '${' + varName + '}', secret: key as string };
 }
 
+/**
+ * Resolve the endpoint for a chosen provider:
+ *   - `custom` MUST supply one (no built-in default);
+ *   - a LOCAL server (ollama, llama.cpp, LM Studio, …) lives on a user-chosen
+ *     port and binding, so confirm/let them edit it — the default is pre-filled.
+ *     This is the one chance to fix a non-default port, or to swap `localhost`
+ *     for `127.0.0.1` (on Windows `localhost` resolves to IPv6 ::1 first, which
+ *     a server bound only to 127.0.0.1 refuses);
+ *   - a cloud provider uses the profile default unchanged.
+ * The returned URL is used to list models AND persisted, so runtime hits the
+ * same endpoint the user just confirmed.
+ */
+async function resolveBaseUrl(
+  profile: ProviderProfile,
+  label = 'Endpoint base URL (OpenAI-compatible)',
+): Promise<string | undefined> {
+  const requireHttp = (v: string) =>
+    /^https?:\/\//.test(v) ? undefined : 'http(s):// URL required';
+  if (profile.baseUrl === undefined && profile.name === 'custom') {
+    const url = await text({ message: label, validate: requireHttp });
+    bail(url);
+    return url as string;
+  }
+  if (profile.local) {
+    const url = await text({
+      message: `${profile.displayName} endpoint URL`,
+      placeholder: profile.baseUrl,
+      defaultValue: profile.baseUrl,
+      // Empty falls through to the pre-filled default; a typed value must be a URL.
+      validate: (v) => (v.length === 0 ? undefined : requireHttp(v)),
+    });
+    bail(url);
+    return (url as string).length > 0 ? (url as string) : profile.baseUrl;
+  }
+  return profile.baseUrl;
+}
+
 /** Sentinel select value: drop out of the live pick-list to type a model id. */
 const MANUAL_MODEL = '__manual__';
 
@@ -185,15 +222,7 @@ export async function runOnboard(
   bail(providerKey);
   const profile = getProviderProfile(providerKey as string)!;
 
-  let customBaseUrl: string | undefined;
-  if (profile.baseUrl === undefined && profile.name === 'custom') {
-    const url = await text({
-      message: 'Endpoint base URL (OpenAI-compatible)',
-      validate: (v) => (/^https?:\/\//.test(v) ? undefined : 'http(s):// URL required'),
-    });
-    bail(url);
-    customBaseUrl = url as string;
-  }
+  const chatBaseUrl = await resolveBaseUrl(profile);
 
   // The LLM's key comes FIRST — with it in hand we can list the provider's live
   // models below so the user picks one instead of typing an id from memory. Paste
@@ -206,12 +235,7 @@ export async function runOnboard(
     apiKeySecret = collected?.secret;
   }
 
-  const model = await selectModel(
-    profile.api,
-    customBaseUrl ?? profile.baseUrl,
-    apiKeySecret,
-    profile.defaultModel,
-  );
+  const model = await selectModel(profile.api, chatBaseUrl, apiKeySecret, profile.defaultModel);
 
   // ── Embeddings (semantic memory index) ───────────────────────────────────
   // Optional system-wide (ADR 55): skipping means keyword retrieval until added.
@@ -262,16 +286,14 @@ export async function runOnboard(
     bail(embPick);
     const embProfile = getProviderProfile(embPick as string)!;
 
-    // custom has no built-in endpoint — ask for it; others derive from the profile.
-    let embBaseUrl = embProfile.baseUrl;
-    if (embProfile.baseUrl === undefined && embProfile.name === 'custom') {
-      const url = await text({
-        message: 'Embedding endpoint base URL (OpenAI-compatible)',
-        validate: (v) => (/^https?:\/\//.test(v) ? undefined : 'http(s):// URL required'),
-      });
-      bail(url);
-      embBaseUrl = url as string;
-    }
+    // custom must supply an endpoint; a local server (e.g. a separate llama.cpp
+    // embedding server on its own port) gets confirmed/edited; cloud derives from
+    // the profile. Resolving it here means the model list below — and the runtime
+    // — hit the endpoint the user actually runs.
+    const embBaseUrl = await resolveBaseUrl(
+      embProfile,
+      'Embedding endpoint base URL (OpenAI-compatible)',
+    );
 
     // Reuse the LLM key if it's the same provider; otherwise collect this one
     // the same paste→.env way so users can bring their preferred embedding key.
@@ -295,7 +317,11 @@ export async function runOnboard(
     embeddingSection = {
       provider: embProfile.name,
       model: embModel,
-      ...(embProfile.baseUrl === undefined && embBaseUrl !== undefined ? { baseUrl: embBaseUrl } : {}),
+      // Persist the endpoint whenever it differs from the profile default —
+      // custom has none, and a local server may be on an edited port/host.
+      ...(embBaseUrl !== undefined && embBaseUrl !== embProfile.baseUrl
+        ? { baseUrl: embBaseUrl }
+        : {}),
       ...(embKeyRef !== undefined ? { apiKey: embKeyRef } : {}),
     };
   }
@@ -386,11 +412,7 @@ export async function runOnboard(
         type: profile.api === 'anthropic-messages' ? 'anthropic' : 'openai-compatible',
         model: model as string,
         priority: 1,
-        ...(customBaseUrl !== undefined
-          ? { baseUrl: customBaseUrl }
-          : profile.baseUrl !== undefined
-            ? { baseUrl: profile.baseUrl }
-            : {}),
+        ...(chatBaseUrl !== undefined ? { baseUrl: chatBaseUrl } : {}),
         ...(apiKeyRef !== undefined ? { apiKey: apiKeyRef } : {}),
       },
     ],

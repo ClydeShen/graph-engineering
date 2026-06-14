@@ -1009,3 +1009,21 @@ llamacpp/omlx/custom)。
 
 **结果:** embedding picker 从 3 → 9 个 provider。`provider-profiles.test.ts`「hosted 必须有默认模型」
 对 GLM 仍绿;新增 custom-embedding 用例。20 测试绿,root tsc clean。
+
+### Local-provider endpoint confirmation (same session)
+
+**触发:** 用户本机 llama.cpp embedding 在跑,onboarding 选 "llama.cpp (local)" 却 "Couldn't list
+models"。
+
+**根因:** 本地 provider 的 baseUrl 是 registry 写死的(llamacpp=`http://localhost:8080`),而 onboarding
+**只对 custom 问 URL**,本地一律用默认 → 端口/绑定不符就探不到;且就算手敲模型名,写进 config 的 baseUrl 仍是
+错的,运行时 embedding 照样失败。Windows 还叠加 `localhost`→IPv6 `::1` 优先、而服务器多只绑 `127.0.0.1`
+→ 连接被拒(同 channel 连通修复的 undici/IP 族问题)。
+
+**改动:** 新 `resolveBaseUrl(profile)` —— custom 必填、**local 确认/可改(默认预填)**、cloud 用默认。
+chat 与 embedding 两条路都接;返回的 URL 既喂 `fetchModels`(拉模型)又写进 config(运行时同端点)。
+embedding section 的 baseUrl 写入条件改为「与 profile 默认不同就写」(支持本地改端口,不止 custom)。
+USER_MANUAL §5.1 补本地端点确认 + `localhost`→`127.0.0.1` 排错提示。
+
+**Gate:** 新增 llamacpp 改端口活体路径用例(stub 只认 `127.0.0.1:8081/v1/models`,证明改后的 URL 流进
+fetchModels 且持久化);onboard 7 + fetch-models 6 + provider-profiles 8 = 21 绿,root tsc clean。

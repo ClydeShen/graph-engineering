@@ -187,6 +187,34 @@ describe('runOnboard', () => {
     });
   });
 
+  it('lets a local embedding server override its port and lists models from it', async () => {
+    answers['select'] = 'anthropic'; // chat provider can't embed
+    answers[EMBEDDING_SELECT_OTHER] = 'other';
+    answers['Embedding provider'] = 'llamacpp';
+    // The user's llama.cpp embedding server runs on a non-default port/binding;
+    // the local-endpoint prompt is their chance to point onboarding at it.
+    answers['llama.cpp (local llama-server) endpoint URL'] = 'http://127.0.0.1:8081';
+    answers['Which embedding model?'] = 'bge-m3';
+    // Only the CORRECTED url answers — proves resolveBaseUrl flowed into fetchModels.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url) === 'http://127.0.0.1:8081/v1/models'
+          ? Promise.resolve({ ok: true, json: () => Promise.resolve({ data: [{ id: 'bge-m3' }] }) })
+          : Promise.reject(new Error('offline')),
+      ),
+    );
+
+    await runOnboard(configPath, envPath);
+
+    const loaded = loadMemexConfig(configPath);
+    expect(loaded!.embedding).toMatchObject({
+      provider: 'llamacpp',
+      model: 'bge-m3',
+      baseUrl: 'http://127.0.0.1:8081', // edited endpoint persisted for runtime
+    });
+  });
+
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;

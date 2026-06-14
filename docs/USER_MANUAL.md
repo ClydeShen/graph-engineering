@@ -225,6 +225,12 @@ The interactive wizard asks, in order:
    - `LM Studio (local)`: defaults to `http://localhost:1234`.
    - `DeepSeek`: defaults to `https://api.deepseek.com`, key referenced as
      `${DEEPSEEK_API_KEY}`.
+   For a **local** provider (Ollama, llama.cpp, LM Studio, vLLM, oMLX) the wizard
+   then asks you to confirm its **endpoint URL** with the default pre-filled —
+   edit it if your server runs on a non-default port. On Windows, if a model list
+   can't be fetched from `http://localhost:<port>`, change `localhost` to
+   `127.0.0.1`: `localhost` resolves to IPv6 `::1` first, which a server bound
+   only to `127.0.0.1` refuses.
 2. **API key** — pasted directly (not a variable name); it is written to `.env`
    (gitignored) and the config keeps only a `${ENV_VAR}` reference. Local
    providers that need no key skip this step.
