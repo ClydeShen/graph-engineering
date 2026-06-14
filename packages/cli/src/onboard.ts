@@ -266,7 +266,16 @@ export async function runOnboard(
   bail(embChoice);
 
   if (embChoice === 'reuse') {
-    embeddingSection = { provider: profile.name, model: profile.defaultEmbeddingModel! };
+    embeddingSection = {
+      provider: profile.name,
+      model: profile.defaultEmbeddingModel!,
+      // Carry an edited local endpoint (port/host) so embeddings hit the SAME
+      // server as chat. Without this, resolveEmbeddingEndpoint matches on
+      // `provider` and falls back to the profile default, missing the edit.
+      ...(chatBaseUrl !== undefined && chatBaseUrl !== profile.baseUrl
+        ? { baseUrl: chatBaseUrl }
+        : {}),
+    };
   } else if (embChoice === 'other') {
     // Every embedding-capable profile is offered (ADR 56 conservative flag).
     // Those with a canonical default show it; self-hosted/custom ones say so and

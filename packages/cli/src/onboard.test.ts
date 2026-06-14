@@ -231,6 +231,25 @@ describe('runOnboard', () => {
     expect(loaded!.embedding).toMatchObject({ provider: 'nvidia', model: 'baai/bge-m3' });
   });
 
+  it('reuse-embedding carries an edited local chat endpoint to the embedding section', async () => {
+    answers['select'] = 'ollama';
+    answers['Ollama (local) endpoint URL'] = 'http://127.0.0.1:11435'; // non-default port
+    answers[
+      'Protect the gateway with an access token? (only needed if you expose it beyond this computer — press Enter to skip)'
+    ] = false;
+    // EMBEDDING_SELECT_REUSE defaults to 'reuse' in beforeEach
+    await runOnboard(configPath, envPath);
+
+    const loaded = loadMemexConfig(configPath);
+    expect(loaded!.providers![0]).toMatchObject({ baseUrl: 'http://127.0.0.1:11435' });
+    // The embedding must point at the SAME edited endpoint, not the :11434 default.
+    expect(loaded!.embedding).toMatchObject({
+      provider: 'ollama',
+      model: 'nomic-embed-text',
+      baseUrl: 'http://127.0.0.1:11435',
+    });
+  });
+
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;

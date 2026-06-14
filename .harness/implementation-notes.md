@@ -1049,3 +1049,31 @@ baai-bge-m3-invoke:input 必填,model/encoding_format/truncate 可选,无 input_
 = 16 绿,root tsc clean。bge-m3 输出 1024 维,padToSchemaDims 补到 1536。
 
 **残留(unverified-live):** bge-m3 经 NVIDIA key 的真实 `/embeddings` 往返未活体(用户有 key 可验)。
+
+### Onboarding zoom-out: same-class sweep (same session)
+
+**任务:** "fix all similar issue for onboarding process" —— 抽象一层,扫同一类缺陷。
+
+**缺陷类定义:** onboarding 假设/写入了运行时够不到的东西,或发起在真实环境会失败的网络调用。
+
+**模块图(Memex 词汇):**
+- `cli/onboard.ts runOnboard` = Onboarding TUI,只写 `~/.memex/config.json`(provider registry + gateway + embedding + channels),不写图。
+- SSOT = `shared/llm/provider-profiles.ts PROVIDER_PROFILES`(provider 能力声明:baseUrl/envVar/default(Embedding)Model/local/supportsEmbedding)。
+- 消费侧:`shared/llm/from-config.ts`(buildChatProvider/resolveEmbeddingEndpoint)、`cli/doctor.ts`(checkProviders/checkEmbedding 探活)、`gateway-bot`(channels)。
+- 网络硬化 SSOT = `gateway-bot/channel-http.ts`(resolveProxyUrl + telegramFetch:SNI 保留 IP 回退 + DoH)。
+
+**修复(本 commit):** embedding **reuse** 路径丢弃已编辑的本地端点 —— `{provider,model}` 没写 baseUrl,
+而 resolveEmbeddingEndpoint 路径#1 命中 `provider` 后回退 profile 默认端口,忽略用户改的端口(如 ollama 改
+:11435)。同 embedding-other baseUrl 持久化的同类 bug。修:reuse 段在 chatBaseUrl≠profile 默认时一并写入。
+新增 ollama 改端口 reuse 用例锁定。
+
+**已核实在 parity(非 bug):** doctor `checkProviders`(probeUrl=prov.baseUrl??profile)、`checkEmbedding`
+(走 resolveEmbeddingEndpoint 读 emb.baseUrl)—— 修完 reuse 后都读到持久化的编辑端点,与运行时一致。
+
+**记录为 finding(本轮未修,需更大决策):** `cli/connect/telegram.ts validateBotToken` 用裸 `fetch` 打
+`api.telegram.org/getMe`,而运行时通道已用 `telegramFetch`(channel-http.ts)硬化(代理/IPv6/SNI 回退)。
+onboarding 的 Telegram 步在受限网络可能误报"validation failed"。**未修原因:** telegramFetch 在 gateway-bot
+包,CLI 复用需跨包(移到 @graph/shared 或加依赖,带 undici)= 结构改动有 blast radius;且该步可选、失败仅降级为
+"稍后 memex connect telegram",非阻断。落地条件:把 channel-http 提到 @graph/shared 时顺带接线。
+
+**Gate:** onboard 9 测试绿,root tsc clean。
