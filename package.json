@@ -32,6 +32,9 @@
     "pg": "8.21.0",
     "pg-listen": "1.7.0",
     "pino": "9.6.0",
+    "react-force-graph-3d": "^1.29.1",
+    "three": "^0.184.0",
+    "three-spritetext": "^1.10.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

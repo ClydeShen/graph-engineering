@@ -1,48 +1,46 @@
 'use client';
 
 /**
- * UniverseCanvas — the Now hero's L0/L1 tier (CONSOLE-REDESIGN §6.1). Reads
- * /v1/forest and renders each channel as a glowing galaxy with its root tasks
- * orbiting; clicking a task drills into its L2 tree (ForestCanvas). Same engine
- * + reduced-motion discipline as ForestCanvas.
+ * UniverseCanvas — the Now hero's L0/L1 tier (CONSOLE-REDESIGN §6.1), now in 3D
+ * (react-force-graph-3d / ThreeJS-WebGL; §7 翻案 2026-06-15). Reads /v1/forest
+ * and renders each channel as a glowing galaxy with its root tasks orbiting;
+ * clicking a task drills into its L2 tree.
  *
- * react-force-graph leverage (the four reference behaviours):
- *  - large-graph: custom nodeCanvasObject + pointer-area paint keep dense graphs
- *    cheap; labels are gated so a 400-node hairball stays legible.
- *  - highlight: hovering a node lifts it + its neighbours + their links, and dims
- *    the rest (globalAlpha) — the canonical focus interaction.
- *  - text-nodes: galaxy names always paint; task names paint on focus or zoom.
- *  - dynamic: SSE trail pulses debounce-reconcile against REST (§6.3).
+ * Visual depth (the reason 3D was chosen):
+ *  - UnrealBloom post-processing → nodes read as light sources, not flat discs.
+ *  - directional particles flow causality along the links.
+ *  - galaxies = brass spheres + always-on SpriteText name; tasks = status-hued
+ *    spheres; hover lifts the connected links + shows the name tooltip.
+ *
+ * Interaction stability (fixes the "nodes suddenly fly / zoom out of control"):
+ *  - fit-once: the camera auto-frames the scene ONLY on the first settle; after
+ *    that it is fully user-owned (no zoomToFit fighting your pan/zoom).
+ *  - diff-before-reload: an SSE pulse only rebuilds graphData when the forest's
+ *    visible signature actually changed, so idle pulses never reheat the layout.
+ *  - reduced-motion: bloom + particles off, layout settles instantly.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-// d3-force-3d ships with react-force-graph-2d; forceCollide spreads overlapping
-// nodes so dense galaxies stay legible instead of piling onto each other.
-import { forceCollide } from 'd3-force-3d';
 import { api } from '@/lib/api';
 import { toUniverseGraph, type UniverseData } from '@/lib/forest-universe';
 import { useTrailPulse } from '@/lib/use-trail-pulse';
+import {
+  STATUS_HEX,
+  GALAXY_HEX,
+  TASK_FALLBACK,
+  LINK_HEX,
+  LINK_HOT,
+  SPACE_BG,
+  nodeId,
+  prefersReducedMotion,
+  registerBloom,
+  graphSignature,
+  makeLabelSprite,
+} from '@/lib/graph3d';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false }) as any;
-
-// Status palette mirrors ForestCanvas (CONSOLE-REDESIGN §6 — single source is
-// the design doc; kept inline to avoid coupling the pure data module to colors).
-const STATUS_COLOR: Record<string, string> = {
-  active: 'oklch(0.650 0.052 230)',
-  converged: 'oklch(0.640 0.072 136)',
-  closed: 'oklch(0.640 0.015 78)',
-  suspended: 'oklch(0.595 0.135 40)',
-};
-const GALAXY_COLOR = 'oklch(0.730 0.110 77)'; // brass — the channel signal
-const FALLBACK = 'oklch(0.470 0.014 76)';
-const EDGE = 'oklch(0.500 0.045 178)';
-const EDGE_HOT = 'oklch(0.760 0.110 80)'; // highlighted link
-const DIM_ALPHA = 0.12; // non-focused nodes when something is hovered
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const nodeId = (x: any): string => (typeof x === 'object' && x !== null ? (x.id as string) : (x as string));
+const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false }) as any;
 
 function Overlay({ children, danger }: { children: React.ReactNode; danger?: boolean }) {
   return (
@@ -55,6 +53,7 @@ function Overlay({ children, danger }: { children: React.ReactNode; danger?: boo
         justifyContent: 'center',
         textAlign: 'center',
         padding: 'var(--space-6)',
+        pointerEvents: 'none',
       }}
     >
       <p className="ds-label" style={danger ? { color: 'var(--status-danger)' } : undefined}>
@@ -72,15 +71,20 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: 480 });
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const reduced =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = prefersReducedMotion();
 
+  // Diff-before-reload: keep the last applied signature so an SSE pulse that
+  // changed nothing is dropped (no setData → no reheat → no camera jump).
+  const sigRef = useRef<string>('');
   const reload = useCallback(() => {
     api
       .forest()
       .then((r) => {
-        setData(toUniverseGraph(r));
+        const next = toUniverseGraph(r);
+        const sig = graphSignature(next.nodes, next.links);
+        if (sig === sigRef.current) return; // nothing visible changed
+        sigRef.current = sig;
+        setData(next);
         setError(null);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'));
@@ -90,17 +94,13 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
     reload();
   }, [reload]);
 
-  // Real-time: each trail pulse triggers a debounced REST reconcile (§6.3 —
-  // the pulse is lossy by design, REST is the truth).
+  // Real-time: each trail pulse triggers a debounced REST reconcile (§6.3).
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useTrailPulse(() => {
     if (pulseTimer.current) clearTimeout(pulseTimer.current);
     pulseTimer.current = setTimeout(reload, 800);
   });
 
-  // The ref'd container is ALWAYS mounted (loading/empty are overlays inside it),
-  // so the observer attaches on first paint and never misses the real size —
-  // the previous early-return left it stuck at the 800×480 default (not fullscreen).
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -110,8 +110,6 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
     return () => ro.disconnect();
   }, []);
 
-  // Adjacency from the raw links (built before the engine mutates source/target
-  // into node refs; norm handles either form). Drives hover highlight.
   const adjacency = useMemo(() => {
     const m = new Map<string, Set<string>>();
     if (!data) return m;
@@ -130,19 +128,32 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
     for (const n of adjacency.get(hoverId) ?? []) s.add(n);
     return s;
   }, [hoverId, adjacency]);
+  const linkHot = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (l: any) => highlight !== null && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target)),
+    [highlight],
+  );
 
   const ready = error === null && data !== null && data.nodes.length > 0;
 
-  // Spread overlapping nodes: galaxies claim more room than their orbiting tasks.
-  // Re-applied whenever the graph reloads (the engine is re-created with new data).
+  // Bloom: add exactly once after the instance exists (skip when reduced).
+  const bloomRef = useRef(false);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || reduced || bloomRef.current) return;
     const fg = fgRef.current;
     if (!fg) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fg.d3Force('collide', forceCollide((n: any) => (n.kind === 'galaxy' ? 28 : 13)));
-    fg.d3ReheatSimulation?.();
-  }, [ready, data]);
+    bloomRef.current = true;
+    void registerBloom(fg, { strength: 1.15, radius: 0.55, threshold: 0.1 });
+  }, [ready, reduced]);
+
+  // fit-once: frame the universe only on the first settle, then hands off to the
+  // user — never refit on later reheats (that was the camera-grab bug).
+  const fittedRef = useRef(false);
+  const onEngineStop = useCallback(() => {
+    if (fittedRef.current) return;
+    fittedRef.current = true;
+    fgRef.current?.zoomToFit(reduced ? 0 : 600, 80);
+  }, [reduced]);
 
   return (
     <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -155,35 +166,41 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
       ) : null}
 
       {ready ? (
-        <ForceGraph2D
+        <ForceGraph3D
           ref={fgRef}
           graphData={data}
           width={size.w}
           height={size.h}
-          backgroundColor="transparent"
-          // Keep redrawing so hover highlight + SSE reloads repaint (the highlight
-          // pattern needs this; default true pauses the loop between interactions).
-          autoPauseRedraw={false}
-          // Frame the whole universe once the layout settles — without this the
-          // default zoom leaves nodes clustered off-centre and clipped.
-          onEngineStop={() => fgRef.current?.zoomToFit(reduced ? 0 : 500, 48)}
+          backgroundColor={SPACE_BG}
+          showNavInfo={false}
+          warmupTicks={reduced ? 100 : 0}
+          cooldownTicks={reduced ? 0 : undefined}
+          onEngineStop={onEngineStop}
+          nodeRelSize={4}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkColor={(l: any) =>
-            highlight && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target))
-              ? EDGE_HOT
-              : EDGE
-          }
+          nodeVal={(n: any) => (n.kind === 'galaxy' ? Math.min(3 + n.size * 1.5, 16) : Math.min(1 + n.size * 0.6, 6))}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkWidth={(l: any) =>
-            highlight && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target)) ? 2 : 0.5
-          }
+          nodeColor={(n: any) => (n.kind === 'galaxy' ? GALAXY_HEX : STATUS_HEX[n.status as string] ?? TASK_FALLBACK)}
+          nodeOpacity={0.92}
+          nodeResolution={14}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkDirectionalParticles={(l: any) =>
-            reduced ? 0 : highlight && highlight.has(nodeId(l.source)) && highlight.has(nodeId(l.target)) ? 3 : 1
-          }
-          linkDirectionalParticleSpeed={0.005}
-          cooldownTicks={reduced ? 0 : 120}
-          warmupTicks={reduced ? 80 : 0}
+          nodeLabel={(n: any) => n.label as string}
+          nodeThreeObjectExtend
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          nodeThreeObject={(n: any) => {
+            if (n.kind !== 'galaxy') return undefined; // tasks keep the default sphere
+            // raise the name above the galaxy sphere so it never overlaps
+            return makeLabelSprite(n.label as string, 4, Math.min(3 + n.size * 1.5, 16) + 7);
+          }}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          linkColor={(l: any) => (linkHot(l) ? LINK_HOT : LINK_HEX)}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          linkWidth={(l: any) => (linkHot(l) ? 1.6 : 0.4)}
+          linkOpacity={0.4}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          linkDirectionalParticles={(l: any) => (reduced ? 0 : linkHot(l) ? 4 : 1)}
+          linkDirectionalParticleWidth={1.6}
+          linkDirectionalParticleSpeed={0.006}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onNodeClick={(node: any) => {
             if (node.kind === 'task') onSelectTask(node.id as string);
@@ -192,92 +209,6 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
           onNodeHover={(node: any) => {
             setHoverId(node ? (node.id as string) : null);
             document.body.style.cursor = node && node.kind === 'task' ? 'pointer' : 'default';
-          }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-            const focused = highlight === null || highlight.has(node.id as string);
-            ctx.globalAlpha = focused ? 1 : DIM_ALPHA;
-
-            if (node.kind === 'galaxy') {
-              const r = Math.min(6 + node.size * 2, 22);
-              if (!reduced && focused) {
-                const grad = ctx.createRadialGradient(node.x, node.y, r * 0.3, node.x, node.y, r * 1.8);
-                grad.addColorStop(0, 'oklch(0.730 0.110 77 / 0.5)');
-                grad.addColorStop(1, 'oklch(0.730 0.110 77 / 0)');
-                ctx.fillStyle = grad;
-                ctx.beginPath();
-                ctx.arc(node.x, node.y, r * 1.8, 0, 2 * Math.PI);
-                ctx.fill();
-              }
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-              ctx.fillStyle = GALAXY_COLOR;
-              ctx.fill();
-              const fs = Math.max(11 / globalScale, 3);
-              ctx.font = `600 ${fs}px ui-sans-serif, system-ui`;
-              ctx.fillStyle = 'oklch(0.965 0.012 88)';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(node.label as string, node.x, node.y);
-              ctx.globalAlpha = 1;
-              return;
-            }
-
-            // task node
-            const color = STATUS_COLOR[node.status as string] ?? FALLBACK;
-            const r = Math.min(3 + node.size, 9);
-            ctx.beginPath();
-            ctx.arc(node.x, node.y + 1.5, r, 0, 2 * Math.PI);
-            ctx.fillStyle = 'rgba(10,8,4,0.4)';
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
-            if (node.status === 'active' && !reduced && focused) {
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
-              ctx.strokeStyle = color;
-              ctx.globalAlpha = 0.35;
-              ctx.stroke();
-              ctx.globalAlpha = focused ? 1 : DIM_ALPHA;
-            }
-            if (node.status === 'suspended') {
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 2, 0, 2 * Math.PI);
-              ctx.strokeStyle = color;
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-            }
-            // focus ring on the hovered node itself (shape channel, not color)
-            if (node.id === hoverId) {
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
-              ctx.strokeStyle = 'oklch(0.965 0.012 88)';
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-            }
-            // label: on focus (highlighted) or when zoomed in — keeps dense
-            // graphs legible instead of painting every name at once.
-            const isHot = highlight !== null && highlight.has(node.id as string);
-            if (isHot || globalScale > 1.6) {
-              const fs = Math.max(10 / globalScale, 3.5);
-              ctx.font = `${fs}px ui-monospace, monospace`;
-              ctx.fillStyle = 'oklch(0.875 0.021 84)';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'top';
-              ctx.fillText(node.label as string, node.x, node.y + r + 2);
-            }
-            ctx.globalAlpha = 1;
-          }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
-            const r =
-              node.kind === 'galaxy' ? Math.min(6 + node.size * 2, 22) : Math.min(3 + node.size, 9) + 2;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
           }}
         />
       ) : null}

@@ -1188,3 +1188,23 @@ capability 预设的 follow-up(`npm install -g agent-browser`)是该工具自身
 - **#27 AC4 真 LLM + 浏览器活体视觉验证 = BLOCKED**:本机无可用 LLM(Gemini key 被吊销 / Ollama 未装,见 `project_console_live_test_session`)+ 无浏览器活体。
   逻辑层已 logic-done(单测+DB journey+build 全绿);live-done 待用户配可用 provider 后跑 Now 画布 + 写表单真存。
 - per-channel LLM **gateway 进程内热生效**:刻意留作独立基础设施项(见上 #27-1/2)。
+
+---
+
+## 2026-06-15 自主 GOAL 续 — Now 图 3D 翻案 + 交互稳定性修复
+
+**触发**：用户指出当初选 react-force-graph 正是为 3D 视图,现有 `react-force-graph-2d` 是平面;且报 bug「跟图互动时节点突然失控放大」。先查 ctx7 文档(`/vasturiano/react-force-graph`)确认 3D 能力。
+
+**交互 bug 根因（trim tab）**：`onEngineStop` 每次 SSE 脉冲 reheat 后重复 `zoomToFit`——节点少时 fit 强行 zoom-in→节点暴胀 + 抢走用户相机。
+- 修复①**fit-once**:`fittedRef` 仅首次 settle 取景,之后相机全归用户(永不 refit)。
+- 修复②**diff-before-reload**:`graphSignature`(id:status:size + link 端点)签名,脉冲只在签名变化时 setData→闲时脉冲不再 reheat/抖动。
+- 两修复对 2D/3D 同源,故随 3D 重写一并落地(非 throwaway)。
+
+**3D 翻案**：`react-force-graph-2d` → `react-force-graph-3d`(ThreeJS/WebGL)。新增 deps `three@0.184`/`three-spritetext@1.10`/`react-force-graph-3d@1.29`(单一 three 副本,无多实例 footgun)。
+- 共享 `lib/graph3d.ts`:hex 状态调色板(ThreeJS Color 不吃 oklch)、`registerBloom`(UnrealBloomPass 动态 import,reduced 关)、`graphSignature`、`makeLabelSprite`、`prefersReducedMotion`。
+- `UniverseCanvas`/`ForestCanvas` 重写:默认球体(nodeColor/nodeVal)+ bloom 辉光 + 方向粒子 + spritetext 标签(星系/根常显,其余 hover tooltip)+ hover 链 highlight + fit-once + diff-reload + reduced-motion 门。
+- 类型 shim:`types/three-addons.d.ts`(UnrealBloomPass `.js` 子路径在 moduleResolution=bundler 下无类型);SpriteText.position 经 `makeLabelSprite` 内 cast(three Object3D 类型不总穿透 three-spritetext re-export)。
+
+**Gate**：console tsc clean;**console `next build` clean**(13 路由,`/now` 静态 + ForceGraph3D ssr:false);root tsc 不受影响(console 独立 tsconfig)。
+**设计**:CONSOLE-REDESIGN §6.5 改写为 3D 引擎 + §7 加翻案行 + 交互修复段。
+**遗留**:贴图 CC0 sprite(Kenney/AI-Town)仍是 seam(makeLabelSprite/nodeThreeObject 可扩);3D 活体视觉验证待用户本机跑(无 LLM 也能看 Now 画布,但需 dev server)。

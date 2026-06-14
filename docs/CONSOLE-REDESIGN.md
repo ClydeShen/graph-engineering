@@ -112,14 +112,16 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 - 缩进的那棵树（L2/L3）：跑 `requestAnimationFrame` 持续游戏循环（生长缓动、脉冲涟漪、呼吸）。范围有界 → 便宜。
 - 全宇宙（L0/L1）：事件触发的微光/脉冲，不常驻物理。
 
-### 6.5 引擎：react-force-graph-2d + 2.5D 美术
+### 6.5 引擎：react-force-graph-3d（ThreeJS/WebGL）+ 真 3D 纵深（2026-06-15 翻案，见 §7）
 
-- **库**：`react-force-graph-2d` + `d3-force`。Next.js 里 `dynamic(() => import(...), { ssr:false })` 客户端加载（依赖 `window`）。
-- **2.5D**：`nodeCanvasObject(node, ctx, globalScale)` 画等距/带阴影的精灵；宇宙纵深靠美术（视差星空背景、节点投影、非聚焦星系景深虚化）。
-- **语义缩放 LOD**：`globalScale` 直接驱动——缩远画剪影、缩近画全细节。
-- **活气**：`linkDirectionalParticles` + `linkDirectionalParticleSpeed`，因果在树枝上流动。
+- **库**：`react-force-graph-3d` + `three` + `d3-force-3d`。Next.js 里 `dynamic(() => import(...), { ssr:false })` 客户端加载（依赖 `window`/WebGL）。
+- **真 3D 纵深**：透视 + 轨道相机（旋转/缩放/平移）；纵深是真的，不再靠 2.5D 美术伪造。
+- **辉光**：`postProcessingComposer().addPass(UnrealBloomPass)` 让节点像光源（"活树/星系"氛围）；reduced-motion 关。
+- **节点**：默认球体（`nodeColor` hex 状态色 + `nodeVal` 体积）+ bloom；标签 `three-spritetext`（星系/根任务常显，其余 `nodeLabel` 悬停 tooltip）。贴图 `THREE.Sprite` 是日后换 Kenney/AI-Town CC0 sprite 的 seam（§9）。
+- **活气**：`linkDirectionalParticles` + `…Speed`，因果沿 3D 连线流动；悬停 highlight 抬连接链 + 粒子。
+- **交互稳定（修「节点突然失控放大」）**：**fit-once** 相机（仅首次 settle 取景）+ **diff-before-reload**（脉冲只在签名变化时 setData，闲时不 reheat），见 §7 末。
 
-> 游戏化「手感」规格（动效 token、因果即动效、缩放惯性、LOD 美术、性能红线、reduced-motion canvas 守则）见**附录 B**。
+> 游戏化「手感」规格（动效 token、因果即动效、性能红线、reduced-motion 守则）见**附录 B**；其 2.5D/`nodeCanvasObject`/`globalScale` 描述属 2d 时代，3D 下由相机透视 + bloom + spritetext 等价实现，原则（因果即动效、reduced-motion 显式关、性能红线）不变。
 
 ---
 
@@ -131,8 +133,11 @@ Overview(/)  ·  Now  ·  Chat  ·  History  ·  Workspace  ·  Emergence  ·  P
 | 本次初判 | 倾向 react-force-graph | 缺证据下的推荐（不知 g6 已是锁定在用引擎） |
 | 翻案核实 | 摆回 g6（DRY + Combo=星系 + 已锁定） | g6 v5 能力齐全且零新依赖 |
 | **最终（用户对比真实例子）** | **react-force-graph-2d** | **视觉/UX 优先级压过 DRY：g6 太平面、互动弱、UI/UX 不够直观。视觉活气是本次重设计的核心诉求** |
+| **2026-06-15 翻案（用户：当初看中的是 3D 视图）** | **`react-force-graph-3d`（ThreeJS/WebGL）** | 2d 仍是平面；用户最初选这个 lib 正是为其 3D。换 3D 后端拿到真透视 + UnrealBloom 辉光 + 立体粒子 + 贴图精灵 seam。`ForestCanvas`/`UniverseCanvas` 改用 `ForceGraph3D`；新增 `three`/`three-spritetext`/`react-force-graph-3d`；共享 `lib/graph3d.ts`（hex 调色板/bloom/签名/reduced-motion） |
 
-**接受的代价：** 移除 `@antv/g6` 依赖；重写 `packages/console/src/components/TopologyCanvas.tsx`（从"单 scope entity 图" → "scope_lineage 森林渲染器"）。
+**接受的代价：** 移除 `@antv/g6` 依赖；重写 `packages/console/src/components/TopologyCanvas.tsx`（从"单 scope entity 图" → "scope_lineage 森林渲染器"）；3D 翻案新增 `three`（~ThreeJS/WebGL，比 2d 重）。
+
+**交互稳定性修复（2026-06-15，与 3D 翻案同批）：** 修「跟图互动时节点突然失控放大」——根因 = `onEngineStop` 每次 SSE 脉冲 reheat 后重复 `zoomToFit`（节点少时强行 zoom-in→节点暴胀 + 抢走用户相机）。两处修复：① **fit-once**（仅首次 settle 自动取景，之后相机全归用户）；② **diff-before-reload**（脉冲只在 forest 可见签名变化时才 setData，闲时脉冲不再 reheat）；reduced-motion 下 bloom/粒子关 + 布局即时收敛。
 
 ---
 
