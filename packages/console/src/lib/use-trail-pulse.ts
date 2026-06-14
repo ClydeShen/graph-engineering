@@ -7,10 +7,18 @@ import type { TrailSseEvent } from './api';
  * and lossy by design (ADR 32) — callers use it to TRIGGER a REST reconcile, not
  * as a source of truth. A ref keeps the SSE connection stable across onPulse
  * identity changes (no reconnect storm on every render).
+ *
+ * onOpen fires on every (re)connection. Because the pulse is lossy, anything that
+ * happened while the EventSource was disconnected (e.g. the gateway restarted or
+ * the LISTEN connection dropped) is missed — so callers reconcile on open to
+ * catch up. This is the "clients that reconnect simply point-query for anything
+ * missed" contract from the stream route, finally honoured on the client.
  */
-export function useTrailPulse(onPulse: (evt: TrailSseEvent) => void): void {
+export function useTrailPulse(onPulse: (evt: TrailSseEvent) => void, onOpen?: () => void): void {
   const ref = useRef(onPulse);
   ref.current = onPulse;
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
@@ -22,9 +30,12 @@ export function useTrailPulse(onPulse: (evt: TrailSseEvent) => void): void {
         /* malformed pulse — ignore (REST reconcile is the safety net) */
       }
     };
+    const onopen = () => openRef.current?.();
     es.addEventListener('trail_event', handler);
+    es.addEventListener('open', onopen);
     return () => {
       es.removeEventListener('trail_event', handler);
+      es.removeEventListener('open', onopen);
       es.close();
     };
   }, []);

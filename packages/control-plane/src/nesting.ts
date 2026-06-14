@@ -131,7 +131,7 @@ export async function nestScope(
     }
 
     // ── Phase 3: INSERT plan_created event with pgcrypto version_hash ────────
-    const insertResult = await client.query<{ version_hash: string }>(
+    const insertResult = await client.query<{ id: string; version_hash: string }>(
       `INSERT INTO execution_event_log
          (scope_id, entity_id, event_type, predecessor_hash, version_hash, payload, status)
        VALUES (
@@ -149,11 +149,25 @@ export async function nestScope(
          $4,
          'pending_scheduling'
        )
-       RETURNING version_hash`,
+       RETURNING id, version_hash`,
       [scopeId, entityId, ZERO_HASH, canonicalPayload],
     );
 
     await client.query('COMMIT');
+
+    // Pulse the realtime stream so observers (Now universe, dashboard) learn a
+    // scope was born at creation time — not only when its first occWrite lands.
+    // Without this, a brand-new galaxy/scope is invisible to /v1/stream until the
+    // next occWrite, so the Now universe needed a manual refresh. Same
+    // graph_event_ready contract as occWrite (JSON {id}); best-effort — the scope
+    // is already committed, so a notify failure must not fail nesting.
+    try {
+      await client.query("SELECT pg_notify('graph_event_ready', $1::text)", [
+        JSON.stringify({ id: Number(insertResult.rows[0].id) }),
+      ]);
+    } catch {
+      /* notify is best-effort; the COMMIT above is the source of truth */
+    }
 
     const planHash = insertResult.rows[0].version_hash;
     return { scopeId, planHash };

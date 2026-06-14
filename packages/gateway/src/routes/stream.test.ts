@@ -83,23 +83,22 @@ describe('GET /v1/stream', () => {
       }),
     } as unknown as Pool;
 
-    let resolveCallback!: () => void;
-    const callbackDone = new Promise<void>((res) => { resolveCallback = res; });
-
+    // Keep the SSE callback alive so the subscriber stays registered when the
+    // pulse fires: the subscriber is added synchronously before the first await,
+    // and the keepalive sleep never resolves (so no ping is written either).
     mockStreamSSE.mockImplementation((_c, callback) => {
       const mockStream = {
         writeSSE: mockWriteSSE,
-        sleep: vi.fn().mockResolvedValue(undefined),
-        closed: true,
+        sleep: vi.fn().mockReturnValue(new Promise<void>(() => {})),
+        closed: false,
       };
-      void callback(mockStream as unknown as Parameters<typeof callback>[0]).then(resolveCallback);
+      void callback(mockStream as unknown as Parameters<typeof callback>[0]);
       return new Response(null, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
     });
 
     const app = buildStreamRoute(pool);
+    // ensureListener() registers the shared notification handler before streamSSE.
     await app.fetch(new Request('http://x/stream'));
-    // Wait for the async callback (pool.connect + client.on registration) to complete
-    await callbackDone;
 
     expect(capturedNotificationHandler).not.toBeNull();
     capturedNotificationHandler!({ payload: 'event-id-42' });

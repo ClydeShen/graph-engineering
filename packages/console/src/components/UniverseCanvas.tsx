@@ -94,12 +94,18 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
     reload();
   }, [reload]);
 
-  // Real-time: each trail pulse triggers a debounced REST reconcile (§6.3).
+  // Real-time: each trail pulse triggers a debounced REST reconcile (§6.3). On
+  // (re)connect we reconcile immediately — the pulse is lossy, so anything that
+  // landed while the stream was down (gateway restart / dropped LISTEN) is caught
+  // up here instead of waiting for the next live pulse.
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useTrailPulse(() => {
-    if (pulseTimer.current) clearTimeout(pulseTimer.current);
-    pulseTimer.current = setTimeout(reload, 800);
-  });
+  useTrailPulse(
+    () => {
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+      pulseTimer.current = setTimeout(reload, 800);
+    },
+    reload,
+  );
 
   useEffect(() => {
     const el = wrapRef.current;
