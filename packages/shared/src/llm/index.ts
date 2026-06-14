@@ -6,5 +6,6 @@ export * from './factory.js';
 export * from './classify-error.js';
 export * from './fallback.provider.js';
 export * from './provider-profiles.js';
+export * from './openai-url.js';
 export * from './fetch-models.js';
 export * from './from-config.js';

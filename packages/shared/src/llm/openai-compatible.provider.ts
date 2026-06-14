@@ -18,6 +18,7 @@ import type {
   ToolDefinition,
 } from './provider.interface.js';
 import type { LLMProviderConfig } from './types.js';
+import { openaiUrl } from './openai-url.js';
 
 interface OpenAIChatResponse {
   choices: Array<{
@@ -37,7 +38,7 @@ export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider,
 
   private async post(body: Record<string, unknown>): Promise<OpenAIChatResponse> {
     // LLM CALL — justified by ADR 22 (Workers call provider interface, not raw HTTP)
-    const res = await fetch(`${this.config.baseUrl ?? 'http://localhost:11434'}/v1/chat/completions`, {
+    const res = await fetch(openaiUrl(this.config.baseUrl ?? 'http://localhost:11434', 'chat/completions'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ export class OpenAICompatibleProvider implements LLMProvider, EmbeddingProvider,
 
   async embed(text: string): Promise<EmbedResult> {
     // LLM CALL — justified by ADR 22 (embedding calls excluded from Worker token budget)
-    const res = await fetch(`${this.config.baseUrl ?? 'http://localhost:11434'}/v1/embeddings`, {
+    const res = await fetch(openaiUrl(this.config.baseUrl ?? 'http://localhost:11434', 'embeddings'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -10,22 +10,11 @@
  */
 
 import type { LLMApi } from './types.js';
+import { openaiUrl } from './openai-url.js';
 
 /** OpenAI list-models / Anthropic list-models share this envelope shape. */
 interface ModelListResponse {
   data?: Array<{ id?: string }>;
-}
-
-/**
- * Build the models endpoint for an OpenAI-compatible base. The profile registry
- * is inconsistent about whether baseUrl already carries a version segment
- * (`https://api.openai.com/v1`, `.../v1beta/openai`) or is a bare host
- * (`http://localhost:11434`), so detect it: a versioned base just needs
- * `/models`; a bare host needs `/v1/models`.
- */
-function openaiModelsUrl(baseUrl: string): string {
-  const trimmed = baseUrl.replace(/\/+$/, '');
-  return /\/v\d/.test(trimmed) ? `${trimmed}/models` : `${trimmed}/v1/models`;
 }
 
 export async function fetchModels(
@@ -46,7 +35,7 @@ export async function fetchModels(
       headers = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
     } else {
       if (baseUrl === undefined) return [];
-      url = openaiModelsUrl(baseUrl);
+      url = openaiUrl(baseUrl, 'models');
       headers =
         apiKey !== undefined && apiKey.length > 0
           ? { Authorization: `Bearer ${apiKey}` }

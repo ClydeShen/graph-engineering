@@ -1092,3 +1092,31 @@ bge-m3。4 选项保留一键默认 + 按需选择,respects 两类用户。NVIDI
 选中运行时需 input_type 会失败,但属用户显式选择,recommended(bge-m3)已置顶标注。
 
 **Gate:** reuse-pick 用例锁定(选非默认 nv-embed-v1);onboard 10 测试绿,root tsc clean。
+
+### systematic-debugging: cloud /v1 path doubling (ROOT CAUSE) — same session
+
+**触发:** 用户 "nvidia不是一個孤例" + /systematic-debugging。要求找 NVIDIA 误分类背后的系统性根因。
+
+**Phase 1 证据(curl 实测,非推理):**
+| URL | 结果 |
+| nvidia/v1/embeddings | 400(路径存在,空body被拒) |
+| nvidia/v1/v1/embeddings | 404(翻倍) |
+| openai/v1/chat/completions | 401 | openai/v1/v1/chat/completions | 404 |
+| openrouter/v1/embeddings | 401 | openrouter/v1/v1/embeddings | 404 |
+
+**根因(系统性,比 flag 漂移更深):** `OpenAICompatibleProvider` 硬编 `${baseUrl}/v1/chat/completions`
+和 `${baseUrl}/v1/embeddings`,但所有云 profile 的 baseUrl 已含版本段(openai/v1、nvidia/v1、gemini
+/v1beta/openai)→ 运行时发**翻倍路径** → 严格网关全 404,chat+embedding 双双失败。
+
+**为何隐藏(Phase 2 工作/损坏对比):** ① 本地 provider(ollama:11434/llamacpp:8080/…)baseUrl 无 /v1
+→ `${base}/v1/...` 正确,而活体测试全是本地;② DeepSeek 网关宽容(/v1 与裸路径都 401);③ 我新写的
+fetchModels 已做版本检测(所以选单能列 121 个)——但运行时 embed()/chat() 没有,两者对 URL 契约不一致。
+**关键后果:** 我之前的 NVIDIA embedding fix(525e004f)运行时 404,非功能性 —— 这正是"nvidia 不孤"的真义。
+
+**Phase 4 修复(at source,failing-test-first):** 抽 `openai-url.ts :: openaiUrl(baseUrl, route)` 单一规则
+(检测 `/v\d` → 已版本化则直接拼 route,否则补 /v1)。provider chat+embed 与 fetch-models 共用,全码库统一
+一条 URL 规则。新增 openai-compatible.provider.test.ts 6 例(版本化云 base 不翻倍×chat/embed/gemini、
+裸 host 补 /v1×chat/embed、尾斜杠不翻倍)—— 先 RED(4 fail 显示 `/v1//v1/`)后 GREEN。Anthropic provider
+不动(base 恒裸,不属翻倍类,改即 scope creep)。
+
+**Gate:** llm 全套 54 测试绿(含新 6),root tsc clean。Anthropic/local/DeepSeek 行为不变。
