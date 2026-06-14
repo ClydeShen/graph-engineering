@@ -41,6 +41,41 @@ const log = logger.child({ component: 'gateway', module: 'conversation-core' });
 /** Hard cap on retrieve→re-ask iterations per turn. */
 export const MAX_TOOL_ITERATIONS = 3;
 
+/** Recent conversation messages re-projected into the prompt (≈10 exchanges). */
+export const HISTORY_LIMIT = 20;
+
+/**
+ * Re-project prior conversation turns from the graph as proper chat messages
+ * (ADR-54: stateless re-derivation, never a retained message list). The model
+ * needs turn-structured history to stay coherent — fed only the current line it
+ * repeats itself and ignores answers ("which city?" after the user already said
+ * it). Excludes the just-written current turn; newest-capped, returned oldest-first.
+ */
+export async function loadConversationHistory(
+  pool: Pool,
+  scopeId: string,
+  currentTurnId: string,
+): Promise<ChatMessage[]> {
+  const { rows } = await pool.query<{ kind: string; text: string | null }>(
+    `SELECT payload::jsonb->>'kind' AS kind, payload::jsonb->>'text' AS text
+       FROM execution_event_log
+      WHERE scope_id = $1
+        AND event_type = 'memory_updated'
+        AND payload::jsonb->>'kind' IN ('conversation.user', 'conversation.assistant')
+        AND payload::jsonb->>'turn_id' <> $2
+      ORDER BY id DESC
+      LIMIT $3`,
+    [scopeId, currentTurnId, HISTORY_LIMIT],
+  );
+  return rows
+    .reverse()
+    .map((r) => ({
+      role: r.kind === 'conversation.user' ? ('user' as const) : ('assistant' as const),
+      content: r.text ?? '',
+    }))
+    .filter((m) => m.content !== '');
+}
+
 export interface ConversationDeps {
   pool: Pool;
   wMax: number;
@@ -63,8 +98,27 @@ export type ConversationTurnResult =
   | { kind: 'suspended' }
   | { kind: 'error'; message: string };
 
-/** Serialize the context projection into a compact prompt block. */
-export function formatContextBlock(ctx: AssembledContext): string {
+/**
+ * Conversational system role for the ADR-54 chat surface. The agentic
+ * STABLE_SYSTEM_ROLE ("you are a graph-native agent… your context window is a
+ * read-time projection of the graph state") makes small models emit graph-event
+ * format — they echo the trail dump and invent `[event_type] {json}` lines
+ * instead of conversing — so the conversation surface gets its own prose-first
+ * instruction. (The agentic role is unchanged for the real agent path.)
+ */
+export const CONVERSATION_SYSTEM_ROLE =
+  'You are the memex, a helpful conversational assistant with a persistent, ' +
+  'graph-backed memory. Reply to the user directly and naturally, in prose. ' +
+  'Any MEMORY section below is background recalled from earlier trails — draw on ' +
+  'it when relevant, but never repeat it verbatim, list it, or imitate its formatting.';
+
+/**
+ * Prose memory block for the conversation prompt: crystallized lessons,
+ * capability notes, and CCR retrieval guidance. Deliberately EXCLUDES the raw
+ * trail-event listing — small models parrot it — and the conversation turns,
+ * which are re-projected as real chat messages (see loadConversationHistory).
+ */
+export function conversationMemoryBlock(ctx: AssembledContext): string {
   const parts: string[] = [];
   if (ctx.reflectionContent !== undefined && ctx.reflectionContent !== '') {
     parts.push(ctx.reflectionContent);
@@ -72,15 +126,8 @@ export function formatContextBlock(ctx: AssembledContext): string {
   if (ctx.capabilityContent !== undefined && ctx.capabilityContent !== '') {
     parts.push(ctx.capabilityContent);
   }
-  if (ctx.context !== null && ctx.context.length > 0) {
-    const lines = ctx.context.map((e) => {
-      if ('_ccr_dropped' in e) return e._ccr_dropped;
-      return `[${e.event_type}] ${typeof e.payload === 'string' ? e.payload : JSON.stringify(e.payload)}`;
-    });
-    parts.push('## Trail Context (newest last)\n' + lines.join('\n'));
-  }
   if (ctx.ccrInstructions !== undefined) parts.push(ctx.ccrInstructions);
-  return parts.join('\n\n');
+  return parts.length > 0 ? '## MEMORY\n' + parts.join('\n\n') : '';
 }
 
 /**
@@ -134,21 +181,30 @@ export async function runConversationTurn(
   // 2. Build the prompt from the projection. A degraded turn (context null
   // from an environment fault, ADR 55) still converses — with less context.
   const ctx = userOutcome.context;
-  const systemParts: string[] = [];
+  const systemParts: string[] = [CONVERSATION_SYSTEM_ROLE];
   if (ctx !== null) {
-    systemParts.push(ctx.stable);
-    const block = formatContextBlock(ctx);
-    if (block !== '') systemParts.push(block);
+    const mem = conversationMemoryBlock(ctx);
+    if (mem !== '') systemParts.push(mem);
   }
-  const messages: ChatMessage[] = [
+  // Prior turns as real chat messages (not buried in the system trail-dump, where
+  // small models can't follow them). baseMessages is the clean prompt the
+  // tool-loop fallback re-asks from.
+  const history = await loadConversationHistory(deps.pool, input.scopeId, turnId);
+  const baseMessages: ChatMessage[] = [
     ...(systemParts.length > 0
       ? [{ role: 'system' as const, content: systemParts.join('\n\n') }]
       : []),
+    ...history,
     { role: 'user' as const, content: input.text },
   ];
+  const messages: ChatMessage[] = [...baseMessages];
 
   // 3. Chat with the memex_retrieve tool (ADR 54 D-3): honours the stable
-  // system prompt's promise that dropped events are retrievable.
+  // system prompt's promise that dropped events are retrievable. Offered ONLY
+  // when CCR actually dropped events — otherwise there is nothing to retrieve,
+  // and small models reflexively emit empty-prose tool calls (or leak the tool
+  // JSON as text) on a cold/short conversation. No drops → plain chat.
+  const hasDroppedContext = ctx !== null && ctx.droppedCount > 0;
   const retrieveTool = createMemexRetrieveTool();
   const tools: ToolDefinition[] = [
     {
@@ -161,10 +217,7 @@ export async function runConversationTurn(
 
   let reply: string;
   try {
-    if (supportsToolTurns(deps.chat)) {
-      // Snapshot the clean prompt (system + user) before the loop folds tool
-      // results into `messages` — the empty-reply fallback re-asks from here.
-      const baseMessages = [...messages];
+    if (supportsToolTurns(deps.chat) && hasDroppedContext) {
       let turn = await deps.chat.chatTurn(messages, tools);
       let iterations = 0;
       while (turn.toolCalls.length > 0 && iterations < MAX_TOOL_ITERATIONS) {
@@ -199,7 +252,8 @@ export async function runConversationTurn(
         reply = await deps.chat.chat(baseMessages);
       }
     } else {
-      // LLM CALL — ADR 22 (provider without tool support: plain chat)
+      // Plain chat: provider has no tool support, or nothing was dropped so the
+      // retrieve tool would only invite small-model pathologies (ADR 22).
       reply = await deps.chat.chat(messages);
     }
   } catch (err) {

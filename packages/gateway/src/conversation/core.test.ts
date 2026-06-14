@@ -19,7 +19,12 @@ vi.mock('@graph/shared', async (importOriginal) => {
   return { ...actual, occWrite: (...a: unknown[]) => occWrite(...a) };
 });
 
-import { runConversationTurn, formatContextBlock, MAX_TOOL_ITERATIONS } from './core.js';
+import {
+  runConversationTurn,
+  conversationMemoryBlock,
+  CONVERSATION_SYSTEM_ROLE,
+  MAX_TOOL_ITERATIONS,
+} from './core.js';
 import type { AssembledContext } from '@graph/workers/context/assemble';
 
 function makePool(tipRows: unknown[] = [{ version_hash: 't'.repeat(64) }]): Pool {
@@ -44,6 +49,17 @@ beforeEach(() => {
   });
   occWrite.mockResolvedValue({ version_hash: 'a'.repeat(64), occ_result: 'won', event_type: 'memory_updated' });
 });
+
+/** Override the next turn's projection to report dropped context (droppedCount>0),
+ *  the precondition for offering the memex_retrieve tool. */
+function withDroppedContext(): void {
+  processAgentTurn.mockResolvedValueOnce({
+    suspended: false,
+    version_hash: 'u'.repeat(64),
+    occ_result: 'won',
+    context: { ...baseContext, droppedCount: 1 },
+  });
+}
 
 describe('runConversationTurn', () => {
   it('null chat provider fails fast with onboarding guidance', async () => {
@@ -92,7 +108,7 @@ describe('runConversationTurn', () => {
     expect(writeArgs.payload['kind']).toBe('conversation.assistant');
   });
 
-  it('projection content lands in the system message', async () => {
+  it('conversational role + lessons land in the system message (no raw trail dump)', async () => {
     processAgentTurn.mockResolvedValue({
       suspended: false,
       version_hash: 'u'.repeat(64),
@@ -110,9 +126,12 @@ describe('runConversationTurn', () => {
     );
     const messages = chat.chat.mock.calls[0]![0] as ChatMessage[];
     expect(messages[0]!.role).toBe('system');
-    expect(messages[0]!.content).toContain('STABLE');
+    expect(messages[0]!.content).toContain(CONVERSATION_SYSTEM_ROLE);
     expect(messages[0]!.content).toContain('REFLECTED-LESSONS');
-    expect(messages[0]!.content).toContain('plan_created');
+    // Raw trail events must not be dumped into the conversation prompt (parroting).
+    expect(messages[0]!.content).not.toContain('plan_created');
+    // The agentic graph-projection role must not leak into the chat surface.
+    expect(messages[0]!.content).not.toContain('graph-native agent');
   });
 
   it('suspended scope propagates', async () => {
@@ -142,6 +161,7 @@ describe('runConversationTurn', () => {
   });
 
   it('tool loop: memex_retrieve call is executed and folded back', async () => {
+    withDroppedContext(); // tool is only offered when CCR actually dropped events
     const chatTurn = vi
       .fn()
       .mockResolvedValueOnce({
@@ -167,6 +187,7 @@ describe('runConversationTurn', () => {
   });
 
   it('tool loop is capped at MAX_TOOL_ITERATIONS', async () => {
+    withDroppedContext();
     const chatTurn = vi.fn().mockResolvedValue({
       text: 'loop',
       toolCalls: [{ id: 'x', name: 'memex_retrieve', input: { hash: 'h' } }],
@@ -186,6 +207,7 @@ describe('runConversationTurn', () => {
     // Small models (llama-3.1-8b) reflexively call memex_retrieve with empty
     // text every turn — without the fallback, reply='' renders as a silent
     // no-response in the terminal. The fallback forces a final tool-free chat().
+    withDroppedContext();
     const chatTurn = vi.fn().mockResolvedValue({
       text: '',
       toolCalls: [{ id: 'x', name: 'memex_retrieve', input: { query: 'greeting' } }],
@@ -204,6 +226,53 @@ describe('runConversationTurn', () => {
     expect(fallbackMessages.some((m) => m.content.includes('Tool result'))).toBe(false);
   });
 
+  it('no dropped context → plain chat, retrieve tool never offered', async () => {
+    // Cold/short conversation (droppedCount 0): the tool would only invite small
+    // models to emit empty tool calls or leak tool JSON, so it must not be offered.
+    const chatTurn = vi.fn();
+    const chat = { chat: vi.fn().mockResolvedValue('direct reply'), chatTurn };
+
+    const result = await runConversationTurn(
+      { pool: makePool(), wMax: 4096, embed: null, chat },
+      { scopeId: 's1', text: 'hi' },
+    );
+
+    expect(result).toMatchObject({ kind: 'reply', reply: 'direct reply' });
+    expect(chatTurn).not.toHaveBeenCalled();
+    expect(chat.chat).toHaveBeenCalledTimes(1);
+  });
+
+  it('prior turns are re-projected from the graph as chat messages', async () => {
+    // The history query (2nd pool.query) returns earlier turns; they must reach
+    // the model as role-tagged messages so it stays coherent across turns.
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [{ version_hash: 't'.repeat(64) }] }) // tip lookup
+        .mockResolvedValueOnce({
+          // SQL returns newest-first (ORDER BY id DESC); the loader reverses it.
+          rows: [
+            { kind: 'conversation.assistant', text: 'which city?' },
+            { kind: 'conversation.user', text: 'book me a flight' },
+          ],
+        }),
+    } as unknown as Pool;
+    const chat = { chat: vi.fn().mockResolvedValue('Auckland it is') };
+
+    await runConversationTurn(
+      { pool, wMax: 4096, embed: null, chat },
+      { scopeId: 's1', text: 'Auckland' },
+    );
+
+    const sent = chat.chat.mock.calls[0]![0] as ChatMessage[];
+    expect(sent[0]!.role).toBe('system'); // conversational role
+    expect(sent.slice(1)).toEqual([
+      { role: 'user', content: 'book me a flight' },
+      { role: 'assistant', content: 'which city?' },
+      { role: 'user', content: 'Auckland' },
+    ]);
+  });
+
   it('LLM failure returns an error result (turn fails, scope intact)', async () => {
     const chat = { chat: vi.fn().mockRejectedValue(new Error('429 rate limit')) };
     const result = await runConversationTurn(
@@ -215,18 +284,23 @@ describe('runConversationTurn', () => {
   });
 });
 
-describe('formatContextBlock', () => {
-  it('renders trail events, sentinels, and CCR instructions', () => {
-    const block = formatContextBlock({
+describe('conversationMemoryBlock', () => {
+  it('includes lessons, capabilities, and CCR guidance — never raw trail events', () => {
+    const block = conversationMemoryBlock({
       ...baseContext,
-      context: [
-        { event_type: 'plan_created', payload: '{"a":1}' } as never,
-        { _ccr_dropped: '<<ccr:abc 3_dropped>>' },
-      ],
+      reflectionContent: 'LESSON: prefer X',
+      capabilityContent: 'CAN: search',
+      context: [{ event_type: 'plan_created', payload: '{"a":1}' } as never],
       ccrInstructions: 'USE memex_retrieve',
     });
-    expect(block).toContain('[plan_created]');
-    expect(block).toContain('<<ccr:abc 3_dropped>>');
+    expect(block).toContain('LESSON: prefer X');
+    expect(block).toContain('CAN: search');
     expect(block).toContain('USE memex_retrieve');
+    // The parrotable raw trail listing must NOT appear in the conversation prompt.
+    expect(block).not.toContain('[plan_created]');
+  });
+
+  it('returns empty string when there is no prose context', () => {
+    expect(conversationMemoryBlock(baseContext)).toBe('');
   });
 });
