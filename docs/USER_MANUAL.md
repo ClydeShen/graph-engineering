@@ -225,9 +225,15 @@ The interactive wizard asks, in order:
    - `LM Studio (local)`: defaults to `http://localhost:1234`.
    - `DeepSeek`: defaults to `https://api.deepseek.com`, key referenced as
      `${DEEPSEEK_API_KEY}`.
-2. **Model name** (default can be edited).
-3. **Gateway port** (default `3000`).
-4. **Whether to generate a realtime API token** — if the Gateway will be
+2. **API key** — pasted directly (not a variable name); it is written to `.env`
+   (gitignored) and the config keeps only a `${ENV_VAR}` reference. Local
+   providers that need no key skip this step.
+3. **Model** — picked from a live list fetched from the provider with the key
+   from step 2 (the provider's recommended default is pinned to the top). If the
+   list can't be fetched (offline, no key, or an endpoint without a `/models`
+   route) the wizard falls back to typing a model name, default pre-filled.
+4. **Gateway port** (default `3000`).
+5. **Whether to generate a realtime API token** — if the Gateway will be
    reachable over a LAN or the internet, choose "yes"; a random 24-byte hex
    token is generated and written to the config (used to authenticate WS/SSE
    and remote connections).

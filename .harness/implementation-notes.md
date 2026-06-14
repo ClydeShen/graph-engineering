@@ -963,3 +963,27 @@ api.telegram.org,bot @memememex_bot),对同一条真实入站消息跑两次出�
 **残留:** ① webhook secret 校验**未活体**(本机无公网 URL/未跑 webhook 模式)= unverified-live,
 落地条件=有公网入口时 POST 带/不带 secret 各一次。② allowlist 仅 gate chat_id(DM 即 user);群组按
 from.id 细分留作 YAGNI,需要时再加。③ Slack/Discord 仍未上同一个门(channel-allowlist.ts 已备好复用)。
+
+---
+
+## Onboarding: model pick-list (2026-06-14)
+
+**触发:** 用户跑 `memex onboard` 反馈顺序错 —— 还没问 API key 就让手敲 model name
+(`meta/llama-3.1-8b-instruct`)。应先问 key,再用 key 拉 provider 的 `/models` 让用户选。
+
+**新顺序:** `provider → (custom url) → API key → 拉取 /models 选单(推荐置顶) → ...`
+(对齐 Hermes `hermes model` 选单流,hermes-research-B §1.2/§1.4 的 `ProviderProfile.fetch_models()`)。
+
+**改动:**
+- `packages/shared/src/llm/fetch-models.ts`(新):best-effort 拉 OpenAI-compat `/models`
+  (`{base}/models` vs `{base}/v1/models` 按 base 是否已含 `/v\d` 版本段自动判定)及 Anthropic
+  固定 `/v1/models`(`x-api-key`+`anthropic-version`)。**永不抛**,任何失败返回 `[]`。
+- `onboard.ts`:`collectApiKey` 改返回 `{ref, secret}` —— `ref`(`${VAR}`)进 config,`secret`
+  仅内存内供这次拉取用、不落盘(仍只进 .env)。key 采集上移到 model 前。新 `selectModel()`:能拉到
+  就 `select`(`defaultModel` 命中列表则置顶标 recommended,末尾留"手动输入"逃生口);拉不到回退原 text。
+- 测试:fetch-models 6 单测 + onboard 选单路径 1 用例;现有 4 onboard 用例靠 fetch stub-reject 走回退,断言不变。
+
+**Gate:** root tsc clean;`fetch-models.test.ts`(6)+ `onboard.test.ts`(5)= 11 绿。
+
+**残留(unverified-live):** 真实 onboarding 未跑活体(本机 LLM key 此前被吊销,待用户配新 key 后验证
+真实 provider 的 `/models` 选单)。`docs/USER_MANUAL.md` §5.1 向导步骤已同步新顺序。

@@ -13,13 +13,14 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { intro, outro, note, select, text, password, confirm, log, isCancel, multiselect } from '@clack/prompts';
+import { intro, outro, note, select, text, password, confirm, log, isCancel, multiselect, spinner } from '@clack/prompts';
 import {
   CAPABILITY_PRESETS,
   DEFAULT_CONFIG_PATH,
   DEFAULT_GATEWAY_PORT,
   MemexConfigSchema,
   PROVIDER_PROFILES,
+  fetchModels,
   getProviderProfile,
   type MemexConfig,
   type ProviderProfile,
@@ -71,7 +72,7 @@ async function collectApiKey(
   profile: ProviderProfile,
   providerKey: string,
   envPath: string,
-): Promise<string | undefined> {
+): Promise<{ ref: string; secret: string } | undefined> {
   const varName = profile.envVar ?? `${providerKey.toUpperCase()}_API_KEY`;
   const optional = profile.envVar === undefined;
   const key = await password({
@@ -85,7 +86,68 @@ async function collectApiKey(
   log.success(
     `Saved ${maskSecret(key as string)} to ${envPath} as ${varName} — your key never goes in config.json.`,
   );
-  return '${' + varName + '}';
+  // ref is what config.json stores; secret is held transiently in memory only to
+  // list the provider's models below — it is never returned beyond onboarding.
+  return { ref: '${' + varName + '}', secret: key as string };
+}
+
+/** Sentinel select value: drop out of the live pick-list to type a model id. */
+const MANUAL_MODEL = '__manual__';
+
+/** Free-text model entry — the fallback when the live list is empty. */
+async function promptModelText(profile: ProviderProfile): Promise<string> {
+  const model = await text({
+    message: 'Model name',
+    // placeholder shows the suggestion as a grey hint (no need to delete it);
+    // defaultValue means pressing Enter on an empty line accepts the suggestion.
+    placeholder: profile.defaultModel,
+    ...(profile.defaultModel !== undefined ? { defaultValue: profile.defaultModel } : {}),
+    validate: (v) =>
+      v.length === 0 && profile.defaultModel === undefined ? 'model is required' : undefined,
+  });
+  bail(model);
+  return model as string;
+}
+
+/**
+ * Resolve the chat model: list what the provider actually serves (key already
+ * in hand) and let the user PICK, recommended pinned on top — Hermes' `hermes
+ * model` picker flow. Falls back to free-text when the list can't be fetched
+ * (offline, no key, an endpoint without /models).
+ */
+async function selectModel(
+  profile: ProviderProfile,
+  baseUrl: string | undefined,
+  apiKeySecret: string | undefined,
+): Promise<string> {
+  const sp = spinner();
+  sp.start('Listing available models…');
+  const models = await fetchModels(profile, baseUrl, apiKeySecret);
+  sp.stop(
+    models.length > 0
+      ? `Found ${models.length} model${models.length === 1 ? '' : 's'}`
+      : "Couldn't list models — enter one by name",
+  );
+  if (models.length === 0) return promptModelText(profile);
+
+  const rec =
+    profile.defaultModel !== undefined && models.includes(profile.defaultModel)
+      ? profile.defaultModel
+      : undefined;
+  const picked = await select({
+    message: 'Which model should Memex use?',
+    options: [
+      ...(rec !== undefined ? [{ value: rec, label: rec, hint: 'recommended' }] : []),
+      ...[...models]
+        .sort()
+        .filter((m) => m !== rec)
+        .map((m) => ({ value: m, label: m })),
+      { value: MANUAL_MODEL, label: 'Enter a different model name…' },
+    ],
+    ...(rec !== undefined ? { initialValue: rec } : {}),
+  });
+  bail(picked);
+  return picked === MANUAL_MODEL ? promptModelText(profile) : (picked as string);
 }
 
 export async function runOnboard(
@@ -129,22 +191,18 @@ export async function runOnboard(
     customBaseUrl = url as string;
   }
 
-  const model = await text({
-    message: 'Model name',
-    // placeholder shows the suggestion as a grey hint (no need to delete it);
-    // defaultValue means pressing Enter on an empty line accepts the suggestion.
-    placeholder: profile.defaultModel,
-    ...(profile.defaultModel !== undefined ? { defaultValue: profile.defaultModel } : {}),
-    validate: (v) =>
-      v.length === 0 && profile.defaultModel === undefined ? 'model is required' : undefined,
-  });
-  bail(model);
-
-  // The LLM's key. Paste the key itself — it goes to .env; config keeps a ref.
+  // The LLM's key comes FIRST — with it in hand we can list the provider's live
+  // models below so the user picks one instead of typing an id from memory. Paste
+  // the key itself — it goes to .env; config keeps a ${VAR} ref.
   let apiKeyRef: string | undefined;
+  let apiKeySecret: string | undefined;
   if (profile.envVar !== undefined || profile.name === 'custom') {
-    apiKeyRef = await collectApiKey(profile, providerKey as string, envPath);
+    const collected = await collectApiKey(profile, providerKey as string, envPath);
+    apiKeyRef = collected?.ref;
+    apiKeySecret = collected?.secret;
   }
+
+  const model = await selectModel(profile, customBaseUrl ?? profile.baseUrl, apiKeySecret);
 
   // ── Embeddings (semantic memory index) ───────────────────────────────────
   // Optional system-wide (ADR 55): skipping means keyword retrieval until added.
@@ -196,7 +254,7 @@ export async function runOnboard(
       embKeyRef =
         embProfile.name === profile.name
           ? apiKeyRef
-          : await collectApiKey(embProfile, embProfile.name, envPath);
+          : (await collectApiKey(embProfile, embProfile.name, envPath))?.ref;
     }
     embeddingSection = {
       provider: embProfile.name,

@@ -38,6 +38,8 @@ vi.mock('@clack/prompts', () => ({
   // Phase 18 prompts: presets default to none, telegram step defaults to skip
   // (per-test overrides via answers[message]).
   multiselect: vi.fn(() => Promise.resolve(answers['multiselect'] ?? [])),
+  // Model listing shows a spinner around fetchModels — no-op in tests.
+  spinner: () => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() }),
 }));
 
 import { runOnboard } from './onboard.js';
@@ -127,6 +129,29 @@ describe('runOnboard', () => {
     expect(loaded!.gateway!.token).toBeUndefined();
     // Embedding-capable profile → section derived without an extra prompt
     expect(loaded!.embedding).toMatchObject({ provider: 'ollama', model: 'nomic-embed-text' });
+  });
+
+  it('offers a live model pick-list when the provider lists models', async () => {
+    answers['select'] = 'openai';
+    // User picks a non-default model from the fetched list (proves the pick-list
+    // path ran, not the text fallback which would yield the gpt-4o default).
+    answers['Which model should Memex use?'] = 'gpt-4o-mini';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url).includes('/models')
+          ? Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve({ data: [{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }] }),
+            })
+          : Promise.reject(new Error('offline')),
+      ),
+    );
+
+    await runOnboard(configPath, envPath);
+
+    const loaded = loadMemexConfig(configPath);
+    expect(loaded!.providers![0]!.model).toBe('gpt-4o-mini');
   });
 
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
