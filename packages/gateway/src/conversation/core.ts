@@ -162,6 +162,9 @@ export async function runConversationTurn(
   let reply: string;
   try {
     if (supportsToolTurns(deps.chat)) {
+      // Snapshot the clean prompt (system + user) before the loop folds tool
+      // results into `messages` — the empty-reply fallback re-asks from here.
+      const baseMessages = [...messages];
       let turn = await deps.chat.chatTurn(messages, tools);
       let iterations = 0;
       while (turn.toolCalls.length > 0 && iterations < MAX_TOOL_ITERATIONS) {
@@ -182,6 +185,19 @@ export async function runConversationTurn(
         turn = await deps.chat.chatTurn(messages, tools);
       }
       reply = turn.text;
+      // A small model (e.g. llama-3.1-8b) reflexively emits a memex_retrieve
+      // tool call with EMPTY prose — even for a plain greeting — and can keep
+      // doing so until the iteration budget is spent, leaving reply=''. That
+      // surfaced as a silent no-response in the terminal (the assistant text
+      // only renders via streamed deltas, and an empty reply streams nothing).
+      // Force one final tool-free turn so the model must answer in prose.
+      // Re-ask from the clean prompt, not the tool-polluted `messages` — reaching
+      // here means the tool path never converged, and feeding the failed-retrieval
+      // transcript back makes the model narrate its failures ("three consecutive
+      // failed attempts…") instead of answering the user.
+      if (reply.trim() === '') {
+        reply = await deps.chat.chat(baseMessages);
+      }
     } else {
       // LLM CALL — ADR 22 (provider without tool support: plain chat)
       reply = await deps.chat.chat(messages);

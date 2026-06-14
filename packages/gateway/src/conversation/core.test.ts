@@ -182,6 +182,28 @@ describe('runConversationTurn', () => {
     expect(chatTurn).toHaveBeenCalledTimes(MAX_TOOL_ITERATIONS + 1);
   });
 
+  it('empty prose after the tool loop falls back to a tool-free turn', async () => {
+    // Small models (llama-3.1-8b) reflexively call memex_retrieve with empty
+    // text every turn — without the fallback, reply='' renders as a silent
+    // no-response in the terminal. The fallback forces a final tool-free chat().
+    const chatTurn = vi.fn().mockResolvedValue({
+      text: '',
+      toolCalls: [{ id: 'x', name: 'memex_retrieve', input: { query: 'greeting' } }],
+    });
+    const chat = { chat: vi.fn().mockResolvedValue('forced final answer'), chatTurn };
+
+    const result = await runConversationTurn(
+      { pool: makePool(), wMax: 4096, embed: null, chat },
+      { scopeId: 's1', text: 'greeting' },
+    );
+
+    expect(result).toMatchObject({ kind: 'reply', reply: 'forced final answer' });
+    expect(chat.chat).toHaveBeenCalledTimes(1); // tool-free fallback fired exactly once
+    // Fallback re-asks from the CLEAN prompt — no folded tool-result transcript.
+    const fallbackMessages = chat.chat.mock.calls[0]![0] as ChatMessage[];
+    expect(fallbackMessages.some((m) => m.content.includes('Tool result'))).toBe(false);
+  });
+
   it('LLM failure returns an error result (turn fails, scope intact)', async () => {
     const chat = { chat: vi.fn().mockRejectedValue(new Error('429 rate limit')) };
     const result = await runConversationTurn(
