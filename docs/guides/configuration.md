@@ -220,7 +220,7 @@ For production deployments, replace development defaults with the following:
 
 - **`DATABASE_URL`** — point to your production PostgreSQL instance (must have `pgvector` and `pgcrypto`).
 - **`LLM_API_KEY`** — set to a real API key for your cloud LLM provider.
-- **`LLM_BASE_URL`** — set to the cloud provider endpoint (e.g., `https://api.openai.com` for OpenAI, or omit for Anthropic when `LLM_API=anthropic-messages`).
+- **`LLM_BASE_URL`** — set to the cloud provider endpoint. Both conventions work: a versioned base (`https://api.openai.com/v1`, the OpenAI-SDK style the provider registry uses) or a bare host (`https://api.openai.com`, `http://localhost:11434`) — the client detects an existing version segment and never doubles `/v1`. Omit for Anthropic when `LLM_API=anthropic-messages`.
 - **`LLM_MODEL`** — set to the production model identifier.
 - **`LOG_LEVEL`** — use `info` or `warn` to reduce log volume; avoid `debug` in production.
 - **`GRAPH_RUNTIME_SECRET`** — set to a strong random string to protect the `/pair/generate` admin endpoint.

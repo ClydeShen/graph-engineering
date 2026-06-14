@@ -69,9 +69,47 @@ onboarding 选单、doctor 探测项、运行时 provider 构造、模型目录�
 - Anthropic-only / OpenRouter-only / 本地 Ollama 等主流单 provider 场景开箱可用
 - ADR-22 的 createLLMProvider 单构造路径保留，构造参数来源改为声明表+config
 
+## 补充（2026-06-14：活体 onboarding 暴露的三处结构修正）
+
+用户手动 onboarding NVIDIA 时连环暴露三类问题，逐一根因修复（非打补丁）：
+
+### D-6：OpenAI-compatible URL 契约（单一规则）
+
+`OpenAICompatibleProvider` 原硬编 `${baseUrl}/v1/chat/completions` 与 `…/v1/embeddings`，
+但声明表的云 baseUrl **已含版本段**（`api.openai.com/v1`、`integrate.api.nvidia.com/v1`、
+Gemini `…/v1beta/openai`）→ 运行时发**翻倍路径** `…/v1/v1/…` → 严格网关全 404，chat+embedding
+双失败。本地（裸 host，无 `/v1`）与 DeepSeek（宽容网关）掩盖了它，而活体测试恰好全是本地。
+
+修复：抽 `openaiUrl(baseUrl, route)` 单一规则——检测路径含 `/v\d` 即"已版本化"直接拼 route，
+否则补 `/v1`。provider（chat+embed）与 fetch-models 共用，全码库一条 URL 契约。**baseUrl 两种
+写法都合法**：版本化（OpenAI SDK 约定，声明表采用）或裸 host（本地服务），互不翻倍。
+
+### D-7：onboarding 交互流程对齐 Hermes `hermes model`
+
+- **先 key 后选模型**：拿到 key 即拉 provider 的 `/models`，recommended 置顶让用户选，
+  拉不到（离线/无端点）回退手敲——取代"一上来盲敲 model name"。
+- **本地 provider 确认端点**：local profile 的 baseUrl 是声明表默认，onboarding 让用户
+  确认/改端口（默认预填）；改后的 URL 既拉模型又写 config（运行时同端点）。Windows
+  `localhost`→IPv6 `::1` 优先的坑在 USER_MANUAL §5.1 给出 `127.0.0.1` 排错提示。
+- **embedding picker 列全部 `supportsEmbedding`**：过滤从"有默认模型"放宽为"能 embed"，
+  无默认者标 `(choose a model)` 走同款选单；`custom` 补问 baseUrl 成为任意 OpenAI-compatible
+  embeddings 端点（Voyage/Cohere/Jina）的逃生口。reuse / reuse-pick 两路：一键默认 vs 同
+  provider 自选模型，不强制。
+
+### D-8：embedding flag 校正（声明表数据）
+
+`supportsEmbedding` 系手维护、会漂移。穷尽审计 5 个标 false 的 provider：
+- **NVIDIA → true**（默认 `baai/bge-m3`，对称模型，NIM `/embeddings` 只收 `{model,input}`，
+  无需 `input_type`）；**OpenRouter → true**（2025 标准化 OpenAI 形 `/embeddings`，默认
+  `openai/text-embedding-3-small`）——两者均为 flag 漂移。
+- **MiniMax/nv-embedqa 仍 false**：`embo-01`/nv-embedqa 非对称，需 query/db（passage/query）
+  类型参数，对称 `embed()` 满足不了——**有据排除非疏漏**，profile 内注释说明。未来 `embed()`
+  若学会 `input_type` 再评估。
+
 ## 关联
 
 - ADR-22（LLM provider abstraction——本 ADR 是其配置/注册层补全，传输抽象不动）
 - ADR-54（对话核心为最大消费者）/ ADR-55（embedding 可选声明、doctor 派生探测）
 - `.harness/FINDINGS-install-flow.md` P4/N1/N5/N6
-- Hermes 参照：providers/base.py（ProviderProfile）、hermes_cli/config.py（单权威加载）
+- `.harness/implementation-notes.md`（2026-06-14 onboarding 弧逐项根因）
+- Hermes 参照：providers/base.py（ProviderProfile + `fetch_models()`）、hermes_cli/config.py（单权威加载）
