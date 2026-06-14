@@ -42,6 +42,7 @@
     "@commitlint/config-conventional": "^21.0.2",
     "@types/node": "^22",
     "@types/pg": "^8",
+    "@types/three": "^0.184.1",
     "husky": "^9.1.7",
     "tsx": "4.22.4",
     "typescript": "^5",

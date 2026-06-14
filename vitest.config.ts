@@ -19,6 +19,11 @@ function loadDotenv(): Record<string, string> {
 export default defineConfig({
   resolve: {
     alias: {
+      // Console's Next.js path alias — value imports under packages/console use
+      // '@/...'. Next resolves it via the console tsconfig; vitest needs it too,
+      // or console specs that import a sibling via '@/lib/...' fail to load. Keyed
+      // '@/' (not '@') so it never shadows the '@graph/*' / '@shared' aliases.
+      '@/': path.resolve(__dirname, 'packages/console/src') + '/',
       '@shared': path.resolve(__dirname, 'packages/shared/src'),
       '@graph/shared': path.resolve(__dirname, 'packages/shared/src'),
       '@graph/workers': path.resolve(__dirname, 'packages/workers/src'),

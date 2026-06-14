@@ -26,9 +26,6 @@ import { api } from '@/lib/api';
 import { toUniverseGraph, type UniverseData } from '@/lib/forest-universe';
 import { useTrailPulse } from '@/lib/use-trail-pulse';
 import {
-  STATUS_HEX,
-  GALAXY_HEX,
-  TASK_FALLBACK,
   LINK_HEX,
   LINK_HOT,
   SPACE_BG,
@@ -36,7 +33,7 @@ import {
   prefersReducedMotion,
   registerBloom,
   graphSignature,
-  makeLabelSprite,
+  makeNodeObject,
 } from '@/lib/graph3d';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,21 +180,14 @@ export function UniverseCanvas({ onSelectTask }: { onSelectTask: (scopeId: strin
           cooldownTicks={reduced ? 0 : undefined}
           onEngineStop={onEngineStop}
           nodeRelSize={4}
+          // nodeVal is kept for the force layout's collision sizing; the visual
+          // is fully owned by nodeThreeObject (§9 node-art vocabulary) below.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           nodeVal={(n: any) => (n.kind === 'galaxy' ? Math.min(3 + n.size * 1.5, 16) : Math.min(1 + n.size * 0.6, 6))}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          nodeColor={(n: any) => (n.kind === 'galaxy' ? GALAXY_HEX : STATUS_HEX[n.status as string] ?? TASK_FALLBACK)}
-          nodeOpacity={0.92}
-          nodeResolution={14}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           nodeLabel={(n: any) => n.label as string}
-          nodeThreeObjectExtend
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          nodeThreeObject={(n: any) => {
-            if (n.kind !== 'galaxy') return undefined; // tasks keep the default sphere
-            // raise the name above the galaxy sphere so it never overlaps
-            return makeLabelSprite(n.label as string, 4, Math.min(3 + n.size * 1.5, 16) + 7);
-          }}
+          nodeThreeObject={(n: any) => makeNodeObject(n, reduced)}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           linkColor={(l: any) => (linkHot(l) ? LINK_HOT : LINK_HEX)}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

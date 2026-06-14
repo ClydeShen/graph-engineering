@@ -14,6 +14,7 @@
 // Hex mirror of the observatory status palette (ForestCanvas/UniverseCanvas
 // oklch tokens). ThreeJS Color does not parse oklch reliably, so the WebGL
 // surface uses the nearest hex; bloom makes them read as the same glow family.
+import * as THREE from 'three';
 import SpriteText from 'three-spritetext';
 
 export const STATUS_HEX: Record<string, string> = {
@@ -29,6 +30,25 @@ export const LINK_HOT = '#d8a23e'; // highlighted branch
 /** Dark space background — bloom needs a dark field to read as glow. */
 export const SPACE_BG = '#05060a';
 
+// Status → emissive intensity. The §9 "node art" vocabulary encodes work state on
+// a NON-colour channel (glow), so the universe stays legible for colour-blind
+// users and through bloom: active "thinks" (brightest), converged is a steady
+// "done well", suspended is a warm-but-static "hit a wall", closed is a barely-lit
+// "archived". (color-not-only / pattern-texture.)
+export const STATUS_EMISSIVE: Record<string, number> = {
+  active: 0.9,
+  converged: 0.55,
+  suspended: 0.5,
+  closed: 0.18,
+};
+// Status → opacity: archived/closed work fades back; suspended dims slightly.
+const STATUS_OPACITY: Record<string, number> = {
+  active: 1,
+  converged: 1,
+  suspended: 0.75,
+  closed: 0.5,
+};
+
 /**
  * Build a node label as a ThreeJS text sprite, raised `y` units above the node
  * so it never overlaps the sphere. Returned to react-force-graph as an extended
@@ -42,6 +62,72 @@ export function makeLabelSprite(text: string, textHeight: number, y: number): Sp
   s.fontFace = 'ui-sans-serif, system-ui';
   (s as unknown as { position: { set: (x: number, y: number, z: number) => void } }).position.set(0, y, 0);
   return s;
+}
+
+export interface UniverseNodeLike {
+  kind: 'galaxy' | 'task';
+  status?: string;
+  size?: number;
+  label?: string;
+}
+
+/**
+ * Visual radius — mirrors the previous nodeVal mapping exactly so the force
+ * layout and overall scale are unchanged by the art swap.
+ */
+function nodeRadius(n: UniverseNodeLike): number {
+  return n.kind === 'galaxy'
+    ? Math.min(3 + (n.size ?? 1) * 1.5, 16)
+    : Math.min(1 + (n.size ?? 1) * 0.6, 6);
+}
+
+/**
+ * Build a node's 3D object — the §9 "node art", implemented 3D-native rather
+ * than as flat 2D sprite billboards (the 2.5D-era seam): kind is legible by
+ * SHAPE (galaxy = smooth icosahedron "star" carrying the channel name; task =
+ * faceted octahedron "shard"), status by EMISSIVE + OPACITY (not colour alone),
+ * and aliveness by a gentle emissive pulse on ACTIVE work only (motion = cause:
+ * "thinking"; never decorative; disabled under reduced motion). MeshLambert +
+ * emissive matches the library's default lighting so UnrealBloom still reads the
+ * nodes as light sources.
+ */
+export function makeNodeObject(n: UniverseNodeLike, reduced: boolean): THREE.Object3D {
+  const r = nodeRadius(n);
+  const isGalaxy = n.kind === 'galaxy';
+  const hex = isGalaxy ? GALAXY_HEX : STATUS_HEX[n.status ?? ''] ?? TASK_FALLBACK;
+  const color = new THREE.Color(hex);
+  const baseEmissive = isGalaxy ? 0.7 : STATUS_EMISSIVE[n.status ?? ''] ?? 0.3;
+
+  const geom = isGalaxy
+    ? new THREE.IcosahedronGeometry(r, 1)
+    : new THREE.OctahedronGeometry(r, 0);
+  const mat = new THREE.MeshLambertMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: baseEmissive,
+    transparent: true,
+    opacity: isGalaxy ? 0.95 : STATUS_OPACITY[n.status ?? ''] ?? 0.9,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+
+  // Aliveness: only ACTIVE work breathes (emissive sine). The render loop already
+  // runs for the link particles, so onBeforeRender ticks every frame with no
+  // extra timer. reduced-motion → no pulse at all (steady glow).
+  if (!reduced && n.status === 'active') {
+    const t0 = performance.now();
+    mesh.onBeforeRender = () => {
+      const t = (performance.now() - t0) / 1000;
+      mat.emissiveIntensity = baseEmissive + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.2));
+    };
+  }
+
+  if (isGalaxy && n.label) {
+    const group = new THREE.Group();
+    group.add(mesh);
+    group.add(makeLabelSprite(n.label, 4, r + 7));
+    return group;
+  }
+  return mesh;
 }
 
 export function prefersReducedMotion(): boolean {

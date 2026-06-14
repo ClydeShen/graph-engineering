@@ -1208,3 +1208,28 @@ capability 预设的 follow-up(`npm install -g agent-browser`)是该工具自身
 **Gate**：console tsc clean;**console `next build` clean**(13 路由,`/now` 静态 + ForceGraph3D ssr:false);root tsc 不受影响(console 独立 tsconfig)。
 **设计**:CONSOLE-REDESIGN §6.5 改写为 3D 引擎 + §7 加翻案行 + 交互修复段。
 **遗留**:贴图 CC0 sprite(Kenney/AI-Town)仍是 seam(makeLabelSprite/nodeThreeObject 可扩);3D 活体视觉验证待用户本机跑(无 LLM 也能看 Now 画布,但需 dev server)。
+
+## 2026-06-15 — #27 AC3 Now node art: decision (3D-native vocabulary over 2D sprites)
+
+Goal /execute-goal reconciliation found #27/#28 mostly already shipped in 63a4b7f4.
+Only genuine remaining dev = #27 AC3 (Now node sprite art). Decision (mid-high
+confidence; specimen+research backed per goal mandate):
+
+**Implement a 3D-native node visual vocabulary** (custom geometry per node kind +
+status-driven emissive/opacity/particles), NOT flat 2D Kenney/AI-Town sprite
+billboards.
+
+Evidence:
+- Specimens (agentmemory/hermes-agent/iii/gsd-2/headroom) are agent/memory backends —
+  none has a 3D graph viz, so no specimen precedent either way (stated, not fabricated).
+- Research (ctx7 /vasturiano/3d-force-graph): first-class node customization is
+  nodeThreeObject → THREE mesh/material (geometry + emissive + opacity + per-node
+  particles). Flat THREE.Sprite billboards are the 2D-era seam, not the 3D idiom.
+- CONSOLE-REDESIGN line 124 explicitly sanctions 3D-equivalent implementation over
+  literal 2D-era porting; line 120 calls the sprite-texture path a future "seam".
+- Project-best: zero external CC0 asset dependency (no asset pipeline / attribution /
+  bundle weight), aesthetic coherence with the UnrealBloom nebula.
+
+Realizes §9 intent ("see what state the work is in") natively: galaxy(channel) vs
+task geometry distinction + active/converged/closed/suspended material treatment.
+Executed via ui-ux-pro-max skill (user mandate). Text left-aligned.
