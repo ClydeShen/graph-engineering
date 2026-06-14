@@ -250,6 +250,38 @@ describe('runOnboard', () => {
     });
   });
 
+  it('reuse-pick lets the user choose a different embedding model on the same provider', async () => {
+    answers['select'] = 'nvidia';
+    answers['Which model should Memex use?'] = 'meta/llama-3.1-8b-instruct';
+    answers['How should Memex create embeddings? (powers semantic memory)'] = 'reuse-pick';
+    answers['Which embedding model?'] = 'nvidia/nv-embed-v1'; // not the bge-m3 default
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url).includes('/models')
+          ? Promise.resolve({
+              ok: true,
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    { id: 'meta/llama-3.1-8b-instruct' },
+                    { id: 'baai/bge-m3' },
+                    { id: 'nvidia/nv-embed-v1' },
+                  ],
+                }),
+            })
+          : Promise.reject(new Error('offline')),
+      ),
+    );
+
+    await runOnboard(configPath, envPath);
+
+    process.env['NVIDIA_API_KEY'] = 'x';
+    const loaded = loadMemexConfig(configPath);
+    delete process.env['NVIDIA_API_KEY'];
+    expect(loaded!.embedding).toMatchObject({ provider: 'nvidia', model: 'nvidia/nv-embed-v1' });
+  });
+
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;

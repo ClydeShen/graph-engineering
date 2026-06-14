@@ -252,6 +252,9 @@ export async function runOnboard(
             label: `Use ${profile.displayName} (${profile.defaultEmbeddingModel})`,
             hint: 'recommended',
           },
+          // Same provider/key, but pick the embedding model yourself — the
+          // recommended default is not forced (e.g. another NVIDIA embed model).
+          { value: 'reuse-pick', label: `Use ${profile.displayName}, choose a different model` },
           { value: 'other', label: 'Use a different provider' },
           { value: 'skip', label: 'Skip — keyword search only' },
         ],
@@ -265,10 +268,23 @@ export async function runOnboard(
       });
   bail(embChoice);
 
-  if (embChoice === 'reuse') {
+  if (embChoice === 'reuse' || embChoice === 'reuse-pick') {
+    // 'reuse' takes the recommended default in one tap; 'reuse-pick' lists the
+    // provider's models (key already in hand) so the user chooses — the default
+    // is pinned on top, never forced.
+    const embModel =
+      embChoice === 'reuse'
+        ? profile.defaultEmbeddingModel!
+        : await selectModel(
+            profile.api,
+            chatBaseUrl,
+            apiKeySecret,
+            profile.defaultEmbeddingModel,
+            'embedding',
+          );
     embeddingSection = {
       provider: profile.name,
-      model: profile.defaultEmbeddingModel!,
+      model: embModel,
       // Carry an edited local endpoint (port/host) so embeddings hit the SAME
       // server as chat. Without this, resolveEmbeddingEndpoint matches on
       // `provider` and falls back to the profile default, missing the edit.

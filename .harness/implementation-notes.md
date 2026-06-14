@@ -1077,3 +1077,18 @@ onboarding 的 Telegram 步在受限网络可能误报"validation failed"。**�
 "稍后 memex connect telegram",非阻断。落地条件:把 channel-http 提到 @graph/shared 时顺带接线。
 
 **Gate:** onboard 9 测试绿,root tsc clean。
+
+### Reuse-embedding model choice (same session)
+
+**触发:** 用户选 NVIDIA LLM 后,embedding reuse 显示"Use NVIDIA (baai/bge-m3)"硬编默认模型,觉得是强制
+自动选,想能选自己倾向的 embedding 模型。
+
+**改动:** reuse 选单加第 4 项 `reuse-pick`("Use <provider>, choose a different model")。reuse 仍一键
+接受推荐默认(快路径不变);reuse-pick 走 selectModel(默认置顶 recommended,不强制)列出 provider 的
+模型让用户选(如另一个 NVIDIA embed 模型)。两条都带编辑过的本地端点。
+
+**取舍:** 没把 reuse 直接改成"每次都 selectModel"—— 那会逼所有 reuse 用户翻 121 个混合模型;多数人就用
+bge-m3。4 选项保留一键默认 + 按需选择,respects 两类用户。NVIDIA 非对称模型(nv-embedqa)若被 reuse-pick
+选中运行时需 input_type 会失败,但属用户显式选择,recommended(bge-m3)已置顶标注。
+
+**Gate:** reuse-pick 用例锁定(选非默认 nv-embed-v1);onboard 10 测试绿,root tsc clean。
