@@ -259,7 +259,19 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`\n${C.dim}  shutting down all services...${C.reset}`);
-  for (const p of procs) p.kill('SIGTERM');
+  for (const p of procs) {
+    if (!p.pid) continue;
+    if (process.platform === 'win32') {
+      // Each service is spawned with shell:true, so p is the cmd.exe wrapper —
+      // p.kill('SIGTERM') terminates only the shell and ORPHANS the node/iii.exe
+      // grandchildren, which keep holding ports (3000/4000/4001) and block the
+      // next `memex console` from starting the engine. taskkill /T kills the
+      // whole tree, /F forces it (no real SIGTERM on Windows).
+      try { execSync(`taskkill /PID ${p.pid} /T /F`, { stdio: 'ignore' }); } catch {}
+    } else {
+      p.kill('SIGTERM');
+    }
+  }
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);
