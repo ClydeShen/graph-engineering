@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { partitionTable } from '@graph/shared';
 import { USER_PROFILE_SCOPE_ID } from '../memory/user-profile.worker.js';
 
 /**
@@ -40,11 +41,32 @@ export async function bootstrapAgentRegistry(pool: Pool): Promise<void> {
        ARRAY['memory-storage', 'lesson-dedup'], 'iii', NULL, '{}', 'active')
     ON CONFLICT (agent_id) DO NOTHING
   `);
-  // Pre-create the user-profile scope so occWrite can reference it as a valid foreign key (T4)
+  // Pre-create the user-profile scope's PARTITION so UserProfileWorker's occWrite
+  // (which targets the partition sub-table directly) has somewhere to land. Mirrors
+  // nestScope() Phase 1 (ADR 05) for the fixed USER_PROFILE_SCOPE_ID, made idempotent
+  // via to_regclass so re-boots are safe (D-2).
+  //
+  // The previous statement here could NEVER succeed: it INSERTed into the parent table
+  // (PARTITION BY LIST has no partition for this scope → routing error) using a
+  // non-canonical 'scope_initialized' event_type the CHECK constraint rejects. The
+  // ON CONFLICT DO NOTHING never fired — the error throws before conflict resolution.
+  const nodash = USER_PROFILE_SCOPE_ID.replace(/-/g, '');
+  const partition = partitionTable(USER_PROFILE_SCOPE_ID);
   await pool.query(`
-    INSERT INTO execution_event_log (scope_id, entity_id, event_type, version_hash, status, payload)
-    VALUES ($1::uuid, gen_random_uuid(), 'scope_initialized',
-            encode(sha256('user-profile-scope'), 'hex'), 'completed', '{"scope":"user-profiles"}')
-    ON CONFLICT DO NOTHING
-  `, [USER_PROFILE_SCOPE_ID]);
+    DO $$
+    BEGIN
+      IF to_regclass('${partition}') IS NULL THEN
+        CREATE TABLE ${partition}
+          PARTITION OF execution_event_log
+          FOR VALUES IN ('${USER_PROFILE_SCOPE_ID}');
+        ALTER TABLE ${partition}
+          ADD CONSTRAINT uk_scope_occ_${nodash} UNIQUE (predecessor_hash, scope_id);
+        ALTER TABLE ${partition}
+          ADD CONSTRAINT uk_scope_idem_${nodash} UNIQUE (scope_id, entity_id, version_hash);
+        CREATE INDEX idx_scope_${nodash}_pending_lookup
+          ON ${partition} (scope_id, status, event_id ASC)
+          WHERE status IN ('pending_scheduling', 'pending_dispatch');
+      END IF;
+    END $$;
+  `);
 }
