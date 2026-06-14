@@ -39,6 +39,7 @@ import {
   loadMemexConfig,
   buildEmbeddingProvider,
   buildChatProvider,
+  buildChannelChatProvider,
   readLlmOverrides,
   mergeLlmOverrides,
   DEFAULT_GATEWAY_PORT,
@@ -84,6 +85,18 @@ function buildGatewayChatProvider(): LLMProvider | null {
 }
 const gatewayChatProvider = buildGatewayChatProvider();
 
+// Per-channel chat providers (CONSOLE-REDESIGN §11.2 — "agent identity"). Built
+// lazily once per platform and cached: a channel with a `channels[p].llm`
+// override runs its own model, otherwise null falls back to the default. Same
+// construction-time read as the default provider (Appendix A: no hot-reload).
+const channelChatCache = new Map<string, LLMProvider | null>();
+function resolveChannelChat(platform: string): LLMProvider | null {
+  if (!channelChatCache.has(platform)) {
+    channelChatCache.set(platform, buildChannelChatProvider(resolvedConfig(), platform));
+  }
+  return channelChatCache.get(platform) ?? null;
+}
+
 /**
  * Build and return the Hono app with all routes mounted.
  *
@@ -104,11 +117,18 @@ export function buildApp(pool: Pool, ddlPool: Pool, wMax: number): Hono {
   // surfaces (ADR-44 D-2: no-token mode only while bound to localhost), but
   // without the connection rate bucket (per-message endpoint).
   app.use('/v1/scopes/:id/chat', tokenAuth(realtimeToken));
+  // Appendix A writable LLM settings — the console's one write exception. Same
+  // token gate as the realtime surfaces; the GET projection stays open (it is
+  // already redacted). Only the write verbs (POST/DELETE) are credential-bearing.
+  app.use('/v1/sys/llm-overrides', async (c, next) => {
+    if (c.req.method === 'GET') return next();
+    return tokenAuth(realtimeToken)(c, next);
+  });
 
   // Mount route modules
   app.route('/v1/scopes', buildScopesRoute(pool, ddlPool, wMax));
   app.route('/v1/scopes', buildEventsRoute(pool, wMax, gatewayEmbeddingProvider));
-  app.route('/v1/scopes', buildChatRoute(pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider));
+  app.route('/v1/scopes', buildChatRoute(pool, wMax, gatewayEmbeddingProvider, gatewayChatProvider, resolveChannelChat));
   app.route('/v1/scopes', buildScopeReadRoute(pool, wMax));
   app.route('/v1', buildHealthRoute(pool));
   app.route('/v1', buildSysConfigRoute());

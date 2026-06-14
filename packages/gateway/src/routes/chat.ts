@@ -13,11 +13,29 @@ import type { EmbeddingProvider, LLMProvider } from '@graph/shared';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 import { runConversationTurn } from '../conversation/core.js';
 
+/**
+ * Recover the channel platform from a principal (X-Agent-ID). gateway-bot sets
+ * it to the session key `<platform>::<chatId>` (buildSessionKey), so the prefix
+ * before '::' is the platform. Console/CLI principals have no '::' → null (the
+ * caller then uses the global default provider).
+ */
+export function platformFromPrincipal(principal: string | undefined): string | null {
+  if (principal === undefined) return null;
+  const i = principal.indexOf('::');
+  return i > 0 ? principal.slice(0, i) : null;
+}
+
 export function buildChatRoute(
   pool: Pool,
   wMax: number,
   embed: EmbeddingProvider | null,
   chat: LLMProvider | null,
+  /**
+   * Per-channel provider resolver (CONSOLE-REDESIGN §11.2). Given the channel
+   * platform, returns that channel's own provider or null to use the default.
+   * Omitted in tests / when no per-channel config exists → always the default.
+   */
+  resolveChannelChat?: (platform: string) => LLMProvider | null,
 ): Hono {
   const app = new Hono();
 
@@ -31,14 +49,19 @@ export function buildChatRoute(
       return c.json({ error: 'text is required' }, 400);
     }
 
+    const principal = c.req.header('X-Agent-ID');
+    // Per-channel agent identity: route to the channel's own model when set.
+    const platform = platformFromPrincipal(principal);
+    const channelChat =
+      platform !== null && resolveChannelChat ? resolveChannelChat(platform) : null;
+    const chatProvider = channelChat ?? chat;
+
     const result = await runConversationTurn(
-      { pool, wMax, embed, chat },
+      { pool, wMax, embed, chat: chatProvider },
       {
         scopeId: id,
         text: body.text,
-        ...(c.req.header('X-Agent-ID') !== undefined
-          ? { principal: c.req.header('X-Agent-ID') }
-          : {}),
+        ...(principal !== undefined ? { principal } : {}),
       },
     );
 

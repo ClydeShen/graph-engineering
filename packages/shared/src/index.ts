@@ -33,3 +33,5 @@ export * from './artifact/store.js';
 export * from './skills/guard.js';
 export * from './skills/registry.js';
 export * from './security/vault.js';
+export * from './scope-project.js';
+export * from './workspace.js';

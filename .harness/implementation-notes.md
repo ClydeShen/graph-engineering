@@ -1150,3 +1150,41 @@ fetchModels 已做版本检测(所以选单能列 121 个)——但运行时 emb
 capability 预设的 follow-up(`npm install -g agent-browser`)是该工具自身安装方式,非我们的命令,保留。
 
 **Gate:** onboard 10 测试绿(note 被 mock,不锚文本),root tsc clean。
+
+---
+
+## 2026-06-14 自主 GOAL — Phase 21+22 剩余收口 (GH #27 + #28)
+
+**范围裁定（用户确认）：** 「所有已讨论但未开工的开发」= #28(workspace/project 深度集成) + #27(console 写路径/Now 美术)。
+显式排除：#24(PARKED,缺活体 LLM)、#26(icebox 明确不实现)、#25(epic 设计门要求先钻 X 再切片)。
+
+### #28 workspace-project 深度集成
+- **#28-1 execute_bash cwd→project**：新 `packages/shared/src/scope-project.ts`(`projectFromCwd`/`recordScopeProject`/`isProjectArchived`)。
+  在 execute_bash 的 local backend 分支以 first-write-wins 写 `scope_lineage.project`。tmp/ephemeral cwd → 不记 project。
+  决策：project 值 = **绝对路径**(稳定分组键 + 支持 §11.3 存在性检测)；**不做 path+ctime 身份方案**(与 memory `project_workspace_artifact_model` ⑦ 一致：存标签、靠图连通性自然分簇)。
+- **#28-2 per-channel provider 路由**：新 `buildChannelChatProvider(config, platform)`(from-config.ts)。
+  **架构决策**：ADR-54「服务端单应答者」下,路由发生在 **gateway chat 端点**(provider 所在处),按 `principal`(X-Agent-ID=`<platform>::<chatId>`)解析 platform→选 channel provider,否则回退默认。
+  ROADMAP 原文「gateway-bot 路由」是简写,真正 seam 在服务端。gateway index 按 platform 缓存 provider 实例。
+- **#28-3 forest/artifacts 按 project 分组**：forest 新增 `projects[]`(basename 命名 + archived);artifacts `listAllArtifacts` LEFT JOIN `scope_lineage.project`;artifacts 路由附 `project_archived`。
+- **#28-4 onboarding 文件夹根**：新 `packages/shared/src/workspace.ts`(`ensureWorkspaceRoots`),onboard 写 config 后为 `console`+每 channel 建 `<profileDir>/workspaces/<name>/`(artifacts/ + AGENTS.md,幂等不覆盖)。
+- **#28-5 懒墓碑**：`isProjectArchived`(existsSync + 5s 缓存)= 投影时检测,**图零写**。意外删=archived 显示;故意删走 ADR-43 erase(现成)。
+
+### #27 console-redesign 剩余
+- **#27-1/2 Appendix-A 写路径**：`POST/DELETE /v1/sys/llm-overrides`(sys.ts),index.ts 用 `tokenAuth` 仅门控写动词(GET 投影开放,已脱敏)。
+  **Fail-closed(§6.5)**:坏 JSON/空 override/类型错 → 400 *写入前* 返回,绝不持久化半成品凭证。`/v1/sys/config` 增 `llm_overrides`(脱敏)+ channels `.llm`。
+  UI:`LlmSettingsForm.tsx`(chat+embedding 槽,password+show/hide,提交态,disabled,error surfacing,「重启生效」诚实提示)。
+  **生效语义偏离 Appendix A**:Appendix A 想「gateway 进程内即时」,但 provider 在构造时读一次,跨路由 getter 重构对安全敏感写面风险过高。
+  落地为**持久化即时 + 重启生效**(gateway+workers 一致),UI 明示。热重载留作独立基础设施项(Appendix A 自身已把软重启判出范围)。
+- **#27-3 Now 节点美术**：**art-selection 决策**=**程序化 2.5D 状态精灵**(无外部资源),非导入 Kenney/AI-Town PNG 表。
+  依据:§9 显式把 sheet 选型判为待决「素材候选」,#27 称美术为「design pick」。程序化=零二进制资源 + 全 a11y(色+形+脉动三通道)+ reduced-motion 安全 + 保留 `drawImage` seam 供日后换 CC0 sheet。
+  ForestCanvas 节点增:active 脉冲(thinking)/converged 勾(done)/suspended 警示「!」字形。
+
+### Gate
+- 全量(非 console)707 测试绿(104 文件;基线 682 + 新增 25:scope-project 5 / workspace 3 / channel-provider +2 / chat 2 / sys 4 / forest +2 / 其余既有)。**零回归。**
+- root tsc clean;console tsc clean;**console `next build` clean**(13 路由)。
+- **DB 活体 journey**(`scripts/journey-workspace.mts` vs graph_test)10/10:recordScopeProject 幂等、forest projects+archived、artifact project 继承+archived、llm-overrides fail-closed、config 投影。
+
+### 遗留 / BLOCKED（活体边界,与 snapshot §5 一致）
+- **#27 AC4 真 LLM + 浏览器活体视觉验证 = BLOCKED**:本机无可用 LLM(Gemini key 被吊销 / Ollama 未装,见 `project_console_live_test_session`)+ 无浏览器活体。
+  逻辑层已 logic-done(单测+DB journey+build 全绿);live-done 待用户配可用 provider 后跑 Now 画布 + 写表单真存。
+- per-channel LLM **gateway 进程内热生效**:刻意留作独立基础设施项(见上 #27-1/2)。

@@ -1,32 +1,40 @@
 {
   "version": "1.0",
-  "phase": "20-autonomous-assistant",
-  "task": null,
-  "status": "design-complete + work-committed",
-  "last_updated": "2026-06-13T10:30:00.000Z",
-  "current_state": "Work integrated into master (3 commits) and stale worktree cleaned. (1) Pre-compaction onboarding + console UX batch -> committed c4f18946 (feat onboard) + 00a10bf8 (feat console). (2) This session's /fuller Console redesign DESIGN doc -> committed a907ecda (docs CONSOLE-REDESIGN). No implementation code for the redesign yet — design only. The redesign reframes the Console from a 1:1 mirror of the graph ontology into a human-legible projection; hero = new Now page = a zoomable 'universe' (galaxy=channel -> task tree -> node) rendered with react-force-graph-2d. Working tree clean. master ahead of origin (unpushed, not asked to push). Dev stack shut down.",
+  "phase": "21-console-redesign",
+  "task": 1,
+  "total_tasks": 1,
+  "status": "in_progress",
+  "last_updated": "2026-06-14T16:00:00.000Z",
+  "current_state": "Onboarding + LLM provider arc complete and pushed (11 commits, fd5fd7c7..4379761c on origin/master). Triggered by the user manually onboarding NVIDIA, which exposed a chain of issues — each fixed at root cause, not patched. The deepest finding (via /systematic-debugging): the runtime OpenAI-compatible provider doubled /v1 in cloud endpoint URLs, 404-ing every strict gateway for chat AND embeddings — masked because all live testing was local (bare-host baseUrl).",
   "completed_work": [
-    "docs/CONSOLE-REDESIGN.md (v2.0) — design SSOT from this session's /fuller. Locks: audience (human=operator, single); vocabulary translation layer (Scope->task, Lesson->Emergence, external skills->Skills/Plugins, Artifacts->Workspace, Sessions->History, suspended->Notification, Kernel->System); new IA (Overview/Now/Chat/History/Workspace/Emergence/Plugins/Settings, drop left-rail Scopes list); Now hero page (zoomable universe, galaxy=channel from intent parse, L0->L3 ladder, SSE-pulse+REST-reconcile, layered render model, react-force-graph-2d + 2.5D art); engine reversal record (g6 -> react-force-graph-2d, DRY cost accepted); supersedes-UI-SPEC list; rollout sequence.",
-    "Pre-compaction onboarding/console UX batch (UNCOMMITTED, but live-verified): onboarding redesign (paste-key->.env auto-write, mask all keys to last-6, explicit LLM-vs-embedding select, NVIDIA provider added, post-onboarding 'Next steps' guidance, consoleUrl :3000); `memex console` CLI command (packages/cli/src/console.ts — probes :3000, else npm run dev + open); console home / = Overview stats dashboard (shared ActivityDashboard.tsx, no more redirect to /topology); dashboard.ts h2 rename. `memex console` was live-verified end-to-end (stack started, browser opened, / = 200 stats dashboard with real data)."
+    "92552366 — onboarding asks for API key first, then fetches /models for a pick-list (recommended pinned); new shared/llm/fetch-models.ts (best-effort, never throws)",
+    "bcfaa702 — embedding picker filter relaxed from has-default-model to can-embed (3->9 providers); custom prompts a baseUrl as the escape hatch for any OpenAI-compatible embeddings endpoint",
+    "ed38d4da — local providers confirm/edit their endpoint (new resolveBaseUrl); the resolved URL both lists models and is persisted; USER_MANUAL adds the Windows localhost->127.0.0.1 IPv6 tip",
+    "525e004f — NVIDIA supportsEmbedding=true via baai/bge-m3 (symmetric, no input_type needed; verified against NVIDIA docs)",
+    "d4b21be1 — embedding reuse path carries an edited local chat endpoint so embeddings hit the same server as chat",
+    "1f6635a9 — reuse-pick option: same provider/key, choose a different embedding model (one-tap default preserved)",
+    "b2cd332c — ROOT CAUSE: extracted shared/llm/openai-url.ts :: openaiUrl(baseUrl, route); provider chat+embed and fetch-models share one rule (detect /v\\d, never double /v1); curl-verified; new openai-compatible.provider.test.ts (red->green)",
+    "a80336f1 — flag audit close-out: OpenRouter->true (openai/text-embedding-3-small); MiniMax stays false (asymmetric, documented); regression guard locks openrouter+nvidia flags",
+    "09ae9626 — docs: ADR-56 supplement D-6/D-7/D-8; configuration.md baseUrl note (versioned or bare both work)",
+    "4379761c — onboarding Next-steps uses `memex console` not `npm run dev`; de-leaked console.ts user-facing line"
   ],
   "remaining_work": [
-    "PUSH (optional): master is ahead of origin by ~22 commits, unpushed — user has not asked to push.",
-    "CONSOLE-REDESIGN implementation (per docs/CONSOLE-REDESIGN.md §10 rollout). Backend prereqs FIRST (new read-only endpoints, do not exist yet): GET /v1/forest (root scopes grouped by channel) + GET /v1/scopes/:id/lineage (single-task scope_lineage subtree). Existing /v1/scopes/:id/topology is entity-level, insufficient.",
-    "Engine swap: remove @antv/g6 (^5.0.49) dependency; rewrite packages/console/src/components/TopologyCanvas.tsx from single-scope entity graph into a scope_lineage forest renderer using react-force-graph-2d + d3-force (Next.js dynamic ssr:false).",
-    "Open detail branches (non-structural, see CONSOLE-REDESIGN.md §9): Now node art spec + status palette + growth-animation curves; forest-header one-liner content/data; Emergence machine->human translation form; Plugins page (skill list + CRUD + onboarding wiring); Overview de-jargon (Total scopes / event_type strings / trail mesh); Workspace page (deferred by user); System (Kernel) advanced view.",
-    "SECURITY: leaked Gemini key AIzaSyAnEL7-qQ5ffQjmxL1z730iUx9f1qHRbgg (pasted into transcript pre-compaction) must be revoked — not confirmed done.",
-    "Carried-forward from channel/security arc (unrelated to this session, still open): WebhookConnector still unwired into GatewayBot.start(); Slack no allowlist gating; channel §7 decisions (SOCKS dep / shared webhook host / self-healing reconnect); UI-SPEC.md stale; Email/IMAP + macOS/Linux install runs unverified-live."
+    "AUTHENTICATED LIVE VERIFICATION: a real embedding round-trip through a valid key was NOT done this session (no usable key). URL shapes are curl-confirmed; the authed call is the user's to confirm by re-onboarding NVIDIA and sending a message, checking memory enters the semantic index.",
+    "True one-click `memex start`: `memex console` still spawns `npm run dev` under the hood (needs repo root + npm). Packaging belongs to the deploy arc (ROADMAP 15-deploy).",
+    "connect/telegram.ts validateBotToken uses plain fetch, not the hardened telegramFetch (channel-http.ts) — restricted-network false negatives; landing condition = hoist channel-http.ts into @graph/shared",
+    "ROADMAP 22-workspace-project engine-22 deep integration (per-channel LLM routing, execute_bash cwd->project, forest grouping) — still TODO",
+    "Console live-test residue from prior session: dispatch a task, verify first node seeds into /now with P1 effects (zoomToFit/collide/highlight) — blocked on the same authed-LLM path"
   ],
   "decisions_made": [
-    "Console = human-legible PROJECTION of the graph, not a mirror of its ontology. Translation lives only in the presentation layer; engine/DB names (Scope, Lesson, version-hash) stay unchanged. Invariants: graph=SSOT, append-only, console read-only except explicit write surfaces (Settings/Plugins/Notification).",
-    "Now hero page = zoomable universe (B, forest-first + semantic zoom). Galaxy = channel, recoverable from scope_lineage.intent = 'session:<platform>::<chatId>' (verified in gateway-bot/session-scope.ts + index.ts buildSessionKey); unparseable -> Direct/Console galaxy. Home / stays Overview stats (perf: don't mount the live tree on the landing page).",
-    "Real-time = hybrid: SSE /v1/stream (pg_notify pulse, thin+lossy-by-design per ADR 32) drives animation; REST fills detail + reconciles on reconnect. Does not violate graph=SSOT.",
-    "Render model C: rAF continuous game-loop only on the zoomed-in tree (bounded/cheap); event-triggered shimmer at the universe/galaxy tiers.",
-    "Render engine = react-force-graph-2d + d3-force (FINAL). Initially leaned react-force-graph -> reversed to g6 on DRY+incumbency grounds (g6 v5 already locked+in-use, Combo=galaxy) -> user compared real examples and chose react-force-graph-2d: g6 too flat, weak interactivity, ugly UI/UX. Visual/UX priority overrides DRY. Cost accepted: remove g6, rewrite TopologyCanvas. Grounded via ctx7 (react-force-graph nodeCanvasObject/globalScale/linkDirectionalParticles; g6 v5 combo/g-webgl).",
-    "Naming migration: 'Skills' now means external installable skills (Plugins page, user-editable, no runtime impact); 'Emergence' = the system's crystallized lessons, machine-first but translated to human-readable (diagram/text) in console/TUI.",
-    "docs/CONSOLE-REDESIGN.md supersedes UI-SPEC.md v1.0 on: graph engine (g6->react-force-graph), data transport (polling->SSE hybrid), page architecture (3-page->new IA), read-only (now has write surfaces)."
+    "openaiUrl is the single URL rule for all OpenAI-compatible calls; baseUrl may be versioned (OpenAI-SDK style, used by the registry) or bare-host (local) — the rule detects an existing /v\\d segment and never re-adds /v1",
+    "Anthropic provider deliberately NOT changed — its base is always bare (api.anthropic.com), not in the doubling class",
+    "Embedding flag audit is exhaustive: OpenRouter was the only misclassification; MiniMax/nv-embedqa excluded on purpose (asymmetric, need a query/db type param the symmetric embed() can't send)",
+    "Onboarding reuse keeps the one-tap recommended default AND offers reuse-pick — does not force all users through the full model list",
+    "First-run guidance presents product commands (memex console), never the dev launcher; operator/dev docs keep npm run dev"
   ],
-  "blockers": [],
-  "context": "Memory updated this session: project_console_redesign_now_universe (+ MEMORY.md pointer). Reply language Chinese, code English. The /fuller session reached 'structural core'; user paused (chose C) rather than implementing, then asked to shut the stack down. No code was written for the redesign — only the design doc. Relevant data facts grounded this session: scope_lineage table (parent_scope_id, depth<=3, intent, status active/closed/converged/suspended); SSE stream route packages/gateway/src/routes/stream.ts; current API surface in packages/console/src/lib/api.ts; @antv/g6 in packages/console/package.json + TopologyCanvas.tsx in use.",
-  "next_action": "Begin CONSOLE-REDESIGN.md §10 step 1: add read-only GET /v1/forest (root scopes grouped by channel) + GET /v1/scopes/:id/lineage (scope_lineage subtree) in the gateway."
+  "blockers": [
+    "No valid LLM key available in-session for an authenticated live embedding/chat verification. The user re-onboarded NVIDIA at the end; the authed round-trip is theirs to confirm."
+  ],
+  "context": "Authoritative provider-registry decisions: docs/adr/0065-adr56-provider-profile-registry.md (with the 2026-06-14 supplement D-6/D-7/D-8). Per-item root-cause log: .harness/implementation-notes.md (multiple 2026-06-14 sections). Memory: project_onboarding_provider_arc. Provider registry SSOT: packages/shared/src/llm/provider-profiles.ts. URL rule: packages/shared/src/llm/openai-url.ts. Onboarding TUI: packages/cli/src/onboard.ts. Working tree has pre-existing unrelated edits (memex.mjs/memex-terminal.mjs from user onboarding) — not this session's.",
+  "next_action": "Have the user re-onboard NVIDIA, run `memex console`, send a chat message, and confirm the authenticated /embeddings round-trip works (memory enters the semantic index) — the one residual the curl tests couldn't cover."
 }

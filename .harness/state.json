@@ -2,14 +2,14 @@
   "version": "1.1",
   "session": {
     "status": "idle",
-    "started_at": "2026-06-14T01:00:00.000Z",
-    "last_session": "2026-06-14T02:35:00.000Z",
-    "last_active": "2026-06-14T02:35:00.000Z"
+    "started_at": "2026-06-14T14:00:00.000Z",
+    "last_session": "2026-06-14T18:00:00.000Z",
+    "last_active": "2026-06-14T18:00:00.000Z"
   },
   "position": {
-    "phase": "21-console-redesign",
-    "active": "GOAL（/goal 自主）完成：ROADMAP 21 console-redesign 全弧 + 22 引擎地基 + TD-N + §7 + 附录A 地基。全量 682 测试绿，typecheck 绿，零回归。剩余（标注非阻塞）：附录A 写凭证 UI（安全审查）、Now 小人美术选型、活体验证。",
-    "resume_file": ".harness/phases/ui-console/.continue-here.json",
-    "stopped_at": "批次1-12 全部完成并各自 commit。全量 npm test = 682 passed / 101 files / 0 failed（基线 661+1修+20新）。typecheck 绿。13 个 commit 在 master（未 push）。剩余项见 ROADMAP 21 落地状态 ⬜。"
+    "phase": "01-discuss",
+    "active": "设计大弧收口：MemexTerminal #25(五梁+Y) + workspace/artifact/persona #28(7决策,取代ADR-52) + console artifact #27。tracker #24-28 + ROADMAP §23 + 3 memory 全落盘。下个 session 意图 = design→plan→execute。",
+    "resume_file": ".harness/phases/01-discuss/.continue-here.json",
+    "stopped_at": "fuller 收口 #28② 同名重建身份(B:不裁决/存标签/靠拓扑分簇)。残留设计=MemexTerminal X(工具执行+审批,未钻)+#28④Plugins页+落地细节。并行 DEV 轨(21-console authenticated embedding 活体验证)停在 .harness/phases/ui-console/.continue-here.json，未丢。"
   }
 }

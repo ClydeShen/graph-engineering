@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { api, type SysConfig } from '@/lib/api';
 import { Badge, Panel, StatusDot, Tag } from '@/components/ds';
+import { LlmSettingsForm } from '@/components/LlmSettingsForm';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -26,18 +27,20 @@ export default function SettingsPage() {
   const [cfg, setCfg] = useState<SysConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const reload = () => {
     api
       .sysConfig()
       .then(setCfg)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'load failed'));
-  }, []);
+  };
+
+  useEffect(reload, []);
 
   if (error !== null) return <Badge tone="danger">{error}</Badge>;
   if (cfg === null) return <p className="ds-label">loading configuration…</p>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', maxWidth: 920 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gutter)', maxWidth: 920, textAlign: 'left' }}>
       {!cfg.config_present ? (
         <Panel variant="sunken">
           <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
@@ -119,11 +122,22 @@ export default function SettingsPage() {
         )}
       </Panel>
 
+      <LlmSettingsForm
+        initialChat={cfg.llm_overrides.chat}
+        initialEmbedding={cfg.llm_overrides.embedding}
+        present={cfg.llm_overrides.present}
+        path={cfg.llm_overrides.path}
+        onSaved={reload}
+      />
+
       {cfg.channels.length > 0 ? (
         <Panel eyebrow="Delivery" title="Channels">
           {cfg.channels.map((ch) => (
             <Row key={ch.platform} label={ch.platform}>
-              <Badge tone={ch.configured ? 'ok' : 'neutral'}>{ch.configured ? 'configured' : 'not set'}</Badge>
+              <span style={{ display: 'inline-flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                {ch.llm ? <Tag>agent: {ch.llm}</Tag> : null}
+                <Badge tone={ch.configured ? 'ok' : 'neutral'}>{ch.configured ? 'configured' : 'not set'}</Badge>
+              </span>
             </Row>
           ))}
         </Panel>

@@ -61,6 +61,10 @@ export interface ArtifactMeta {
   label: string;
   created_at: string;
   erased_at: string | null;
+  /** Working folder the producing scope ran in (Workspace grouping, §11.1). */
+  project?: string | null;
+  /** §11.3 lazy tombstone — project folder gone on disk (global feed only). */
+  project_archived?: boolean;
 }
 
 export interface ForestTask {
@@ -69,6 +73,7 @@ export interface ForestTask {
   status: string;
   created_at: string;
   descendants: number;
+  project: string | null;
 }
 
 export interface ForestGalaxy {
@@ -77,8 +82,16 @@ export interface ForestGalaxy {
   status_counts: Record<string, number>;
 }
 
+export interface ForestProject {
+  project: string;
+  name: string;
+  roots: number;
+  archived: boolean;
+}
+
 export interface ForestResponse {
   galaxies: ForestGalaxy[];
+  projects: ForestProject[];
   total_roots: number;
 }
 
@@ -152,7 +165,32 @@ export interface SysConfig {
     base_url: string | null;
     model: string | null;
   };
-  channels: Array<{ platform: string; configured: boolean; home_channel: string | null }>;
+  channels: Array<{ platform: string; configured: boolean; home_channel: string | null; llm: string | null }>;
+  llm_overrides: {
+    path: string;
+    present: boolean;
+    chat: LlmOverrideSlotView | null;
+    embedding: LlmOverrideSlotView | null;
+  };
+}
+
+export interface LlmOverrideSlotView {
+  type: string | null;
+  model: string | null;
+  base_url: string | null;
+  api_key_set: boolean;
+}
+
+/** Write shape for POST /v1/sys/llm-overrides (Appendix A). */
+export interface LlmOverrideSlotInput {
+  type?: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+export interface LlmOverridesInput {
+  chat?: LlmOverrideSlotInput;
+  embedding?: LlmOverrideSlotInput;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -178,4 +216,20 @@ export const api = {
   emergence: (limit = 100) => getJson<EmergenceResponse>(`/v1/emergence?limit=${limit}`),
   allArtifacts: (limit = 200) => getJson<ArtifactMeta[]>(`/v1/artifacts?limit=${limit}`),
   sysConfig: () => getJson<SysConfig>('/v1/sys/config'),
+  saveLlmOverrides: async (body: LlmOverridesInput): Promise<{ ok: boolean; applied: string }> => {
+    const res = await fetch('/v1/sys/llm-overrides', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error ?? `save failed (${res.status})`);
+    }
+    return (await res.json()) as { ok: boolean; applied: string };
+  },
+  clearLlmOverrides: async (): Promise<void> => {
+    const res = await fetch('/v1/sys/llm-overrides', { method: 'DELETE' });
+    if (!res.ok) throw new Error(`clear failed (${res.status})`);
+  },
 };

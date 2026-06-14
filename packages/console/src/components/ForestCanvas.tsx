@@ -201,22 +201,45 @@ export function ForestCanvas({ scopeId }: { scopeId: string }) {
             ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
             ctx.fillStyle = color;
             ctx.fill();
-            // active → soft halo ("thinking"); second visual channel beyond color
-            if (node.status === 'active' && !reduced && focused) {
+            // active → pulsing halo ("thinking"). Selected art = procedural 2.5D
+            // status sprite (asset-free; the drawImage seam is preserved for a
+            // later Kenney/AI-Town CC0 sheet swap, CONSOLE-REDESIGN §9). The pulse
+            // is the second, non-color channel (rule color-not-only) and is frozen
+            // under reduced-motion (Appendix B.3④ — canvas rAF is JS-gated here).
+            if (node.status === 'active' && focused) {
+              const pulse = reduced ? 0.5 : 0.5 + 0.5 * Math.sin(performance.now() / 380);
               ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
+              ctx.arc(node.x, node.y, r + 2 + pulse * 3, 0, 2 * Math.PI);
               ctx.strokeStyle = color;
-              ctx.globalAlpha = 0.35;
+              ctx.globalAlpha = focused ? 0.18 + 0.3 * pulse : DIM_ALPHA;
+              ctx.lineWidth = 1.5;
               ctx.stroke();
               ctx.globalAlpha = focused ? 1 : DIM_ALPHA;
             }
-            // suspended → exclamation ring (shape channel, always shown)
+            // converged → check glyph ("done well"; shape channel, always shown)
+            if (node.status === 'converged') {
+              ctx.beginPath();
+              ctx.moveTo(node.x - r * 0.45, node.y);
+              ctx.lineTo(node.x - r * 0.1, node.y + r * 0.4);
+              ctx.lineTo(node.x + r * 0.5, node.y - r * 0.4);
+              ctx.strokeStyle = 'oklch(0.965 0.012 88)';
+              ctx.lineWidth = 1.4;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.stroke();
+            }
+            // suspended → alert ring + "!" glyph ("hit a wall"; always shown)
             if (node.status === 'suspended') {
               ctx.beginPath();
               ctx.arc(node.x, node.y, r + 2, 0, 2 * Math.PI);
               ctx.strokeStyle = color;
               ctx.lineWidth = 1.5;
               ctx.stroke();
+              ctx.fillStyle = 'oklch(0.965 0.012 88)';
+              ctx.fillRect(node.x - 0.7, node.y - r * 0.45, 1.4, r * 0.6);
+              ctx.beginPath();
+              ctx.arc(node.x, node.y + r * 0.45, 0.9, 0, 2 * Math.PI);
+              ctx.fill();
             }
             // focus ring on the hovered node itself
             if (node.id === hoverId) {

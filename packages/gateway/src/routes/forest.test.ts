@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { channelFromIntent, groupIntoGalaxies } from './forest.js';
+import { channelFromIntent, groupIntoGalaxies, groupIntoProjects } from './forest.js';
 
 describe('channelFromIntent', () => {
   it('parses the platform from a session intent', () => {
@@ -19,10 +19,10 @@ describe('channelFromIntent', () => {
 describe('groupIntoGalaxies', () => {
   it('groups root scopes by channel with per-status counts', () => {
     const galaxies = groupIntoGalaxies([
-      { scope_id: 'a', intent: 'session:telegram::1', status: 'active', created_at: 't1', descendants: 3 },
-      { scope_id: 'b', intent: 'session:telegram::2', status: 'closed', created_at: 't2', descendants: 0 },
-      { scope_id: 'c', intent: 'session:slack::3', status: 'active', created_at: 't3', descendants: 1 },
-      { scope_id: 'd', intent: null, status: 'active', created_at: 't4', descendants: 0 },
+      { scope_id: 'a', intent: 'session:telegram::1', status: 'active', created_at: 't1', descendants: 3, project: null },
+      { scope_id: 'b', intent: 'session:telegram::2', status: 'closed', created_at: 't2', descendants: 0, project: null },
+      { scope_id: 'c', intent: 'session:slack::3', status: 'active', created_at: 't3', descendants: 1, project: null },
+      { scope_id: 'd', intent: null, status: 'active', created_at: 't4', descendants: 0, project: null },
     ]);
 
     const tg = galaxies.find((g) => g.channel === 'telegram');
@@ -35,5 +35,43 @@ describe('groupIntoGalaxies', () => {
 
   it('returns no galaxies for empty input', () => {
     expect(groupIntoGalaxies([])).toEqual([]);
+  });
+});
+
+describe('groupIntoProjects', () => {
+  const row = (scope_id: string, project: string | null) => ({
+    scope_id,
+    intent: null,
+    status: 'active',
+    created_at: 't',
+    descendants: 0,
+    project,
+  });
+
+  it('clusters roots by working folder, names by basename, counts roots', () => {
+    const projects = groupIntoProjects(
+      [
+        row('a', '/home/u/projA'),
+        row('b', '/home/u/projA'),
+        row('c', '/home/u/projB'),
+        row('d', null), // no project — omitted
+      ],
+      () => false,
+    );
+    const a = projects.find((p) => p.project === '/home/u/projA');
+    expect(a?.name).toBe('projA');
+    expect(a?.roots).toBe(2);
+    expect(a?.archived).toBe(false);
+    expect(projects.find((p) => p.project === '/home/u/projB')?.roots).toBe(1);
+    // null-project roots never become a cluster
+    expect(projects).toHaveLength(2);
+  });
+
+  it('marks a project archived when its folder is gone (lazy tombstone)', () => {
+    const projects = groupIntoProjects(
+      [row('a', '/gone/projX')],
+      (p) => p === '/gone/projX',
+    );
+    expect(projects[0]?.archived).toBe(true);
   });
 });

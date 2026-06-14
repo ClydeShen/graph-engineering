@@ -24,7 +24,7 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { occWrite, checkCommand } from '@graph/shared';
+import { occWrite, checkCommand, projectFromCwd, recordScopeProject } from '@graph/shared';
 import { ZERO_HASH, AGENT_HEARTBEAT_TTL_S } from '@graph/shared';
 import {
   formatGuardReport,
@@ -533,6 +533,11 @@ export function buildMcpServer(pool: Pool): McpServer {
               maxBuffer: 512 * 1024,
             }));
           } else {
+            // CONSOLE-REDESIGN §11.1: the local working folder is this scope's
+            // project. Record it (first-write-wins) so the Now universe clusters
+            // and the Workspace page groups by it. tmp/ephemeral cwd → no project.
+            const project = projectFromCwd(EXECUTE_BASH_CWD);
+            if (project) await recordScopeProject(pool, scope_id, project);
             const execAsync = promisify(exec);
             ({ stdout, stderr } = await execAsync(command, {
               timeout: 30000,

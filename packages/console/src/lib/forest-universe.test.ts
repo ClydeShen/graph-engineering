@@ -4,19 +4,20 @@ import type { ForestResponse } from './api.js';
 
 const forest: ForestResponse = {
   total_roots: 3,
+  projects: [],
   galaxies: [
     {
       channel: 'telegram',
       status_counts: { active: 2 },
       tasks: [
-        { scope_id: 't1', intent: 'session:telegram::1', status: 'active', created_at: 'x', descendants: 2 },
-        { scope_id: 't2', intent: 'session:telegram::2', status: 'active', created_at: 'x', descendants: 0 },
+        { scope_id: 't1', intent: 'session:telegram::1', status: 'active', created_at: 'x', descendants: 2, project: null },
+        { scope_id: 't2', intent: 'session:telegram::2', status: 'active', created_at: 'x', descendants: 0, project: null },
       ],
     },
     {
       channel: 'direct',
       status_counts: { closed: 1 },
-      tasks: [{ scope_id: 'd1', intent: null, status: 'closed', created_at: 'x', descendants: 0 }],
+      tasks: [{ scope_id: 'd1', intent: null, status: 'closed', created_at: 'x', descendants: 0, project: null }],
     },
   ],
 };
@@ -39,6 +40,6 @@ describe('toUniverseGraph', () => {
   });
 
   it('returns an empty graph for an empty forest', () => {
-    expect(toUniverseGraph({ galaxies: [], total_roots: 0 })).toEqual({ nodes: [], links: [] });
+    expect(toUniverseGraph({ galaxies: [], projects: [], total_roots: 0 })).toEqual({ nodes: [], links: [] });
   });
 });

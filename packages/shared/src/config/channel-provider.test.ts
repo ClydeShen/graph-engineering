@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveChannelProvider, type MemexConfig } from './loader.js';
+import { buildChannelChatProvider } from '../llm/from-config.js';
 
 const cfg: MemexConfig = {
   providers: [
@@ -29,5 +30,19 @@ describe('resolveChannelProvider (CONSOLE-REDESIGN §11.2 per-channel LLM)', () 
   it('returns undefined when llm references a missing provider', () => {
     const bad: MemexConfig = { providers: [], channels: { x: { llm: 'ghost' } } };
     expect(resolveChannelProvider(bad, 'x')).toBeUndefined();
+  });
+});
+
+describe('buildChannelChatProvider (per-channel agent identity)', () => {
+  it('builds a provider for a channel with an llm override', () => {
+    const p = buildChannelChatProvider(cfg, 'telegram');
+    expect(p).not.toBeNull();
+    expect(typeof p?.chat).toBe('function');
+  });
+
+  it('returns null when the channel has no override (caller uses default)', () => {
+    expect(buildChannelChatProvider(cfg, 'slack')).toBeNull();
+    expect(buildChannelChatProvider(cfg, 'discord')).toBeNull();
+    expect(buildChannelChatProvider(null, 'telegram')).toBeNull();
   });
 });

@@ -41,6 +41,12 @@ export interface ArtifactMeta {
   label: string;
   created_at: string;
   erased_at: string | null;
+  /**
+   * Working-folder cluster the producing scope ran in (CONSOLE-REDESIGN §11.1 —
+   * "artifact inherits the scope's project"). Only populated by the global
+   * Workspace feed (listAllArtifacts); null when the scope has no project.
+   */
+  project?: string | null;
 }
 
 export interface SaveArtifactInput {
@@ -98,14 +104,19 @@ export async function listArtifacts(pool: Pool, scopeId: string): Promise<Artifa
 }
 
 /** All artifacts across every scope (global Workspace list; newest first).
- *  CONSOLE-REDESIGN §11 — the per-project grouping is applied in the projection
- *  layer once the project/cwd dimension lands; this is the flat global feed. */
+ *  CONSOLE-REDESIGN §11.1 — each artifact inherits its producing scope's project
+ *  (working folder) via a LEFT JOIN so the Workspace page can group deliverables
+ *  by project. LEFT JOIN keeps artifacts whose scope row is gone or has no
+ *  project (project → null). */
 export async function listAllArtifacts(pool: Pool, limit = 200): Promise<ArtifactMeta[]> {
   const res = await pool.query<ArtifactMeta>(
-    `SELECT content_hash, scope_id, entity_id, kind, media_type,
-            byte_size::int AS byte_size, label,
-            created_at::text AS created_at, erased_at::text AS erased_at
-     FROM artifact ORDER BY created_at DESC LIMIT $1`,
+    `SELECT a.content_hash, a.scope_id, a.entity_id, a.kind, a.media_type,
+            a.byte_size::int AS byte_size, a.label,
+            a.created_at::text AS created_at, a.erased_at::text AS erased_at,
+            sl.project
+     FROM artifact a
+     LEFT JOIN scope_lineage sl ON sl.scope_id = a.scope_id
+     ORDER BY a.created_at DESC LIMIT $1`,
     [limit],
   );
   return res.rows;

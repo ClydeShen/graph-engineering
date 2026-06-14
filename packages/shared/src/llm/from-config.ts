@@ -15,6 +15,7 @@
  */
 
 import type { MemexConfig } from '../config/loader.js';
+import { resolveChannelProvider } from '../config/loader.js';
 import type { LLMProvider, EmbeddingProvider } from './provider.interface.js';
 import { createLLMProvider } from './factory.js';
 import { OpenAICompatibleProvider } from './openai-compatible.provider.js';
@@ -61,6 +62,23 @@ export function buildChatProvider(
     apiKey: env['LLM_API_KEY'] ?? '',
     maxTokens: env['LLM_MAX_TOKENS'] ? Number(env['LLM_MAX_TOKENS']) : undefined,
   });
+}
+
+/**
+ * Per-channel chat provider (CONSOLE-REDESIGN §11.2 — "agent identity"). When a
+ * channel declares `channels[platform].llm` referencing a providers[] entry,
+ * that channel's conversations run on its own model — a distinct "agent" per
+ * channel. Returns null when the channel has no override; the caller then uses
+ * the global default provider (ADR-54 server-side single responder is preserved
+ * — the responder still runs server-side, it just dials the channel's model).
+ */
+export function buildChannelChatProvider(
+  config: MemexConfig | null,
+  platform: string,
+): LLMProvider | null {
+  const entry = resolveChannelProvider(config, platform);
+  if (entry === undefined) return null;
+  return buildOne(entry, resolveProfile(entry));
 }
 
 /** Resolved embedding endpoint — also consumed by doctor (probe derivation). */

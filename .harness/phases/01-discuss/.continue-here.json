@@ -1,42 +1,36 @@
 {
   "version": "1.0",
   "phase": "01-discuss",
-  "task": "specimen-analysis",
+  "task": 1,
+  "total_tasks": 3,
   "status": "in_progress",
-  "last_updated": "2026-06-01T04:45:00.000Z",
-  "current_state": "ADR 29 (Worker/Tool/Knowledge/Connector 四元边界) 已写入。agentmemory 深度分析完成 (arch + patterns 两份报告)。标本库 D:\\Repo\\specimens\\ 建立，4个项目全部 roam indexed。下一步：分析 hermes-agent / iii / gsd-2。",
+  "last_updated": "2026-06-14T18:00:00.000Z",
+  "current_state": "MemexTerminal + workspace/agent-identity/persona/artifact 设计大弧经多轮 fuller 收口。结构性决策全锁；剩一支设计未钻(MemexTerminal X)+两项非结构(#28④/落地细节)。下一程 = design(收尾)→plan(ADR+切片)→execute。注:此文件原为 2026-06-01 Phase-1 标本分析遗物(已 committed 进 ADR26-29),本次覆盖为当前设计 handover。",
   "completed_work": [
-    "Pre-Phase-1 比较研究：Cayley / Peregrine / GraphVite / codegraph / kli",
-    "G1-G8 缺陷识别与分类（G5-G8 Phase 1 阻断，G1-G4 推迟）",
-    "ADR 26：Event-as-Snapshot 哲学（docs/adr/0028-adr26-event-as-snapshot-philosophy.md）",
-    "ADR 27：Worker 执行生命周期状态机（docs/adr/0029-adr27-worker-lifecycle-state-machine.md）",
-    "ADR 28：调度规约与操作确定性（docs/adr/0030-adr28-scheduling-spec-and-operational-determinism.md）",
-    "ADR 29：Worker/Tool/Knowledge/Connector 四元边界（docs/adr/0031-adr29-worker-tool-knowledge-boundaries.md）",
-    "ADR_v4.md 第九层目录 + 29 条 ADR 总计",
-    "agentmemory 深度分析 — arch 报告：C:\\Temp\\agentmemory-analysis-arch.md",
-    "agentmemory 深度分析 — patterns 报告：C:\\Temp\\agentmemory-analysis-patterns.md（7 个设计模式 with file:line）",
-    "标本库建立：D:\\Repo\\specimens\\（agentmemory/hermes-agent/iii/gsd-2，roam indexed）",
-    "D:\\Repo\\specimens\\specimens.json + update.ps1 — 注册表与批量更新脚本"
+    "MemexTerminal 五梁锁定 (GH #25, ROADMAP §23, memory project_memex_terminal_design.md): 角色/应答者(iii委托gateway核心)/统一类型化协议信封/前向兼容多模态(ProviderProfile seam)/artifact reference-by-path",
+    "MemexTerminal Y 收口: TUI=瘦聊天端(非图驾驶舱); Q先落(满屏聊天+一行状态+审批插播,图→一键Console)+P留seam(lazygit渐进披露)",
+    "workspace/artifact/persona 决策簇 (GH #28/#27, memory project_workspace_artifact_model.md): per-channel LLM=string|{provider,model?}; persona不进图(_principal是分区键); SOUL=agent专属/AGENTS=project专属; 固化文件名非目录树(+AGENTS.md互操作); workspace=糖over discovered无注册表; artifact=per-project文件夹path寻址取代ADR-52 CAS; 同名重建=不裁决靠拓扑分簇",
+    "tracker 中等复活: 关 #15/#10(过时); 建 #24涌现A/B(PARKED)/#25 MemexTerminal epic/#26 skill硬化icebox/#27 Phase21剩余/#28 Phase22剩余; 看板字段同步; 各决策已评论入对应 issue",
+    "project snapshot 提交并推送 (bf0fc607): .harness/PROJECT-SNAPSHOT.md + README 阶段表(17→Complete,补18-22) + ROADMAP §23 + Post-1.0 skill硬化指针"
   ],
   "remaining_work": [
-    "分析 hermes-agent（health 75/100）：架构对标 vision，找出 universal agent runtime 的接口抽象",
-    "分析 iii engine core（17k symbols）：sdk.registerFunction 内部机制 + durable:subscriber 实现",
-    "分析 gsd-2（health 62/100）：planning/execution phase 结构 + skill orchestration 模式",
-    "整合三份标本分析 → 对 ADR 29 实施的具体建议 / 补充 ADR",
-    "填补未决问题追踪 P1/P2 项，运行 /gsd-plan-phase 1"
+    "DESIGN 收尾: 钻 MemexTerminal 支 X — 工具在哪执行 / 审批怎么走 (接 execute_bash 容器化 docker backend + ADR-47 审批状态机); 钻前先读 execute_bash + ask-user 现有实现",
+    "DESIGN 收尾: #28 ④ Plugins 页设计; 落地细节 (workspace 根放哪 / channel cwd 字段名 / `memex workspace add` 模板内容)",
+    "PLAN: 写 ADR — 取代 ADR-52(artifact path 模型) + 统一信封协议 + per-channel LLM + workspace/SOUL/AGENTS 约定 + 同名重建; 把 #25/#27/#28 切成 vertical slice 任务",
+    "EXECUTE: 按切片实现; #24 涌现A/B 验证需用户先给 freeze 信号 + 活体 LLM(独立轨)"
   ],
   "decisions_made": [
-    "G8: Event-as-Snapshot 锁定——memory_updated 是完整快照，禁止 fold/reduce",
-    "G5: Worker 四阶段状态机——Knapsack 失败二分（OOM链路 vs 重入队 N=3）",
-    "G6: 收敛判定纯代数 SQL，禁止概率/时间窗口",
-    "G7: Max_Parallelism 由 iii-config.yaml 动态推导；单写者互斥防止 ConflictResolverWorker 重复实例化",
-    "ADR 29: api:: / mem:: 命名是架构承重墙，transport 层不碰业务逻辑",
-    "ADR 29: TriggerAction.Void() 用于 LLM 路径——热路径零 LLM 是强制设计原则",
-    "ADR 29: 在图原生系统中 audit trail IS execution graph（recordAudit = 冗余层）",
-    "ADR 29: Frontier 分数公式 priority×10 + age_bonus(≤20) + unlocks_count×5 + spawned_by_bonus(3) + active_bonus(15)",
-    "标本库位置锁定：D:\\Repo\\specimens\\（永久，非 C:\\Temp）"
+    "MemexTerminal 应答者 = (iii) Pi SDK 做皮+脑委托 gateway 对话核心(保 ADR-54 免key/渠道一致)",
+    "artifact = per-project workspace/<project>/artifact/ 文件夹, path 寻址, 取代已实现 ADR-52 CAS (本 session 首次取代已实现 ADR, 需新 ADR)",
+    "persona/SOUL 不进图 = 配置输入/噪音; SOUL.md agent专属(热读,缺省→默认), AGENTS.md project专属(+互操作)",
+    "workspace 生命周期 = 糖 over discovered, 无注册表(守 §11); memex workspace add 建文件夹+AGENTS.md+artifact/(不丢SOUL)",
+    "同名重建身份 = 不裁决, scope.project 存标签(无ctime), 靠图连通性自然分簇",
+    "悬空 artifact 引用 = #24 failure 路径 = 涌现软化 (三线合一机制)"
   ],
-  "blockers": [],
-  "context": "Project: Graph-Native Agent Runtime (ClydeShen/graph-engineering). 29 ADRs locked. 标本库 roam index 已就绪，直接用 roam MCP tools with root: D:\\Repo\\specimens\\<name> 分析。agentmemory 报告在 C:\\Temp\\agentmemory-analysis-*.md。",
-  "next_action": "用 roam_understand + roam_explore 分析 hermes-agent 架构（root: D:\\Repo\\specimens\\hermes-agent），对照项目 vision 找出 universal agent runtime 的接口抽象设计。"
+  "blockers": [
+    "#24 涌现A/B 验证: 等用户「可 freeze」信号 + 活体 LLM (Gemini key 被吊/Ollama 未装)",
+    "并行 DEV 轨(21-console authenticated embedding 活体)同样卡活体 LLM, 停在 .harness/phases/ui-console/.continue-here.json"
+  ],
+  "context": "权威指针: ROADMAP=阶段权威(.harness/ROADMAP.md, §23-memex-terminal); snapshot=.harness/PROJECT-SNAPSHOT.md; tracker 开放=#24-28; memory=project_memex_terminal_design.md + project_workspace_artifact_model.md + project_skill_hardening_vision.md + project_emergence_loop_validation.md。ADR-52 标记待取代。工作树有未提交 dev 改动(memex.mjs/memex-terminal.mjs CRLF-only, state.json/ui-console continue-here)——非本设计轨, 留给用户。",
+  "next_action": "钻 MemexTerminal 支 X(工具执行+审批): 先读 packages 内 execute_bash 后端解析 + ask-user/审批状态机现有实现, 再用 fuller 定工具执行位置与审批往返(其 UI 端 = Y 的 A3 审批插播)。"
 }

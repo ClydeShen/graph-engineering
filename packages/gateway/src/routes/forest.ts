@@ -16,6 +16,8 @@
 
 import { Hono } from 'hono';
 import type { Pool } from 'pg';
+import { basename } from 'node:path';
+import { isProjectArchived } from '@graph/shared';
 import { validateScopeIdParam } from '../middleware/zod-guard.js';
 
 /**
@@ -35,6 +37,8 @@ interface ForestTask {
   status: string;
   created_at: string;
   descendants: number;
+  /** CONSOLE-REDESIGN §11.1 — working-folder cluster label, null when unset. */
+  project: string | null;
 }
 
 interface Galaxy {
@@ -43,12 +47,30 @@ interface Galaxy {
   status_counts: Record<string, number>;
 }
 
+/** A project cluster (§11.1) — distinct working folder grouping its roots. */
+interface ProjectCluster {
+  /** Absolute working-folder path (the stable grouping key / identity label). */
+  project: string;
+  /** basename(project) — the human-friendly cluster name (§11.1). */
+  name: string;
+  roots: number;
+  /** §11.3 lazy tombstone — folder no longer on disk → archived/unopenable. */
+  archived: boolean;
+}
+
+type ForestRow = {
+  scope_id: string;
+  intent: string | null;
+  status: string;
+  created_at: string;
+  descendants: number;
+  project: string | null;
+};
+
 /**
  * Group root scopes into galaxies by channel (pure + exported for testing).
  */
-export function groupIntoGalaxies(
-  rows: Array<{ scope_id: string; intent: string | null; status: string; created_at: string; descendants: number }>,
-): Galaxy[] {
+export function groupIntoGalaxies(rows: ForestRow[]): Galaxy[] {
   const galaxies = new Map<string, Galaxy>();
   for (const row of rows) {
     const channel = channelFromIntent(row.intent);
@@ -63,6 +85,28 @@ export function groupIntoGalaxies(
   return [...galaxies.values()];
 }
 
+/**
+ * Group root scopes into project clusters by working folder (§11.1). archivedFn
+ * is injected so the disk-stat (lazy tombstone, §11.3) stays testable. Roots
+ * with no project are omitted — they live only in the channel galaxies.
+ */
+export function groupIntoProjects(
+  rows: ForestRow[],
+  archivedFn: (project: string) => boolean,
+): ProjectCluster[] {
+  const byProject = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.project) continue;
+    byProject.set(row.project, (byProject.get(row.project) ?? 0) + 1);
+  }
+  return [...byProject.entries()].map(([project, roots]) => ({
+    project,
+    name: basename(project) || project,
+    roots,
+    archived: archivedFn(project),
+  }));
+}
+
 export function buildForestRoute(pool: Pool): Hono {
   const app = new Hono();
 
@@ -74,6 +118,7 @@ export function buildForestRoute(pool: Pool): Hono {
         status: string;
         created_at: string;
         descendants: string;
+        project: string | null;
       }>(
         // tree CTE flattens (scope, its root); descendant count per root = tree
         // size − 1. scope_lineage is small enough that this is fine for v1.
@@ -85,19 +130,25 @@ export function buildForestRoute(pool: Pool): Hono {
          )
          SELECT r.scope_id, r.intent, r.status,
                 r.created_at::text AS created_at,
-                (SELECT COUNT(*) - 1 FROM tree WHERE root = r.scope_id)::text AS descendants
+                (SELECT COUNT(*) - 1 FROM tree WHERE root = r.scope_id)::text AS descendants,
+                r.project
          FROM scope_lineage r
          WHERE r.parent_scope_id IS NULL
          ORDER BY r.created_at DESC`,
       );
-      const rows = res.rows.map((r) => ({
+      const rows: ForestRow[] = res.rows.map((r) => ({
         scope_id: r.scope_id,
         intent: r.intent,
         status: r.status,
         created_at: r.created_at,
         descendants: Number(r.descendants),
+        project: r.project,
       }));
-      return c.json({ galaxies: groupIntoGalaxies(rows), total_roots: rows.length });
+      return c.json({
+        galaxies: groupIntoGalaxies(rows),
+        projects: groupIntoProjects(rows, isProjectArchived),
+        total_roots: rows.length,
+      });
     } catch {
       // migration absent / empty system — an empty forest, not an error
       return c.json({ galaxies: [], total_roots: 0 });

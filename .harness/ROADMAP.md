@@ -794,7 +794,9 @@ Plans:
 - ✅ 细节页：Emergence feed（`/v1/emergence` + confidence 翻人话）；`/skills` 解除 "Crystallized lesson" 误标；Overview 去黑话（任务状态卡 + event_type/status 人话标签）
 - ✅ 动效/tabular token 地基（附录 B）；附录 A 写能力地基（llm-overrides 文件 + provider 合并，零回归）
 - ✅ **全量 682 测试绿（基线 661 + 修 1 pre-existing + 新增 20），typecheck 绿，零回归**
-- ⬜ **剩余**：附录 A 写凭证 POST 端点 + Settings 写表单（安全敏感，需独立审查，§6.5 不 ship 半成品）；Now 节点小人美术选型（§9，AI Town/Kenney CC0）；Settings 反映 overrides；真 LLM + 浏览器活体验证
+- ✅ **附录 A 写路径（2026-06-14 自主 GOAL）**：`POST/DELETE /v1/sys/llm-overrides`（token 门控仅写动词，fail-closed §6.5 坏输入写前 400）；`LlmSettingsForm` 写表单（password show/hide、提交态、重启生效诚实提示）；`/v1/sys/config` 反映 overrides + channels `.llm`
+- ✅ **Now 节点美术（2026-06-14）**：art-selection = **程序化 2.5D 状态精灵**（无外部资源；§9 sheet 选型本就待决/#27 称 design pick）；ForestCanvas 增 active 脉冲/converged 勾/suspended 警示字形，色+形+节奏三通道 + reduced-motion 安全，保留 `drawImage` seam 供日后换 CC0 sheet
+- ⬜ **剩余（活体边界，BLOCKED）**：真 LLM + 浏览器活体视觉验证（本机无可用 LLM：Gemini key 吊销 / Ollama 未装）。逻辑层 logic-done（707 测试 + DB journey + next build 全绿）；gateway 进程内热生效刻意留独立基础设施项
 
 ---
 
@@ -819,7 +821,14 @@ Plans:
 - ✅ migration 022：`scope_lineage.project` 列（纯加列，NULL = 现行为，零回归）
 - ✅ `nestScope` 可选 `project` 参数（条件 INSERT：不传则走原 4 列 SQL，零回归且 migrate 前安全）
 - ✅ config `ChannelEntry.llm` 字段 + `resolveChannelProvider()` seam（per-channel LLM「agent 身份」，4 单测绿）
-- ⬜ **剩余深度集成 TODO**：execute_bash cwd 检测→填充 project；gateway-bot 按 `resolveChannelProvider` 路由 provider；onboarding 文件夹根生成；forest 端点按 project 分组；同名重建身份。
+- ✅ **深度集成全收口（2026-06-14 自主 GOAL）**：
+  - execute_bash local cwd → `scope_lineage.project`（`recordScopeProject` first-write-wins；tmp 不记；`packages/shared/src/scope-project.ts`）
+  - per-channel provider 路由：`buildChannelChatProvider` + gateway chat 端点按 `principal`(`<platform>::<chatId>`) 选 channel provider（ADR-54 服务端单应答者下,seam 在服务端非 gateway-bot）
+  - `/v1/forest` 增 `projects[]`（basename 命名 + archived）；`/v1/artifacts` LEFT JOIN 继承 project + `project_archived`
+  - onboarding 生成 `<profileDir>/workspaces/<channel>/`（`ensureWorkspaceRoots`，artifacts/ + AGENTS.md 幂等）
+  - bad-path 懒墓碑：`isProjectArchived`（existsSync,图零写）；故意删走 ADR-43 erase
+  - **同名重建身份决策**：project 值=绝对路径标签,**不做 path+ctime 方案**,靠图连通性自然分簇（与 memory 一致）
+- **§9 B 类决策落定**：per-channel LLM = `channels[p].llm` 引用 providers[].name（已存在 seam，本次接线）；与附录 A 全局单槽并存（全局=默认,channel 覆盖）。Workspace 页（§21）解除阻塞,已落地（按 project 分组 + Archived 簇）。
 
 **待讨论（§9 B 类，未定）：** per-channel LLM 配置 schema/UI 终态、Plugins 页设计、同名重建身份、onboarding 文件夹结构细节。
 

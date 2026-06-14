@@ -20,8 +20,10 @@ import {
   DEFAULT_GATEWAY_PORT,
   MemexConfigSchema,
   PROVIDER_PROFILES,
+  ensureWorkspaceRoots,
   fetchModels,
   getProviderProfile,
+  workspacesRoot,
   type LLMApi,
   type MemexConfig,
   type ProviderProfile,
@@ -453,6 +455,12 @@ export async function runOnboard(
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
 
+  // Per-channel/agent workspace folder roots (CONSOLE-REDESIGN §11.1/§11.4): a
+  // home folder per channel (plus the default `console` agent) so each one's
+  // work has a project cluster. Idempotent — re-running onboard never clobbers.
+  const workspaceNames = ['console', ...Object.keys(config.channels ?? {})];
+  ensureWorkspaceRoots(workspaceNames);
+
   // ── System summary (Phase 18 #3) ──────────────────────────────────────────
   const port = Number(portInput);
   // The dashboard is the Console (Next.js), served on :3000 by `npm run dev` —
@@ -470,6 +478,7 @@ export async function runOnboard(
       `  embedding  ${embeddingSection ? `${embeddingSection.provider}/${embeddingSection.model}` : 'none (keyword search)'}`,
       `  gateway    port ${port}${token !== undefined ? ' (token auth on)' : ''}`,
       `  channels   ${telegramConfigured ? 'telegram' : 'none yet'}`,
+      `  workspaces ${workspaceNames.join(', ')} (in ${workspacesRoot()})`,
       ...(apiKeyRef !== undefined
         ? [`  key        saved to ${envPath} (${apiKeyRef.slice(2, -1)})`]
         : []),
