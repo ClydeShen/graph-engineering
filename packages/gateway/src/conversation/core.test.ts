@@ -303,4 +303,32 @@ describe('conversationMemoryBlock', () => {
   it('returns empty string when there is no prose context', () => {
     expect(conversationMemoryBlock(baseContext)).toBe('');
   });
+
+  it('frames memory as internal/non-displayable, not a parrotable "## MEMORY" heading', () => {
+    // An 8b model echoed a "## MEMORY" heading back as a "(MEMORY) …" reply
+    // prefix (observed live). The block must not reintroduce that heading.
+    const block = conversationMemoryBlock({ ...baseContext, reflectionContent: 'L' });
+    expect(block).not.toContain('## MEMORY');
+    expect(block.toLowerCase()).toContain('private reference');
+  });
+});
+
+describe('CONVERSATION_SYSTEM_ROLE tripwire (tool axis)', () => {
+  // HARD TRIPWIRE — see the comment above CONVERSATION_SYSTEM_ROLE in core.ts.
+  // The conversation core has NO external tools today, so the role tells the
+  // model it has none. The MOMENT chat gains a real tool (#17 MCP ecosystem),
+  // that claim becomes a lie and this test will fail — DO NOT just delete the
+  // assertion. Failure is the signal to make the role capability-aware (describe
+  // the tools actually bound) instead of a static "you have no tools" string.
+  it('claims no external/tool access (must break when chat gains real tools)', () => {
+    const role = CONVERSATION_SYSTEM_ROLE.toLowerCase();
+    expect(role).toContain('no access to the live internet');
+    expect(role).toMatch(/no ability to call apis|run tools/);
+  });
+
+  it('forbids fabrication and reply-prefix labels', () => {
+    const role = CONVERSATION_SYSTEM_ROLE.toLowerCase();
+    expect(role).toContain('never fabricate');
+    expect(role).toContain('(memory)'); // the no-label instruction names the leak
+  });
 });

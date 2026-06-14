@@ -105,6 +105,24 @@ export type ConversationTurnResult =
  * format — they echo the trail dump and invent `[event_type] {json}` lines
  * instead of conversing — so the conversation surface gets its own prose-first
  * instruction. (The agentic role is unchanged for the real agent path.)
+ *
+ * DELIBERATELY a single hand-tuned string, NOT a hermes-style guidance registry
+ * keyed on (model family) × (tools present). That seam is deferred until a
+ * second real case appears — today the chat path has one model class (small
+ * local) and zero external tools. Two tripwires guard the deferral so it stays
+ * safe rather than forgotten:
+ *
+ *   - HARD (tool axis): the "you have NO … tools" claim below becomes a LIE the
+ *     moment chat gains a real tool (#17 MCP ecosystem). A test asserts that
+ *     claim (core.test.ts "TRIPWIRE: role claims no external access") — it fails
+ *     when the claim is removed, forcing whoever wires a tool to make the role
+ *     capability-aware instead of silently lying.
+ *   - SOFT (model-family axis): if you're about to append a FOURTH small-model
+ *     pathology patch to this string, STOP — that's the signal to extract named
+ *     guidance blocks (see hermes agent/prompt_builder.py: TASK_COMPLETION_
+ *     GUIDANCE, TOOL_USE_ENFORCEMENT_GUIDANCE) rather than grow this wall.
+ *     Patches so far: (1) prose-first anti-parroting, (2) anti-confabulation,
+ *     (3) no-label/honesty. Three. The next one triggers the extraction.
  */
 export const CONVERSATION_SYSTEM_ROLE =
   'You are the memex, a conversational assistant backed by a persistent graph memory. ' +
@@ -113,16 +131,24 @@ export const CONVERSATION_SYSTEM_ROLE =
   'is explicitly provided to you in this conversation. ' +
   'Never fabricate facts, data, sources, tool calls, or API requests, and never claim to ' +
   'have looked something up or accessed anything. If you lack the information or the ' +
-  'ability to obtain it, say so plainly and briefly instead of inventing an answer. ' +
+  'ability to obtain it, say so plainly and briefly instead of inventing an answer — ' +
+  'reporting a blocker honestly is always better than inventing a result. ' +
   'Only state things you actually know or that appear in this conversation. ' +
-  'Reply directly and naturally, in prose. Any MEMORY section below is background recalled ' +
-  'from earlier trails — use it when relevant, but never repeat it verbatim or imitate its formatting.';
+  'Reply directly and naturally, in prose. Do not prefix your reply with labels or section ' +
+  'headers (e.g. never start a line with "MEMORY", "(MEMORY)", or "##"). Any background-memory ' +
+  'section below is recalled from earlier trails for your private reference — draw on it silently ' +
+  'when relevant; never quote it, list it, echo its heading, or mention that it exists.';
 
 /**
  * Prose memory block for the conversation prompt: crystallized lessons,
  * capability notes, and CCR retrieval guidance. Deliberately EXCLUDES the raw
  * trail-event listing — small models parrot it — and the conversation turns,
  * which are re-projected as real chat messages (see loadConversationHistory).
+ *
+ * The block is framed as internal, non-displayable reference rather than a
+ * markdown "## MEMORY" heading: an 8b model echoed that heading back as a
+ * "(MEMORY) …" reply prefix (observed live). A self-labelling prose frame is
+ * less imitable than a section header.
  */
 export function conversationMemoryBlock(ctx: AssembledContext): string {
   const parts: string[] = [];
@@ -133,7 +159,12 @@ export function conversationMemoryBlock(ctx: AssembledContext): string {
     parts.push(ctx.capabilityContent);
   }
   if (ctx.ccrInstructions !== undefined) parts.push(ctx.ccrInstructions);
-  return parts.length > 0 ? '## MEMORY\n' + parts.join('\n\n') : '';
+  if (parts.length === 0) return '';
+  return (
+    '(Background memory recalled from earlier trails — for your private reference only. ' +
+    'Do not display, quote, or mention this. Draw on it silently if relevant.)\n' +
+    parts.join('\n\n')
+  );
 }
 
 /**
