@@ -215,6 +215,22 @@ describe('runOnboard', () => {
     });
   });
 
+  it('nvidia chat reuses itself for embeddings via bge-m3 (no input_type needed)', async () => {
+    answers['select'] = 'nvidia';
+    await runOnboard(configPath, envPath);
+
+    process.env['NVIDIA_API_KEY'] = 'resolved';
+    const loaded = loadMemexConfig(configPath);
+    delete process.env['NVIDIA_API_KEY'];
+
+    expect(loaded!.providers![0]).toMatchObject({
+      name: 'nvidia',
+      model: 'meta/llama-3.1-8b-instruct',
+    });
+    // canReuse path: NVIDIA now embeds, so it offers itself — same key, bge-m3.
+    expect(loaded!.embedding).toMatchObject({ provider: 'nvidia', model: 'baai/bge-m3' });
+  });
+
   it('keeps a .bak backup when reconfiguring an existing file', async () => {
     writeFileSync(configPath, '{"gateway":{"port":1234}}', 'utf8');
     answers[`${configPath} already exists. Reconfigure? (a .bak backup is kept)`] = true;

@@ -147,9 +147,13 @@ export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
     envVar: 'NVIDIA_API_KEY',
     signupUrl: 'https://build.nvidia.com/',
     defaultModel: 'meta/llama-3.1-8b-instruct',
-    // Chat-only here: NVIDIA's /embeddings needs an `input_type` (query/passage)
-    // param the generic OpenAI embedding path doesn't send, so we don't claim it.
-    supportsEmbedding: false,
+    // Embeddings via baai/bge-m3 — a SYMMETRIC model whose NIM /embeddings takes
+    // only {model, input} (no input_type), so the generic path works as-is
+    // (verified: docs.api.nvidia.com/nim/reference/baai-bge-m3-invoke). NVIDIA's
+    // asymmetric retrieval models (nv-embedqa-*, E5) instead REQUIRE an
+    // input_type query/passage param we don't send — don't default to those.
+    supportsEmbedding: true,
+    defaultEmbeddingModel: 'baai/bge-m3',
   },
   {
     name: 'glm',

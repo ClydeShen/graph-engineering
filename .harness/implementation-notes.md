@@ -1027,3 +1027,25 @@ USER_MANUAL §5.1 补本地端点确认 + `localhost`→`127.0.0.1` 排错提示
 
 **Gate:** 新增 llamacpp 改端口活体路径用例(stub 只认 `127.0.0.1:8081/v1/models`,证明改后的 URL 流进
 fetchModels 且持久化);onboard 7 + fetch-models 6 + provider-profiles 8 = 21 绿,root tsc clean。
+
+### NVIDIA embeddings via bge-m3 (same session)
+
+**触发:** 用户指出 NVIDIA 也有 embedding,picker 里却没它。
+
+**核实(决定性):** NVIDIA 的 NV-Embed-QA / E5 检索模型**强制 `input_type`**(query/passage),OpenAI 协议没
+这参数 → 通用 embed 路径会 400(这是之前排除它的真实原因)。但 NVIDIA 也托管对称模型 `baai/bge-m3`,其
+NIM `/embeddings` 只收 `{model, input}`,**不需要 input_type**(取自 docs.api.nvidia.com/nim/reference/
+baai-bge-m3-invoke:input 必填,model/encoding_format/truncate 可选,无 input_type)。
+
+**改动:** NVIDIA `supportsEmbedding: true` + `defaultEmbeddingModel: 'baai/bge-m3'`,注释写明对称模型走通用
+路径、asymmetric nv-embedqa 仍需 input_type 故不作默认。**副作用(正向):** 用户 chat=NVIDIA 时 `canReuse`
+变 true → embedding 直接走 reuse("用 NVIDIA(bge-m3)"),同 key,不再显示"can't create embeddings"。
+
+**有意未做:** asymmetric nv-embedqa 的 input_type query/passage 全链路接线 —— embed(text) 接口对称、存/查
+不分,要改接口+~6 调用点(semantic/backfill/procedural/template/reflect worker + memory route)+测试,
+跨切面大改,收益边际(bge-m3 已是优秀对称模型)。需要时再单开。
+
+**Gate:** NVIDIA-reuse 用例锁定(provider=nvidia + embedding=nvidia/bge-m3);onboard 8 + provider-profiles 8
+= 16 绿,root tsc clean。bge-m3 输出 1024 维,padToSchemaDims 补到 1536。
+
+**残留(unverified-live):** bge-m3 经 NVIDIA key 的真实 `/embeddings` 往返未活体(用户有 key 可验)。
