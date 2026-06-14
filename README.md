@@ -149,7 +149,12 @@ When a Scope closes, CrystallizeWorker queries the episodic trail, calls an LLM 
 | 14 — trust-isolation | Docker execution backend, approvals, erase, PII filtering | Complete |
 | 15 — deploy-everywhere | Installers, Docker compose, doctor, backup/restore, profiles | Complete |
 | 16 — memexos-one | Skills install side, eval harness, SECURITY/QUICKSTART, release | Complete |
-| 17 — mcp-connector-ecosystem | MCP catalog, OAuth PKCE, `memex mcp` CLI | Planned |
+| 17 — mcp-connector-ecosystem | MCP catalog, OAuth PKCE, `memex mcp` CLI | Complete |
+| 18 — first-run-experience | WSL2 first-run, onboarding, capability presets, Pi-SDK agent mode | Code-complete (live runs remain) |
+| 19 — console-and-artifacts | Artifact graph convention, Console full version | Code-complete (UI superseded by 21) |
+| 20 — autonomous-assistant | Self-acquire skills, `ask_user`, credential vault, controlled browser | Code-complete (live journey remains) |
+| 21 — console-redesign | Now-universe (force-graph), human-language IA, emergence feed | In progress |
+| 22 — workspace-project | project/cwd dimension, per-channel LLM identity | In progress |
 
 Phases 1–16 form the **1.0 candidate** (479 tests, `tsc` clean). See `.harness/ROADMAP.md` for full phase detail and `CHANGELOG.md` for the release notes.
 

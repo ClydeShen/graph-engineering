@@ -825,6 +825,27 @@ Plans:
 
 ---
 
+## 23-memex-terminal 📋 待执行（设计定稿 2026-06-14，GH #25，权威 = memory `project_memex_terminal_design.md`）
+
+**目标：** 把 MemexTerminal 从 v1 readline 聊天 REPL 升级为 Pi-SDK 构建的、类 Claude Code 的 TUI，后端大脑是图。取代 Phase 18 #6「MemexTerminal Pi-SDK agent 模式」的薄提，给出完整设计。
+
+**五梁（fuller 锁定）：**
+1. **角色**：Pi-SDK 改造、类 Claude Code TUI；≠ `memex connect pi`（外部 Pi 经 MCP）。TUI 表面 = **瘦聊天端 + task 状态**，非图驾驶舱；图观测交 Console；「图原生」仅指后端。
+2. **应答者 (iii)**：Pi SDK 做皮 + 循环外壳；LLM turn/工具编排**委托 gateway 对话核心**（ADR-54）。保住「服务端单应答者 / 本地免 key / 渠道一致」。
+3. **协议 (C)**：一次定统一类型化信封（content blocks 入 / 类型化事件流出）；**先 agentic 文本流（工具+审批），多模态第二批**。
+4. **前向兼容 (A)**：版本化判别联合；turn-based 覆盖 text/image/video/按键说话；实时全双工语音留 v2；能力门在 `ProviderProfile` seam。
+5. **artifact (A)**：统一 reference-by-path、无 CAS（Hermes 背书）；账本只记 `{path/URL, media_type, origin}`；粘贴落成文件；base64 仅 wire。**悬空引用 = 涌现软化信号（同 #24 failure 机制）。**
+
+**Y 收口（TUI 表面，lazygit 调研）：** Q 先落（满屏聊天 + 一行状态 + 审批内联插播 + 一键开 Console）；P 留 seam（lazygit 渐进披露：默认藏、一键揭可折叠面板）。
+
+**未钻：** X — agentic 文本流层（工具在哪执行 / 审批怎么走）。接 `execute_bash` 容器化 + ADR-47 审批状态机；**X 的审批 UI = Y 的 A3 插播**。钻前读 `execute_bash` + ask-user 现状。
+
+**与现有 ADR 的关系：** 续写 ADR-54 D-3 亲口推迟的「MemexShell 正篇」；新 ADR 待写（统一信封协议 + 多模态/blob 引用 + 本地 loop↔gateway 核心契约）。
+
+**前置条件：** 无硬前置；X 钻完后切片规划。
+
+---
+
 ## Post-1.0 方向（顺应 AI 发展，不排期、不写 ADR）
 
 > 记录于此防止丢失，每项启动前需独立 scoping。
@@ -832,6 +853,7 @@ Plans:
 - **多模态 I/O**：voice channel（STT/TTS provider 抽象可仿 ADR-22 的 LLM provider 模式）、图像输入经 vision 辅助模型路由（hermes `image_routing` 模式）
 - **Computer use / browser automation** 作为 worker tool（执行后端抽象已为其预留隔离语义）——容器化受控浏览器能力（实现经 capability presets 可选：agent-browser / Playwright 等）已提前至 Phase 20；此处保留的是宿主级 computer use（控制宿主浏览器/桌面）
 - **本地模型深化**：Ollama/vLLM 一等支持已在 provider 注册表；补充本地 embedding 路径使全栈可离线
-- **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展
+- **Skill 硬化（GH #26，icebox）**：涌现模式相变为确定性快路径 skill + 可逆 deopt（借 smart-contract 概念，非区块链）。结构核心已达（fuller 2026-06-14，memory `project_skill_hardening_vision.md`）；底座已存在（`canonicalizeTemplateGraph`/WL/强化），只差晋升门 + 契约 guard + 快路径/deopt。**前置=#24 先证软回路因果有用。** 联邦/群协同是其更远延伸。
+- **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展 + Skill 硬化（可验证工件）
 - **编辑器集成**（ACP 协议，hermes `hermes acp` 模式）：Memex 作为 IDE 内 agent 的记忆与 trail 后端
 - **SSH / cloud 执行后端**（Modal/Daytona 类）：Phase 14 明确 YAGNI 推迟的项
