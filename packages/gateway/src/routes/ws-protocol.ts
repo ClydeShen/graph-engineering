@@ -24,6 +24,9 @@ import type { EmbeddingProvider, LLMProvider } from '@graph/shared';
 import type {
   WsClientMessage,
   WsServerMessage,
+  WsSubscribeMessage,
+  WsUserMessage,
+  WsAgentEventMessage,
   TrailSseEvent,
 } from '@graph/types/shell';
 import { parseGraphEventReadyPayload } from '@graph/shared';
@@ -83,88 +86,103 @@ export async function handleWsMessage(
     return { type: 'error', message: 'invalid JSON' };
   }
 
-  if (msg.type === 'subscribe') {
-    state.subscriptions.add(msg.scope_id ?? '*');
-    return null;
+  switch (msg.type) {
+    case 'subscribe':
+      return handleSubscribe(msg, state);
+    case 'user_message':
+      return handleUserMessage(deps, msg, send);
+    case 'agent_event':
+      return handleAgentEvent(deps, msg);
+    default:
+      return { type: 'error', message: 'unknown message type' };
   }
+}
 
-  // ── Conversation turn (ADR 54): gateway-side reply loop ────────────────────
-  if (msg.type === 'user_message') {
-    if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
-      return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
-    }
-    // Precheck the shape so a typo'd --scope gets a self-explanatory error
-    // instead of a postgres uuid-syntax failure (UX-audit U7).
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.scope_id)) {
-      return { type: 'error', request_id: msg.request_id, message: `invalid scope_id (expected a UUID): ${msg.scope_id}` };
-    }
-    if (typeof msg.text !== 'string' || msg.text.length === 0) {
-      return { type: 'error', request_id: msg.request_id, message: 'missing text' };
-    }
-    try {
-      const result = await runConversationTurn(deps, {
-        scopeId: msg.scope_id,
-        text: msg.text,
-        onDelta: (text) =>
-          send?.({
-            type: 'trail_event',
-            event_type: 'text_delta', // ADR-44 reserved slot, now live
-            payload: { text, request_id: msg.request_id },
-            scope_id: msg.scope_id,
-            timestamp: new Date().toISOString(),
-          }),
-      });
-      if (result.kind === 'suspended') {
-        return { type: 'turn_result', request_id: msg.request_id, suspended: true, context: null };
-      }
-      if (result.kind === 'error') {
-        return { type: 'error', request_id: msg.request_id, message: result.message };
-      }
-      return {
-        type: 'turn_result',
-        request_id: msg.request_id,
-        version_hash: result.assistant_version_hash,
-        reply: result.reply,
-        context: null,
-      };
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      log.error({ err: reason }, 'ws.conversation.error');
-      // Surface the reason — the client otherwise has nothing to act on (U7).
-      return { type: 'error', request_id: msg.request_id, message: `conversation turn failed: ${reason}` };
-    }
+/** subscribe — register interest in a scope ('*' = all). No direct reply. */
+function handleSubscribe(msg: WsSubscribeMessage, state: WsConnectionState): null {
+  state.subscriptions.add(msg.scope_id ?? '*');
+  return null;
+}
+
+/** user_message — gateway-side conversation reply loop (ADR 54); streams text_delta. */
+async function handleUserMessage(
+  deps: WsDeps,
+  msg: WsUserMessage,
+  send?: (msg: WsServerMessage) => void,
+): Promise<WsServerMessage> {
+  if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
+    return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
   }
-
-  if (msg.type === 'agent_event') {
-    const parsed = EventBodySchema.safeParse(msg.event);
-    if (!parsed.success) {
-      return { type: 'error', request_id: msg.request_id, message: 'invalid event body' };
-    }
-    if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
-      return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
-    }
-    try {
-      const outcome = await processAgentTurn(deps.pool, msg.scope_id, parsed.data, deps.wMax, deps.embed);
-      if (outcome.suspended) {
-        return { type: 'turn_result', request_id: msg.request_id, suspended: true, context: null };
-      }
-      if ('deduplicated' in outcome && outcome.deduplicated) {
-        return { type: 'turn_result', request_id: msg.request_id, deduplicated: true, context: null };
-      }
-      return {
-        type: 'turn_result',
-        request_id: msg.request_id,
-        version_hash: outcome.version_hash,
-        occ_result: outcome.occ_result,
-        context: outcome.context,
-      };
-    } catch (err) {
-      log.error({ err: err instanceof Error ? err.message : String(err) }, 'ws.turn.error');
-      return { type: 'error', request_id: msg.request_id, message: 'turn failed' };
-    }
+  // Precheck the shape so a typo'd --scope gets a self-explanatory error
+  // instead of a postgres uuid-syntax failure (UX-audit U7).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.scope_id)) {
+    return { type: 'error', request_id: msg.request_id, message: `invalid scope_id (expected a UUID): ${msg.scope_id}` };
   }
+  if (typeof msg.text !== 'string' || msg.text.length === 0) {
+    return { type: 'error', request_id: msg.request_id, message: 'missing text' };
+  }
+  try {
+    const result = await runConversationTurn(deps, {
+      scopeId: msg.scope_id,
+      text: msg.text,
+      onDelta: (text) =>
+        send?.({
+          type: 'trail_event',
+          event_type: 'text_delta', // ADR-44 reserved slot, now live
+          payload: { text, request_id: msg.request_id },
+          scope_id: msg.scope_id,
+          timestamp: new Date().toISOString(),
+        }),
+    });
+    if (result.kind === 'suspended') {
+      return { type: 'turn_result', request_id: msg.request_id, suspended: true, context: null };
+    }
+    if (result.kind === 'error') {
+      return { type: 'error', request_id: msg.request_id, message: result.message };
+    }
+    return {
+      type: 'turn_result',
+      request_id: msg.request_id,
+      version_hash: result.assistant_version_hash,
+      reply: result.reply,
+      context: null,
+    };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    log.error({ err: reason }, 'ws.conversation.error');
+    // Surface the reason — the client otherwise has nothing to act on (U7).
+    return { type: 'error', request_id: msg.request_id, message: `conversation turn failed: ${reason}` };
+  }
+}
 
-  return { type: 'error', message: 'unknown message type' };
+/** agent_event — same write path as POST /v1/scopes/:id/events (processAgentTurn). */
+async function handleAgentEvent(deps: WsDeps, msg: WsAgentEventMessage): Promise<WsServerMessage> {
+  const parsed = EventBodySchema.safeParse(msg.event);
+  if (!parsed.success) {
+    return { type: 'error', request_id: msg.request_id, message: 'invalid event body' };
+  }
+  if (typeof msg.scope_id !== 'string' || msg.scope_id.length === 0) {
+    return { type: 'error', request_id: msg.request_id, message: 'missing scope_id' };
+  }
+  try {
+    const outcome = await processAgentTurn(deps.pool, msg.scope_id, parsed.data, deps.wMax, deps.embed);
+    if (outcome.suspended) {
+      return { type: 'turn_result', request_id: msg.request_id, suspended: true, context: null };
+    }
+    if ('deduplicated' in outcome && outcome.deduplicated) {
+      return { type: 'turn_result', request_id: msg.request_id, deduplicated: true, context: null };
+    }
+    return {
+      type: 'turn_result',
+      request_id: msg.request_id,
+      version_hash: outcome.version_hash,
+      occ_result: outcome.occ_result,
+      context: outcome.context,
+    };
+  } catch (err) {
+    log.error({ err: err instanceof Error ? err.message : String(err) }, 'ws.turn.error');
+    return { type: 'error', request_id: msg.request_id, message: 'turn failed' };
+  }
 }
 
 // ── Broadcast: pg LISTEN → subscribed WS clients ────────────────────────────
