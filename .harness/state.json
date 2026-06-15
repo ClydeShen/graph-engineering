@@ -8,8 +8,8 @@
   },
   "position": {
     "phase": "03-execute",
-    "active": "MemexTerminal Pi-embed (ADR-57) build-out 量产切片。Tracer + #1 provider-bridge + #2 C3 loop + #3 approval 已落 master (efa1817c..814f87c0)。当前切片 = 绑 execute_bash 真工具进 Pi（D-5 量产）。",
+    "active": "MemexTerminal (Pi-embed, ADR-57) 弧收口（自主 GOAL 完成）。D-1~D-5 全实现+活体；D-6 schedule_task 实现/send_message 延后；embed 隔离修复；memex chat 接线 terminal-pi。typecheck 0 + 726 测试零回归 + 完整 agentic journey 活体。",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "build-out #4 绑 execute_bash 完成并提交：抽 runExecuteBash 共用函数（gateway/mcp/execute-bash.ts，MCP+Pi 两路共用消除漂移）+ Pi defineTool（只吃 command，scope 由 terminal 供）+ 审批 hook + run-exec-bash.mts。活体三连全绿（良性端到端落账本 / 危险 block / 裸 pi 内置 getActiveToolNames=[] 压制）。下一刀 = 修内嵌 embed 未与外部 ~/.pi 扩展隔离（spawn_task/complete_task 泄漏，buildSessionWithCoreBrain 关外部自动发现）。命名 A 方案/只动 terminal/pi-extension=BYO 不动 已记 memory。"
+    "stopped_at": "MemexTerminal 弧收口（commits 68c057a3..44475114）：embed 隔离 / 组装真终端(terminal.ts+index.ts, InteractiveMode DRY) / memex chat→terminal-pi / schedule_task(D-6) / 删取代 proof+typecheck 0。全测试 726 passed 零回归; 完整 agentic journey 活体(写文件→读回→报告,落盘+落 trail)。剩余: interactive TTY 活体 / send_message 专门切片(channel 依赖) / A-plan 最终 rename(terminal-pi→@graph/terminal)。"
   }
 }

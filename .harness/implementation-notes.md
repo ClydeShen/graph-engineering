@@ -1380,3 +1380,23 @@ registry(只调 .send 不 .start,但 gateway-bot 连接器构造是逐平台内�
 channel 才能活体验证)。两者都无法在本环境无配置 channel 下活体验证 → **不半成品**(违反 stable
 mandate)。留作专门切片。schedule_task 已覆盖 D-6 的 autonomy-parity;send_message 是 outbound-parity,
 delivery 依赖 channel 配置,与核心终端解耦。
+
+### Build-out #9 — 收口验证(2026-06-15,自主 GOAL)
+
+- **typecheck 全工作区 0 错误**(删除被取代的 5 个 tracer proof + 修 buildCoreModelRegistry
+  不可移植返回类型 → 原 7 个 pre-existing 也清了)。console typecheck 0 错误(未触及)。
+- **全测试套件 726 passed / 107 files,零回归**(gateway execute_bash 抽取 + gateway-bot
+  cron 抽取均未破坏;mcp.test.ts execute_bash 经 runExecuteBash 仍绿)。
+- **完整 agentic journey(真 NVIDIA qwen3.5)**:`memex chat -m "创建文件→写入→cat 读回→报告内容"`
+  经真 cli → 终端自主多步执行(mkdir/写/cat),每步审批门控+落 trail,**文件真实落盘**,模型
+  准确报告内容(并发现 echo 尾随空格)。完整因果链在图中可查。
+- 其他活体:-m 单轮 / C3 跨进程 teal / schedule_task cron_job 落库 全绿。
+- **唯一未活体**:interactive `InteractiveMode` TUI 需真 TTY(本环境无法驱动);其包裹的 runtime
+  已由 -m 全验。留用户活体。
+- **dev-mode 注记(非产品 bug)**:`memex chat` 经 tsx 从仓库外目录启动会因 workspace 路径别名
+  (@shared/*)需 repo tsconfig 而失败;生产编译后路径已解析,从任意目录启动正常。execute_bash
+  的 cwd=启动目录特性据此(coding 终端作用于用户项目)。
+
+**MemexTerminal (Pi-embed) 弧收口**:ADR-57 D-1~D-5 全实现并活体;D-6 schedule_task 实现、
+send_message 设计延后(channel 依赖);embed 隔离修复;memex chat 接线。剩余=interactive TTY
+活体 + send_message 专门切片 + A-plan 最终 rename(到 @graph/terminal,需 REPL/-m 对等)。
