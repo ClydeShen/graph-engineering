@@ -1312,3 +1312,46 @@ scrubEnv + occWrite 留痕 + 审批。两者并存会让模型绕开全部安全
   要避免的串台。
 - **修法(下一刀)**:`buildSessionWithCoreBrain` 关掉外部 extension 自动发现(限定
   resourceLoader 只用传入的 extensionFactories)。属 embed 隔离独立主题,不阻塞本刀。
+
+### Build-out #5 — embed 隔离修复(2026-06-15)
+
+`buildSessionWithCoreBrain` 加 `EMBED_RESOURCE_ISOLATION`(noExtensions/noSkills/
+noPromptTemplates/noThemes/noContextFiles)。读编译 loader 确认:`noExtensions:true`
+只丢弃发现路径,inline `extensionFactories` 无条件 append → 我们的 factory 仍加载。
+活体:getActiveToolNames 从 `[spawn_task,complete_task,execute_bash]` → `[execute_bash]`。
+**决策(mid-high)**:embed 完全自洽,只从 Core 派生,不吸收 ~/.pi/cwd 资源(BYO 归 BYO +
+产品确定性)。
+
+### Build-out #6 — 组装真 MemexTerminal(脊柱,ADR-57 D-1/D-5)
+
+**架构决策(high confidence,ADR 强制 DRY + pi 暴露 API)**:复用 pi 的完整
+`InteractiveMode` TUI(聊天+流式+审批弹窗),不自研 loop/审批/TUI。`createMemexTerminalRuntime`
+经 `createAgentSessionRuntime(factory,...)` 组装,factory 内 `createAgentSessionServices`
+(config-share modelRegistry + EMBED 隔离 + systemPrompt + C3/approval factories) +
+`createAgentSessionFromServices`(model + noTools:'builtin' + Core customTools)。
+
+**落点**:`terminal-pi/src/terminal.ts`(脊柱:MEMEX_TERMINAL_SYSTEM_ROLE + makeC3Factory +
+makeApprovalFactory + makeCoreTools + createMemexTerminalRuntime) + `index.ts`(入口:-m
+单轮可脚本 / 默认 InteractiveMode)。provider-bridge 抽出 `buildCoreModelRegistry` +
+`EMBED_RESOURCE_ISOLATION` 共用(不破坏 proof 脚本)。
+
+**系统提示决策(mid confidence)**:terminal 用新 `MEMEX_TERMINAL_SYSTEM_ROLE`(agentic:
+可用工具),**非** channel 的 `CONVERSATION_SYSTEM_ROLE`(ADR-54 故意非 agentic,明说"无法
+调用工具",与 agentic terminal 矛盾)。不臆造纪律保留。
+
+**C3 持久会话精修(mid-high)**:交互式会话里 pi 在会话内自持 message list(即"恰好活在
+进程的每轮投影");故每轮 (a) processAgentTurn 记 user 进图 (b) 注入背景记忆块 (c) agent_end
+冲回;**仅首轮**注入图历史 transcript(跨会话/scope 续接,之后 pi 自持避免重复)。run-c3-loop
+的"每轮 fresh session"是证明构造,产品不丢弃 pi 会话内 list。
+
+**修了一个真 bug(OCC predecessor)**:agent_end 原用 user 轮 hash 作 predecessor → 但
+execute_bash 在 before_agent_start↔agent_end 间 append 了事件、移动了 tip → 用过期 hash
+致 OCC 冲突,助手轮静默不落库(空回复)。run-c3-loop 无工具调用所以 userHash 恰是 tip,掩盖了
+它。改用**当前 tip** 作 predecessor。
+
+**活体验证(真 NVIDIA qwen3.5)**:
+- `-m`:模型调 execute_bash(echo)→读输出→回 "The command printed exactly: memex-terminal-live"。
+  全 agentic 链(脑/工具/审批/冲回/回复)通。
+- **C3 跨进程**:turn1(进程A)存 teal → turn2(进程B,全新 pi session,同 --scope)纯靠图
+  投影答 "teal"。组装终端端到端实现 Graph=工作记忆。
+- typecheck 干净(仍仅 7 个旧 proof 脚本错误);InteractiveMode 交互路径需 TTY,留活体 journey。

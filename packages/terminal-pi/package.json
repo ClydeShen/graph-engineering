@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "main": "src/provider-bridge.ts",
+  "main": "src/index.ts",
+  "bin": { "memex-terminal-pi": "src/index.ts" },
   "dependencies": {
     "@graph/shared": "*",
     "@graph/control-plane": "*",
