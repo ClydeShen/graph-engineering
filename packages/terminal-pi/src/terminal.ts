@@ -44,6 +44,9 @@ import {
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { buildCoreModelRegistry, EMBED_RESOURCE_ISOLATION } from './provider-bridge.js';
+import { makeGraphWidgetFactory } from './graph-widget.js';
+import { registerGraphCommands } from './graph-overlay.js';
+import { setOutcomeWidget, clearOutcome } from './outcome.js';
 
 /** Context-projection budget for the C3 injection (mirrors the gateway default). */
 const WMAX = 4000;
@@ -208,6 +211,12 @@ function makeChromeFactory(scopeId: string, modelLabel: string): ExtensionFactor
 function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
   const approvals = new ApprovalService(pool);
   return (pi) => {
+    // Clear any lingering outcome panel when a new turn begins (agent_start has
+    // no result contract, so it won't interfere with C3's systemPrompt inject).
+    pi.on('agent_start', async (_event, ctx) => {
+      clearOutcome(ctx);
+    });
+
     pi.on('tool_call', async (event: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> => {
       if (!GATED_TOOLS.has(event.toolName)) return undefined;
 
@@ -222,7 +231,15 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
         const approvalId = await approvals.request(scopeId, 'mcp-agent', command);
         const approved = ctx.hasUI ? await ctx.ui.confirm('Approve dangerous command?', command) : false;
         await approvals.decide(approvalId, approved, 'once');
-        if (!approved) return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
+        if (!approved) {
+          setOutcomeWidget(ctx, {
+            status: 'denied',
+            title: 'command denied',
+            subject: command,
+            next: 'It did not run. Approve it manually if you intend to.',
+          });
+          return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
+        }
         return undefined;
       }
 
@@ -233,7 +250,15 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
       const approvalId = await approvals.request(scopeId, 'mcp-agent', subject);
       const approved = ctx.hasUI ? await ctx.ui.confirm('Approve action?', subject) : true;
       await approvals.decide(approvalId, approved, 'once');
-      if (!approved) return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
+      if (!approved) {
+        setOutcomeWidget(ctx, {
+          status: 'denied',
+          title: 'action denied',
+          subject: `${event.toolName}`,
+          next: 'It did not run. Re-issue with approval if you intend to.',
+        });
+        return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
+      }
       return undefined;
     });
   };
@@ -335,6 +360,10 @@ export async function createMemexTerminalRuntime(opts: {
     makeC3Factory(pool, scopeId),
     makeApprovalFactory(pool, scopeId),
     makeChromeFactory(scopeId, modelLabel),
+    // The graph as working memory: persistent at-a-glance widget (full/small/min/
+    // off via /density) + /graph and /memory read-only browsers.
+    makeGraphWidgetFactory({ pool, scopeId, modelLabel, stateDir: agentDir }),
+    (pi) => registerGraphCommands(pi, pool, scopeId),
   ];
   const tools = makeCoreTools(pool, scopeId, cwd);
 

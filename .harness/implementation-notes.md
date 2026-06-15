@@ -1473,3 +1473,47 @@ Gemini 适合纯对话,工具用 qwen。
 
 **净结果**:config-share 现按 provider 正确解析端点(修了"什么 provider 都发去 nvidia"的真 bug);
 Gemini 纯对话可用;Gemini 工具受 pi-ai 上游 thought_signature 限制。
+
+---
+
+## MemexTerminal TUI build-out (2026-06-15, /goal autonomous)
+
+Landed the 4-surface TUI from the gsd-2 learning report (GH #25), built purely on
+pi's `ctx.ui` extension layer (no InteractiveMode fork, ADR-57 DRY). Design via
+ui-ux-pro-max: color-not-only (glyph+word+color), semantic Observatory tokens,
+progressive disclosure (density), whitespace grouping, empty-states, consistent
+glyph family (no emoji), copy-clean (inline panels no `│`; overlays use box).
+
+New (packages/terminal-pi/src/):
+- render-kit.ts — width/CJK-safe primitives on @earendil-works/pi-tui (added as a
+  direct dep, pinned ^0.79.3; pi-coding-agent doesn't re-export them). renderPanel
+  (copy-clean) vs renderFrame (overlay box).
+- graph-snapshot.ts — cheap defensive graph queries (scope_lineage,
+  execution_event_log, approval_request, procedural_memory). EVERY query wrapped:
+  a missing migration yields a safe default, never crashes the terminal.
+- graph-widget.ts — persistent aboveEditor "graph is working memory" widget;
+  full/small/min/off density via /density (persisted to ~/.memex/terminal-agent/
+  widget.json); snapshot cache + 6s timer + agent_end refresh; never awaits in render.
+- outcome.ts — status-colored panel (complete/blocked/denied/failed); wired into
+  approval-denied (set on deny, cleared on next agent_start).
+- graph-overlay.ts — /graph (scope trail) and /memory (lessons) read-only
+  scrollable overlays (esc/jk/g/G), mirroring gsd's GSDNotificationOverlay contract.
+
+Decisions (≥mid confidence, specimen + research backed):
+- Density cycles via /density slash command (stable) not a keyboard shortcut
+  (avoids key-conflict risk; lower-risk than registerShortcut).
+- Tool runs record as `memory_updated` events (graph-native — verified live:
+  classifyEvent buckets them as memory, which is accurate to the data model).
+- pi-tui added as direct dep rather than reimplementing ANSI/CJK width math.
+
+Verification:
+- 46 new unit/integration tests (render-kit 12, graph-snapshot 10, graph-widget 9
+  + integration 3, outcome 5, graph-overlay 7). tsc 0.
+- Live: `memex chat -m` runs clean with all 5 factories wired; snapshot/detail/
+  lessons queries return REAL data (turns/events/breakdown/intent), not swallowed
+  defaults; empty-state (0 lessons) works.
+- KNOWN PRE-EXISTING FLAKE (not this change): `npm test` (parallel) intermittently
+  deadlocks in nesting.test.ts/idempotency.test.ts — a DDL/migration concurrency
+  race in code I didn't touch. `vitest run --no-file-parallelism` → 782/782 green.
+  My terminal-pi tests never fail; they're pure/stub (no DB), they only shifted
+  parallel scheduling enough to expose the existing race.
