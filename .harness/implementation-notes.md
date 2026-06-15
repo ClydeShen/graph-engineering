@@ -1400,3 +1400,28 @@ delivery 依赖 channel 配置,与核心终端解耦。
 **MemexTerminal (Pi-embed) 弧收口**:ADR-57 D-1~D-5 全实现并活体;D-6 schedule_task 实现、
 send_message 设计延后(channel 依赖);embed 隔离修复;memex chat 接线。剩余=interactive TTY
 活体 + send_message 专门切片 + A-plan 最终 rename(到 @graph/terminal,需 REPL/-m 对等)。
+
+### Build-out #10 — Memex "Observatory" 主题(2026-06-15)
+
+身份层第一刀(用户确认 identity-layer over pi / theme-first)。`packages/terminal-pi/memex-theme.json`
+= 完整 51-token pi 主题(派生 dark.json),Observatory 调色板:brass(signal/brand/prompt) +
+run-green(success/agent) + rust(error) + indigo(memory/link) + parchment(text) on 暖深 chrome。
+经 ui-ux-pro-max design-system 验证方向(Dark OLED + JetBrains Mono + "code dark + run green")。
+
+**接线机制(读 pi .d.ts + 编译源确认)**:`createAgentSessionServices` 传
+`SettingsManager.inMemory({theme:'memex', editorPaddingX:2})`(不写用户 ~/.pi,隔离保住) +
+`resourceLoaderOptions.additionalThemePaths:[memex-theme.json]`(noThemes 下显式路径仍加载,
+resource-loader.js L307-309 确认)。InteractiveMode.init() `setRegisteredThemes`+`initTheme
+(settings.getTheme())` → 注册并选中 memex。
+
+**可控面(pi Theme 系统能力)**:颜色(全 51 token:fg + 按元素 bg userMessageBg/toolSuccessBg…)、
+边框/线条色(border/borderAccent/borderMuted)、输入框水平 padding(editorPaddingX)。**不可只靠
+主题改**:消息垂直间距(需 custom MessageRenderer)、整屏背景(终端 app 自身,非 pi)。
+
+**验证**:typecheck 0;build smoke(无 LLM)= runtime 40ms 建成 + `settings theme=memex` +
+`registered themes=['memex']` + `editorPaddingX=2`(主题必生效,InteractiveMode 会注册+选中)。
+
+**⚠ 环境 BLOCK(非代码)**:NVIDIA endpoint 本会话期间不可达(直连 curl 25s 0 字节超时) →
+用户先前的 "Unexpected end of JSON input" + -m 挂起都是这个 provider 中断,**不是主题/代码**
+(撤掉全部主题改动 -m 仍挂 = 铁证)。**视觉 TUI 渲染 + 真 LLM 活体 = BLOCKED 待 NVIDIA 恢复
+/本地 Ollama**。主题已 build-verified,待视觉确认。

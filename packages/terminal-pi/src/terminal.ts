@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Type } from 'typebox';
 import type { Pool } from 'pg';
 import { occWrite, checkCommand } from '@graph/shared';
@@ -33,6 +34,7 @@ import {
   createAgentSessionServices,
   createAgentSessionFromServices,
   SessionManager,
+  SettingsManager,
   defineTool,
   type AgentSessionRuntime,
   type ToolDefinition,
@@ -45,6 +47,18 @@ import { buildCoreModelRegistry, EMBED_RESOURCE_ISOLATION } from './provider-bri
 
 /** Context-projection budget for the C3 injection (mirrors the gateway default). */
 const WMAX = 4000;
+
+/**
+ * Memex "Observatory" theme + layout. The theme JSON (Observatory palette: brass
+ * signal, run-green, rust, indigo memory, on warm-dark chrome) ships with the
+ * package and is loaded via additionalThemePaths even under EMBED_RESOURCE_ISOLATION
+ * (noThemes only drops DISCOVERED themes; explicit paths still load). The in-memory
+ * SettingsManager selects it by name and sets the input padding — without writing
+ * the user's ~/.pi settings (embed stays hermetic).
+ */
+const MEMEX_THEME_NAME = 'memex';
+const MEMEX_THEME_PATH = fileURLToPath(new URL('../memex-theme.json', import.meta.url));
+const EDITOR_PADDING_X = 2;
 
 /**
  * Agentic system role for MemexTerminal. Distinct from the channel conversation
@@ -298,10 +312,17 @@ export async function createMemexTerminalRuntime(opts: {
         cwd: factoryCwd,
         authStorage,
         modelRegistry,
+        // In-memory so the Memex theme + input padding apply WITHOUT persisting to
+        // the user's ~/.pi settings (embed isolation).
+        settingsManager: SettingsManager.inMemory({ theme: MEMEX_THEME_NAME, editorPaddingX: EDITOR_PADDING_X }),
         resourceLoaderOptions: {
           ...EMBED_RESOURCE_ISOLATION,
           systemPrompt: MEMEX_TERMINAL_SYSTEM_ROLE,
           extensionFactories: factories,
+          // Loaded even under noThemes (explicit paths bypass discovery). Verified
+          // fast at build time; the only -m hang seen was the NVIDIA endpoint being
+          // unreachable, not theme loading.
+          additionalThemePaths: [MEMEX_THEME_PATH],
         },
       });
       const result = await createAgentSessionFromServices({

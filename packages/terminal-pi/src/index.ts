@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { nestScope } from '@graph/control-plane/nesting';
-import { InteractiveMode, initTheme } from '@earendil-works/pi-coding-agent';
+import { InteractiveMode } from '@earendil-works/pi-coding-agent';
 import { createMemexTerminalRuntime } from './terminal.js';
 
 /** Defensive .env load for standalone runs; in production the CLI sets env. */
@@ -93,7 +93,8 @@ async function main(): Promise<void> {
   }
 
   // ── Interactive Pi TUI ─────────────────────────────────────────────────────
-  initTheme(undefined, true);
+  // Theme (Memex Observatory) + input padding are applied by InteractiveMode.init()
+  // from the runtime's in-memory settings (theme='memex') + additionalThemePaths.
   const mode = new InteractiveMode(runtime, {});
   await mode.run();
   await runtime.dispose();
