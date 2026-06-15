@@ -104,11 +104,26 @@ export async function buildSessionWithCoreBrain(opts: {
   const model = modelRegistry.find(core.name, core.model);
   if (!model) throw new Error(`${core.name}/${core.model} not in registry: ${modelRegistry.getError() ?? '?'}`);
 
+  // Embed isolation: MemexTerminal is hermetic — it derives everything from Core
+  // (config-share brain + C3 projection + Core tools + our in-process factories).
+  // Disabling filesystem discovery keeps the user's external Pi install (~/.pi:
+  // `memex connect pi` extensions, skills, themes) and cwd AGENTS.md out of the
+  // embed. Without this, getActiveToolNames() leaked pi-extension's
+  // spawn_task/complete_task into the embedded session — BYO bleeding into the
+  // product surface. Inline extensionFactories still load (noExtensions only
+  // drops discovered paths; factories are always appended).
   const services = await createAgentSessionServices({
     cwd: opts.cwd ?? process.cwd(),
     authStorage,
     modelRegistry,
-    ...(opts.extensionFactories ? { resourceLoaderOptions: { extensionFactories: opts.extensionFactories } } : {}),
+    resourceLoaderOptions: {
+      noExtensions: true,
+      noSkills: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      noContextFiles: true,
+      ...(opts.extensionFactories ? { extensionFactories: opts.extensionFactories } : {}),
+    },
   });
   const { session } = await createAgentSessionFromServices({
     services,
