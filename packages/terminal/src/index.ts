@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 /**
- * MemexTerminal — built-in default TUI (Phase 11 deliverable #4).
+ * Thin Gateway conversation client (Phase 11 deliverable #4).
+ *
+ * SUPERSEDED as `memex chat` by the Pi-embed MemexTerminal (@graph/terminal-pi,
+ * ADR-57): `memex chat` now launches the agentic terminal. This thin client
+ * remains as the non-agentic conversation-core client (ADR-54: one responder,
+ * no tools) — useful as a scriptable probe of the channel conversation core and
+ * a fallback when an embedded Pi runtime is not wanted. Under ADR-57's
+ * per-surface law these are NOT in conflict: the channel core is non-agentic,
+ * the terminal (Pi-embed) is agentic. (A-plan: terminal-pi takes the canonical
+ * @graph/terminal name at the final rename, once at REPL/-m parity.)
  *
  * Pure Gateway client: zero state ownership, everything lives in the graph.
  * Reads connection settings from ~/.memex/config.json (shell.gateway_url,
@@ -9,13 +18,7 @@
  * Two surfaces (one responder — the ADR-54 gateway conversation core):
  *   default            interactive readline REPL; replies stream as text_delta
  *   -m "text"          non-interactive single turn: send, print the reply, exit.
- *                      Scriptable debugging primitive — agents (e.g. Claude
- *                      Code) drive conversations without a TTY.
  *                      Optional --scope <id> continues an existing scope.
- *
- * The former --agent mode (Pi SDK session) is retired: Pi connects as an
- * EXTERNAL coding agent via `memex connect pi` (its own config, claims async
- * tasks) — conversation has exactly one responder (ADR-54).
  */
 
 import { createInterface } from 'node:readline';

@@ -184,7 +184,7 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
  * the scope (graph identity) is supplied by the terminal closure, never by the
  * model (C3: the graph, not the model, owns the scope).
  */
-function makeCoreTools(pool: Pool, scopeId: string): ToolDefinition[] {
+function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition[] {
   const executeBash = defineTool({
     name: 'execute_bash',
     label: 'Execute Bash',
@@ -192,10 +192,14 @@ function makeCoreTools(pool: Pool, scopeId: string): ToolDefinition[] {
     parameters: Type.Object({ command: Type.String() }),
     async execute(_id, params) {
       const command = (params as { command: string }).command;
+      // Run in the terminal's launch dir (a coding terminal acts on the user's
+      // project), not tmpdir. The local backend records the scope's project from
+      // this cwd (CONSOLE-REDESIGN §11.1).
       const result = await runExecuteBash(pool, {
         command,
         scopeId,
         predecessorHash: await tip(pool, scopeId),
+        cwd,
       });
       return {
         content: [{ type: 'text' as const, text: result.text }],
@@ -235,7 +239,7 @@ export async function createMemexTerminalRuntime(opts: {
   const { authStorage, modelRegistry, model } = buildCoreModelRegistry();
 
   const factories: ExtensionFactory[] = [makeC3Factory(pool, scopeId), makeApprovalFactory(pool, scopeId)];
-  const tools = makeCoreTools(pool, scopeId);
+  const tools = makeCoreTools(pool, scopeId, cwd);
 
   const runtime = await createAgentSessionRuntime(
     async ({ cwd: factoryCwd, sessionManager, sessionStartEvent }) => {

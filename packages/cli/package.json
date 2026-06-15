@@ -15,7 +15,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "pg": "^8.21.0",
     "yaml": "^2.6.0",
-    "@graph/terminal": "*"
+    "@graph/terminal-pi": "*"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0"

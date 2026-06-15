@@ -258,8 +258,9 @@ if ((subcommand === 'onboard' || subcommand === 'connect') && !process.stdin.isT
 
 const entry =
   subcommand === 'onboard' ? runOnboard()
-  // memex chat — MemexTerminal REPL (its module entry starts the session).
-  : subcommand === 'chat' ? import('@graph/terminal').then(() => {})
+  // memex chat — MemexTerminal (Pi-embed): the agentic terminal (ADR-57). Its
+  // module entry starts the session (interactive Pi TUI, or -m single turn).
+  : subcommand === 'chat' ? import('@graph/terminal-pi').then(() => {})
   : subcommand === 'console' ? import('./console.js').then((m) => m.runConsoleCommand())
   : subcommand === 'log' ? import('./log.js').then((m) => m.runLogCommand())
   : subcommand === 'doctor' ? runDoctorCommand()
