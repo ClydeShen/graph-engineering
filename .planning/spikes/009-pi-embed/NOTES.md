@@ -74,6 +74,31 @@
 - `createAgentSession` 无 model/key 也跑完一轮(有默认兜底)——provider 接入是 build-out
   的事,非阻塞。
 
+## Build-out line #1 — provider 接线（2026-06-15,机制+设计解完）
+
+**设计纠正(实读 Core 接口)**:Core 的 `LLMProvider` = `chat(messages)→string`（+ Core
+自有形状 `chatTurn`,见 `provider.interface.ts`）,**非流式、非 OpenAI 协议**。Pi 的 loop
+要 provider 说 pi-ai 原生流式 + 原生 tool-calling。**in-process 委托(原 D-2)会让 Pi
+丧失原生 tool-calling → 否决**。正解 = **config-share**:Core 配置 `{api,model,baseUrl,
+apiKey}`（`from-config.ts` buildOne）→ pi 的 ModelRegistry,Pi 直连同一 endpoint。
+
+**实测 Core 配置** = nvidia / `qwen/qwen3.5-397b-a17b` / `integrate.api.nvidia.com/v1`
+/ apiKey=`${...KEY}`(env 插值,pi-ai 也支持)。OpenAI 兼容,映射 1:1。
+
+**注入机制(真 API,见 `provider-bridge.mjs`)**:
+`createAgentSessionServices({ modelRegistry })` → `createAgentSessionFromServices
+({ services, model, customTools, noTools:'builtin' })`。schema = `ProviderConfig` +
+`ProviderModelConfig`(已读全)。
+
+**到 live turn 的残留(build-out commit,非设计阻塞)**:
+1. ModelRegistry 自定义 provider 注入路径二选一:(A) extension `registerProvider` 经
+   in-process extension factory 线程进 `services.resourceLoader`;(B) 生成临时 models.json
+   →`ModelRegistry.create(authStorage, path)`(registry 无公开 add 方法,custom 走 models.json)。
+   B 更确定。需确认 models.json 顶层 schema(`model-registry.parseModels`)。
+2. `NVIDIA_API_KEY` env 是否在位(Core onboarding 存的是 env-ref,独立 spike 未必有)。
+3. 应在 monorepo worktree 内做:import `@graph/shared` 的 `loadMemexConfig`+`resolveProfile`,
+   勿在独立 spike 重写配置解析。pi 需进 workspace(或该 terminal-pi 包单独装)。
+
 ## 残留未知（移交 build-out,非 tracer 阻塞）
 
 - 安全抑制:`noTools:'builtin'` 后 `getToolDefinition('bash')` 仍非空(疑 enabled≠registered)。

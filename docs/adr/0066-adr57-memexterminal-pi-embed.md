@@ -42,12 +42,24 @@ MemexTerminal 改造为一个**基于 Pi SDK 的进程**,in-process `import` Mem
 Pi 的工具与记忆。**不走 MCP**（否决 R-B「原生协议远程」：那等于重新发明一个不叫
 MCP 的 MCP,吃掉 DRY 收益）。「直接搭在 Core 上」= 字面的同进程函数绑定。
 
-### D-2：脑 = Core 已 onboard 的 provider,经 `streamSimple` 同进程委托
+### D-2：脑 = Core onboarded provider,经 **config-share**（非 in-process 委托）
 
-`pi.registerProvider("memex", { streamSimple → 委托 Core 的 LLMProvider })`。R-A 是
-同进程,Pi 的脑直接调 Core 的 `LLMProvider` 接口,**连 HTTP 都不用**。onboarded
-provider 原样复用 → 保住 ADR-54 的「免 key / 渠道一致」：terminal 的脑 = channel/
-console 的脑,同一个。
+**修订（build-out line #1 实读纠正）**：原设计写"`streamSimple` 同进程委托 Core 的
+`LLMProvider`,连 HTTP 都不用"——**错**。Core 的 `LLMProvider` 是 `chat(messages)→
+string`（+ Core 自有形状的 `chatTurn`）,**非流式、非 OpenAI 协议**;而 Pi 的 agent
+loop 依赖 provider 说 pi-ai 的**原生流式 + 原生 tool-calling 协议**才能驱动工具。
+in-process 委托会让 Pi 丧失它最核心的原生 tool-calling。
+
+**正解 = config-share**：读 Core 的 onboarded provider 配置（`~/.memex/config.json`
+providers[] + ADR-56 profile → `{ api, model, baseUrl, apiKey }`,见 `from-config.ts`
+`buildOne`）,把同一组 `baseUrl/apiKey/model/api` 喂给 pi 的 ModelRegistry。Pi 直连
+**同一个 OpenAI 兼容 endpoint**（实测 Core 配的是 nvidia `integrate.api.nvidia.com/v1`
++ `qwen/qwen3.5-...`,OpenAI 兼容）。脑/key **是同一个**（免 key/渠道一致靠**共享配置**
+而非共享对象）,但 Pi 拿到原生协议。
+
+机制：`createAgentSessionServices({ modelRegistry })` + `createAgentSessionFromServices
+({ services, model, customTools, noTools })`;ModelRegistry 由 Core 配置生成的
+models.json/provider 注册喂入,`find(provider, modelId)→Model` 作为显式 `model` 传入。
 
 ### D-3：C3——图是 agent 的工作记忆,每 turn 投影注入（不是审计后盾）
 
