@@ -1425,3 +1425,22 @@ resource-loader.js L307-309 确认)。InteractiveMode.init() `setRegisteredTheme
 用户先前的 "Unexpected end of JSON input" + -m 挂起都是这个 provider 中断,**不是主题/代码**
 (撤掉全部主题改动 -m 仍挂 = 铁证)。**视觉 TUI 渲染 + 真 LLM 活体 = BLOCKED 待 NVIDIA 恢复
 /本地 Ollama**。主题已 build-verified,待视觉确认。
+
+### Build-out #11 — 品牌 header/footer + 消息间距裁定(2026-06-15)
+
+身份层第二刀。`makeChromeFactory(scopeId, modelLabel)` ExtensionFactory:`session_start` →
+`ctx.ui.setHeader`(内联 Component:✦ MemexTerminal 品牌 + model + scope + brass 分隔线;主题色)
++ `ctx.ui.setStatus('memex', 'scope … · /memory · /console')`(追加进 pi footer,保留其 model/token)。
+`hasUI` 守卫:-m/print 无 TUI 跳过。
+
+**真 API(读 .d.ts)**:`ExtensionUIContext`(=ctx.ui)有 `setHeader/setFooter/setStatus/setWidget`。
+Component 接口必需 `render(width)=>string[]` + **`invalidate()`**(非可选,踩了一次 typecheck)。
+内联实现免 import pi-tui(嵌套依赖不可直接解析)。
+
+**消息间距裁定(查尽公开 API)**:pi **不暴露**标准聊天轮的垂直间距 ——`registerMessageRenderer`
+仅作用于 **custom message 类型**,标准 user/assistant 轮渲染是 InteractiveMode 内部(addMessageToChat),
+无设置项(只有 editorPaddingX)。**不 fork InteractiveMode(守 ADR-57 DRY)**。替代 = 主题 per-message
+背景(`userMessageBg` 等给消息独立色块分隔)。已如实告知用户。
+
+**验证**:typecheck 0;build smoke = runtime 建成 + chrome factory 加载无错(session_start hasUI
+守卫,-m 跳过);header 组件 render 结构预览正确。颜色/视觉布局待 TTY(NVIDIA BLOCK 同上)。
