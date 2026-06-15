@@ -187,6 +187,31 @@ describe('TemplateProposalWorker', () => {
     expect(mockEmbed).toHaveBeenCalledTimes(1);
   });
 
+  it('L2: embeds the crystallized lesson into the positive template content (actionable structure)', async () => {
+    mockChat.mockResolvedValue(
+      '{"intent_summary":"build a service","outcome_summary":"done","lesson":"containerize must be done before run_tests"}',
+    );
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive).toBeDefined();
+    expect(positive!.intentDescription).toContain('Lesson:');
+    expect(positive!.intentDescription).toContain('containerize must be done before run_tests');
+    expect(positive!.content).toContain('Lesson:');
+  });
+
+  it('L2: positive template carries no Lesson line when the LLM omits one', async () => {
+    // default mockChat returns no lesson field
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive!.intentDescription).not.toContain('Lesson:');
+  });
+
   it('skips positive skeleton when conflicts exceed 10% of scope events', async () => {
     const events = makeScopeEvents();
     // 1 conflict out of 2 events = 50% > 10%

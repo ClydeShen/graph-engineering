@@ -75,23 +75,37 @@ export class TemplateProposalWorker {
       {
         role: 'system',
         content:
-          'You are analyzing an agent execution trace. Extract the primary intent and outcome. ' +
-          'Return ONLY valid JSON in this format: {"intent_summary":"...","outcome_summary":"..."}. ' +
-          'Be concise — each field should be one sentence.',
+          'You are analyzing an agent execution trace to extract a REUSABLE procedure. ' +
+          'Return ONLY valid JSON: {"intent_summary":"...","outcome_summary":"...","lesson":"..."}. ' +
+          'intent_summary and outcome_summary are one sentence each. ' +
+          'lesson is the actionable structure a future agent needs to do this RIGHT THE FIRST TIME. ' +
+          'State the CORRECTED, optimal order of the concrete named steps — the order that AVOIDS the ' +
+          'mistakes in this trace. If a step failed and had to be retried after another step ran, do ' +
+          'NOT replay that mistake: instead put the prerequisite first and list each step ONCE. Phrase ' +
+          'every non-obvious dependency as a rule "X must be done before Y". Omit if there is no reusable order.',
       },
       { role: 'user', content: writeGuard(scopeText) },
     ]);
 
     let intentSummary: string;
     let outcomeSummary: string;
+    let lesson = '';
     try {
-      const parsed = JSON.parse(llmResponse) as { intent_summary: string; outcome_summary: string };
+      const parsed = JSON.parse(llmResponse) as { intent_summary: string; outcome_summary: string; lesson?: string };
       intentSummary = parsed.intent_summary;
       outcomeSummary = parsed.outcome_summary;
+      if (typeof parsed.lesson === 'string') lesson = parsed.lesson.trim();
     } catch {
       intentSummary = llmResponse.substring(0, 300);
       outcomeSummary = 'outcome extraction failed';
     }
+
+    // L2 fidelity (docs/benchmarks/emergence-loop-validation.md): the injected
+    // template must carry the ACTIONABLE lesson (step order / dependency
+    // constraints), not just a generic "what happened" summary. The anonymized
+    // template_graph serves topological recall; this readable lesson is what a
+    // future agent actually reads in mem::reflect's procedural section.
+    const actionableContent = lesson ? `${intentSummary}\nLesson: ${lesson}` : intentSummary;
 
     // Step 3: LLM CALL — ADR 22 (embedding calls not counted against Worker token budget)
     // The intent+outcome embedding is reused as the positive template's intent_embedding
@@ -137,8 +151,8 @@ export class TemplateProposalWorker {
         const skeleton = canonicalizeTemplateGraph(buildTemplateGraphFromEvents(events));
         const { id: templateId } = await this.memory.insertProceduralTemplate({
           scopeId,
-          content: writeGuard(intentSummary),
-          intentDescription: writeGuard(intentSummary),
+          content: writeGuard(actionableContent),
+          intentDescription: writeGuard(actionableContent),
           templateGraph: skeleton,
           embeddingLiteral: wlLiteral(skeleton),
           intentEmbeddingLiteral,
