@@ -85,58 +85,60 @@ export async function bindCategoryCli(category: string, implementation: string):
 
 export async function runCapabilityCommand(): Promise<void> {
   const action = process.argv[3];
-
-  if (action === 'list' || action === undefined) {
-    const live = await withPool(async (pool) => ({
-      bindings: await resolveBindings(pool),
-      stats: await capabilityStats(pool),
-    })).catch(() => null);
-    const bindings = live?.bindings ?? {};
-    const statsByImpl = new Map((live?.stats ?? []).map((s) => [s.implementation, s]));
-
-    for (const category of CAPABILITY_CATEGORIES) {
-      const bound = bindings[category];
-      console.log(`${category}${bound ? `  → ${bound}` : ''}`);
-      for (const p of CAPABILITY_PRESETS.filter((x) => x.category === category)) {
-        const s = statsByImpl.get(p.name);
-        const stat = s ? `  [${s.successes}/${s.activations} converged]` : '';
-        console.log(`    ${p.name} (${p.form})${p.recommended ? ' *' : ''}${stat} — ${p.description}`);
-        console.log(`      install: ${installInstruction(p)}`);
-      }
-    }
-    if (!live) console.log('\n(no DATABASE_URL — bindings/stats unavailable)');
-    return;
-  }
-
-  if (action === 'bind') {
-    const [, , , , category, impl] = process.argv;
-    if (!category || !impl) throw new Error('usage: memex capability bind <category> <implementation>');
-    if (!(CAPABILITY_CATEGORIES as readonly string[]).includes(category)) {
-      throw new Error(`unknown category '${category}' (known: ${CAPABILITY_CATEGORIES.join(', ')})`);
-    }
-    const ok = await bindCategoryCli(category, impl);
-    if (!ok) throw new Error('no DATABASE_URL — bindings are graph state and need the DB up');
-    console.log(`bound: ${category} → ${impl} (graph Snapshot chain)`);
-    return;
-  }
-
-  if (action === 'install') {
-    const name = process.argv[4];
-    const preset = CAPABILITY_PRESETS.find((p) => p.name === name);
-    if (!preset) throw new Error(`unknown preset '${name}' (memex capability list)`);
-    if (preset.form === 'bundled-skill') {
-      const dest = installBundledSkill(preset);
-      console.log(`installed bundled skill: ${dest}`);
-      // binding is meaningful immediately for single-impl categories
-      if (await bindCategoryCli(preset.category, preset.name)) {
-        console.log(`bound: ${preset.category} → ${preset.name}`);
-      }
-      return;
-    }
-    console.log(`'${preset.name}' is ${preset.form}-form — install via:\n  ${installInstruction(preset)}`);
-    console.log(`then bind it: memex capability bind ${preset.category} ${preset.name}`);
-    return;
-  }
-
+  if (action === 'list' || action === undefined) return capList();
+  if (action === 'bind') return capBind();
+  if (action === 'install') return capInstall();
   throw new Error('usage: memex capability <list|bind|install>');
+}
+
+/** `memex capability list` — categories, bindings, presets, convergence stats. */
+async function capList(): Promise<void> {
+  const live = await withPool(async (pool) => ({
+    bindings: await resolveBindings(pool),
+    stats: await capabilityStats(pool),
+  })).catch(() => null);
+  const bindings = live?.bindings ?? {};
+  const statsByImpl = new Map((live?.stats ?? []).map((s) => [s.implementation, s]));
+
+  for (const category of CAPABILITY_CATEGORIES) {
+    const bound = bindings[category];
+    console.log(`${category}${bound ? `  → ${bound}` : ''}`);
+    for (const p of CAPABILITY_PRESETS.filter((x) => x.category === category)) {
+      const s = statsByImpl.get(p.name);
+      const stat = s ? `  [${s.successes}/${s.activations} converged]` : '';
+      console.log(`    ${p.name} (${p.form})${p.recommended ? ' *' : ''}${stat} — ${p.description}`);
+      console.log(`      install: ${installInstruction(p)}`);
+    }
+  }
+  if (!live) console.log('\n(no DATABASE_URL — bindings/stats unavailable)');
+}
+
+/** `memex capability bind <category> <implementation>` — write a binding Snapshot. */
+async function capBind(): Promise<void> {
+  const [, , , , category, impl] = process.argv;
+  if (!category || !impl) throw new Error('usage: memex capability bind <category> <implementation>');
+  if (!(CAPABILITY_CATEGORIES as readonly string[]).includes(category)) {
+    throw new Error(`unknown category '${category}' (known: ${CAPABILITY_CATEGORIES.join(', ')})`);
+  }
+  const ok = await bindCategoryCli(category, impl);
+  if (!ok) throw new Error('no DATABASE_URL — bindings are graph state and need the DB up');
+  console.log(`bound: ${category} → ${impl} (graph Snapshot chain)`);
+}
+
+/** `memex capability install <name>` — install a preset (bundled skill binds immediately). */
+async function capInstall(): Promise<void> {
+  const name = process.argv[4];
+  const preset = CAPABILITY_PRESETS.find((p) => p.name === name);
+  if (!preset) throw new Error(`unknown preset '${name}' (memex capability list)`);
+  if (preset.form === 'bundled-skill') {
+    const dest = installBundledSkill(preset);
+    console.log(`installed bundled skill: ${dest}`);
+    // binding is meaningful immediately for single-impl categories
+    if (await bindCategoryCli(preset.category, preset.name)) {
+      console.log(`bound: ${preset.category} → ${preset.name}`);
+    }
+    return;
+  }
+  console.log(`'${preset.name}' is ${preset.form}-form — install via:\n  ${installInstruction(preset)}`);
+  console.log(`then bind it: memex capability bind ${preset.category} ${preset.name}`);
 }

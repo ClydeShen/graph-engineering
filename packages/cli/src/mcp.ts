@@ -166,123 +166,137 @@ export async function runLogin(name: string): Promise<void> {
 export async function runMcpCommand(): Promise<void> {
   const action = process.argv[3];
   const registry = new McpCatalogRegistry(catalogRoot());
+  switch (action) {
+    case 'catalog':
+      return mcpCatalog(registry);
+    case 'install':
+      return mcpInstall(registry);
+    case 'configure':
+      return mcpConfigure(registry);
+    case 'login':
+      return mcpLogin();
+    case 'list':
+      return mcpList();
+    case 'uninstall':
+      return mcpUninstall();
+    default:
+      throw new Error('usage: memex mcp <catalog|install|configure|login|list|uninstall>');
+  }
+}
 
-  if (action === 'catalog') {
-    const installed = new Set(Object.keys(readRawConfig().mcp_servers ?? {}));
-    const statuses = registry.statusReport(installed);
-    if (statuses.length === 0) {
-      console.log(`no manifests under ${catalogRoot()}`);
-      return;
-    }
-    for (const s of statuses) {
-      const flags = [
-        s.installed ? 'installed' : null,
-        s.missing_env.length > 0 ? `missing env: ${s.missing_env.join(', ')}` : null,
-      ].filter(Boolean);
-      console.log(`  ${s.name}${flags.length ? ` [${flags.join('; ')}]` : ''} — ${s.description}`);
-    }
+/** `memex mcp catalog` — list optional-mcps/ manifests + install/env status. */
+async function mcpCatalog(registry: McpCatalogRegistry): Promise<void> {
+  const installed = new Set(Object.keys(readRawConfig().mcp_servers ?? {}));
+  const statuses = registry.statusReport(installed);
+  if (statuses.length === 0) {
+    console.log(`no manifests under ${catalogRoot()}`);
     return;
   }
+  for (const s of statuses) {
+    const flags = [
+      s.installed ? 'installed' : null,
+      s.missing_env.length > 0 ? `missing env: ${s.missing_env.join(', ')}` : null,
+    ].filter(Boolean);
+    console.log(`  ${s.name}${flags.length ? ` [${flags.join('; ')}]` : ''} — ${s.description}`);
+  }
+}
 
-  if (action === 'install') {
-    const name = process.argv[4];
-    if (!name) throw new Error('usage: memex mcp install <name>');
-    const manifest = registry.get(name);
-    if (!manifest) throw new Error(`no catalog manifest '${name}' under ${catalogRoot()}`);
+/** `memex mcp install <name>` — manifest → guard scan → env prompts → config + graph. */
+async function mcpInstall(registry: McpCatalogRegistry): Promise<void> {
+  const name = process.argv[4];
+  if (!name) throw new Error('usage: memex mcp install <name>');
+  const manifest = registry.get(name);
+  if (!manifest) throw new Error(`no catalog manifest '${name}' under ${catalogRoot()}`);
 
-    // Catalog content is registry content — same guard as skill installs.
-    const { scanSkillContent, formatGuardReport } = await import('@graph/shared');
-    const findings = scanSkillContent(registry.rawContent(name) ?? '');
-    if (findings.length > 0) {
-      console.log(formatGuardReport(findings));
-      if (!process.argv.includes('--yes-despite-findings')) {
-        console.log('\ninstall withheld — review findings, re-run with --yes-despite-findings');
-        process.exit(1);
-      }
+  // Catalog content is registry content — same guard as skill installs.
+  const { scanSkillContent, formatGuardReport } = await import('@graph/shared');
+  const findings = scanSkillContent(registry.rawContent(name) ?? '');
+  if (findings.length > 0) {
+    console.log(formatGuardReport(findings));
+    if (!process.argv.includes('--yes-despite-findings')) {
+      console.log('\ninstall withheld — review findings, re-run with --yes-despite-findings');
+      process.exit(1);
     }
+  }
 
-    await promptMissingEnv(manifest);
-    const entry = manifestToConfigEntry(manifest);
-    writeRawConfig(upsertServerEntry(readRawConfig(), name, entry));
-    console.log(`installed: mcp_servers.${name} → ${resolveConfigPath()}`);
-    if (entry.auth === 'oauth') console.log(`next: memex mcp login ${name}`);
+  await promptMissingEnv(manifest);
+  const entry = manifestToConfigEntry(manifest);
+  writeRawConfig(upsertServerEntry(readRawConfig(), name, entry));
+  console.log(`installed: mcp_servers.${name} → ${resolveConfigPath()}`);
+  if (entry.auth === 'oauth') console.log(`next: memex mcp login ${name}`);
 
-    await recordToGraph('installed', name, {
-      transport: entry.command !== undefined ? 'stdio' : 'http',
-      // names only — never values (graph payloads are not a secrets store)
-      requires_env: manifest.requires_env ?? [],
-      guard_findings: findings.length,
+  await recordToGraph('installed', name, {
+    transport: entry.command !== undefined ? 'stdio' : 'http',
+    // names only — never values (graph payloads are not a secrets store)
+    requires_env: manifest.requires_env ?? [],
+    guard_findings: findings.length,
+  });
+}
+
+/** `memex mcp configure <name>` — re-prompt env vars + tool include/exclude. */
+async function mcpConfigure(registry: McpCatalogRegistry): Promise<void> {
+  const name = process.argv[4];
+  if (!name) throw new Error('usage: memex mcp configure <name>');
+  const cfg = readRawConfig();
+  const raw = cfg.mcp_servers?.[name] as McpServerEntry | undefined;
+  if (!raw) throw new Error(`no configured server '${name}'`);
+  const manifest = registry.get(name);
+  if (manifest) await promptMissingEnv(manifest);
+
+  const tools = await listToolsBestEffort(name, raw);
+  if (tools) {
+    const { multiselect, isCancel } = await import('@clack/prompts');
+    const selected = await multiselect({
+      message: `tools to enable for ${name} (space to toggle)`,
+      options: tools.map((t) => ({ value: t, label: t })),
+      initialValues: raw.tools?.include ?? tools,
+      required: false,
     });
-    return;
-  }
-
-  if (action === 'configure') {
-    const name = process.argv[4];
-    if (!name) throw new Error('usage: memex mcp configure <name>');
-    const cfg = readRawConfig();
-    const raw = cfg.mcp_servers?.[name] as McpServerEntry | undefined;
-    if (!raw) throw new Error(`no configured server '${name}'`);
-    const manifest = registry.get(name);
-    if (manifest) await promptMissingEnv(manifest);
-
-    const tools = await listToolsBestEffort(name, raw);
-    if (tools) {
-      const { multiselect, isCancel } = await import('@clack/prompts');
-      const selected = await multiselect({
-        message: `tools to enable for ${name} (space to toggle)`,
-        options: tools.map((t) => ({ value: t, label: t })),
-        initialValues: raw.tools?.include ?? tools,
-        required: false,
-      });
-      if (!isCancel(selected)) {
-        const entry: McpServerEntry = { ...raw, tools: { include: selected as string[] } };
-        writeRawConfig(upsertServerEntry(cfg, name, entry));
-        console.log(`updated tools.include for '${name}' (${(selected as string[]).length} tools)`);
-      }
-    } else {
-      console.log(`could not connect to '${name}' — tool selection skipped, env updates saved`);
+    if (!isCancel(selected)) {
+      const entry: McpServerEntry = { ...raw, tools: { include: selected as string[] } };
+      writeRawConfig(upsertServerEntry(cfg, name, entry));
+      console.log(`updated tools.include for '${name}' (${(selected as string[]).length} tools)`);
     }
-    await recordToGraph('configured', name, {});
+  } else {
+    console.log(`could not connect to '${name}' — tool selection skipped, env updates saved`);
+  }
+  await recordToGraph('configured', name, {});
+}
+
+/** `memex mcp login <name>` — OAuth PKCE flow (local callback, token cache on disk). */
+async function mcpLogin(): Promise<void> {
+  const name = process.argv[4];
+  if (!name) throw new Error('usage: memex mcp login <name>');
+  await runLogin(name);
+}
+
+/** `memex mcp list` — configured servers + connectivity. */
+async function mcpList(): Promise<void> {
+  const servers = readRawConfig().mcp_servers ?? {};
+  const names = Object.keys(servers);
+  if (names.length === 0) {
+    console.log('no configured MCP servers (memex mcp catalog to browse)');
     return;
   }
-
-  if (action === 'login') {
-    const name = process.argv[4];
-    if (!name) throw new Error('usage: memex mcp login <name>');
-    await runLogin(name);
-    return;
+  for (const name of names) {
+    const entry = servers[name] as McpServerEntry;
+    const transport = entry.command !== undefined ? `stdio:${entry.command}` : `http:${entry.url}`;
+    const state = entry.enabled === false ? 'disabled' : await probeBestEffort(name, entry);
+    console.log(`  ${name} [${state}] ${transport}${entry.auth === 'oauth' ? ' (oauth)' : ''}`);
   }
+}
 
-  if (action === 'list') {
-    const servers = readRawConfig().mcp_servers ?? {};
-    const names = Object.keys(servers);
-    if (names.length === 0) {
-      console.log('no configured MCP servers (memex mcp catalog to browse)');
-      return;
-    }
-    for (const name of names) {
-      const entry = servers[name] as McpServerEntry;
-      const transport = entry.command !== undefined ? `stdio:${entry.command}` : `http:${entry.url}`;
-      const state = entry.enabled === false ? 'disabled' : await probeBestEffort(name, entry);
-      console.log(`  ${name} [${state}] ${transport}${entry.auth === 'oauth' ? ' (oauth)' : ''}`);
-    }
-    return;
-  }
-
-  if (action === 'uninstall') {
-    const name = process.argv[4];
-    if (!name) throw new Error('usage: memex mcp uninstall <name>');
-    const cfg = readRawConfig();
-    if (!cfg.mcp_servers?.[name]) throw new Error(`no configured server '${name}'`);
-    writeRawConfig(removeServerEntry(cfg, name));
-    const { MemexOAuthProvider } = await import('@graph/shared');
-    MemexOAuthProvider.deleteCache(name);
-    console.log(`uninstalled: ${name} (config entry + token cache removed)`);
-    await recordToGraph('uninstalled', name, {});
-    return;
-  }
-
-  throw new Error('usage: memex mcp <catalog|install|configure|login|list|uninstall>');
+/** `memex mcp uninstall <name>` — remove config entry + token cache, record to graph. */
+async function mcpUninstall(): Promise<void> {
+  const name = process.argv[4];
+  if (!name) throw new Error('usage: memex mcp uninstall <name>');
+  const cfg = readRawConfig();
+  if (!cfg.mcp_servers?.[name]) throw new Error(`no configured server '${name}'`);
+  writeRawConfig(removeServerEntry(cfg, name));
+  const { MemexOAuthProvider } = await import('@graph/shared');
+  MemexOAuthProvider.deleteCache(name);
+  console.log(`uninstalled: ${name} (config entry + token cache removed)`);
+  await recordToGraph('uninstalled', name, {});
 }
 
 /** Prompt for manifest requires_env vars that are unset; print export hints (values are NOT persisted). */

@@ -8,7 +8,7 @@
  * called out in ADR-57's 後果. Containment, CommandGate gating, fail-closed
  * docker, and the blocked-attempt/result trail writes all live in one place.
  *
- * @see packages/gateway/src/mcp/server.ts — MCP registration (tool 8)
+ * @see packages/gateway/src/mcp/tools/exec.ts — MCP tool registration
  * @see docs/adr/0066-adr57-memexterminal-pi-embed.md D-5
  * @see ADR 47 D-4 — backend decides containment; fail-closed on docker unreachable
  */
