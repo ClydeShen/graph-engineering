@@ -7,6 +7,7 @@
   "dependencies": {
     "@graph/shared": "*",
     "@graph/control-plane": "*",
+    "@graph/gateway": "*",
     "@earendil-works/pi-coding-agent": "^0.79.3",
     "pg": "*"
   }

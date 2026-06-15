@@ -92,8 +92,17 @@ reflection 注入 / CCR / 晶化反哺 / capability endorsement 对 terminal 整
 ORCHID-7`）,问 nvidia qwen3.5"项目代号是什么"→ 回 `ORCHID-7`（它只可能从注入知道）
 → **投影确实到达 Pi 的脑**;`before_agent_start` 触发 1 次（per-user-prompt）;
 `agent_end` 抓到整轮 `messages[]`（回写料够）。见 `packages/terminal-pi/src/run-c3.mts`。
-build-out 残留 = 把哨兵 stand-in 换成真 `assembleContext(graph,scopeId)`+history,把
-`agent_end` 的 log 换成真 `occWrite`（需 pool + scope,gateway 持有）。
+**C3 闭环实测绿（2026-06-15,真 Core 函数,多轮）**：
+- 写回：`agent_end`→真 `occWrite` 进真 `nestScope` 的 scope,查 `execution_event_log`
+  确认落账（`run-ledger.mts`,occ_result=won）。
+- 读回：`before_agent_start`→真 `processAgentTurn`（写 user turn + 内部真
+  `assembleContext` 投影）+ 真 `loadConversationHistory`（gateway 新增子路径导出
+  `./conversation` / `./process-agent-turn`）→ 注入 systemPrompt（`run-c3-loop.mts`）。
+- **闭环证明**：多轮对话,**每轮 fresh pi session（零保留）**。turn1 告知 "favorite
+  color is teal"→写图;turn2 全新 session 经图重投影读回 → 回 "Teal"。一个零记忆的新
+  agent 进程纯靠图回忆起上一轮事实 ⇒ **Graph = Pi 的工作记忆**。
+- 残留：systemPrompt 调优（用 CONVERSATION_SYSTEM_ROLE 而非 pi 默认 coding-agent 提示）;
+  embed 投影（现传 null）;接进 MemexTerminal 入口（现为独立 run 脚本）。
 
 这保住了 Memex 根本大法「Graph → Context, never Context = State」**在 terminal 也成立**。
 
