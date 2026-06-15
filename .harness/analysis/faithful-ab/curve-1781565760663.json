@@ -1,0 +1,308 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-15T23:22:40.694Z",
+    "commit": "3d6ef5890e313755883a46439ea45208098adf19",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 10,
+    "events_by_run": [
+      26,
+      24,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26
+    ],
+    "gateFailures_by_run": [
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "first_third_mean": 25.333333333333332,
+    "last_third_mean": 26,
+    "improvement_pct": -0.026315789473684258
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "run_migrations",
+        "write_tests",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 24320
+    },
+    {
+      "label": "run#2",
+      "events": 24,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 11,
+      "gateFailures": 0,
+      "failedSteps": [],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 18806
+    },
+    {
+      "label": "run#3",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 31797
+    },
+    {
+      "label": "run#4",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "run_migrations",
+        "write_tests",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 21428
+    },
+    {
+      "label": "run#5",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 24114
+    },
+    {
+      "label": "run#6",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "run_migrations",
+        "write_tests",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 22288
+    },
+    {
+      "label": "run#7",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "start_db",
+        "db_schema",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 19839
+    },
+    {
+      "label": "run#8",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 20484
+    },
+    {
+      "label": "run#9",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "write_tests",
+        "run_migrations",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 24658
+    },
+    {
+      "label": "run#10",
+      "events": 26,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 12,
+      "gateFailures": 1,
+      "failedSteps": [
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "start_db",
+        "write_api",
+        "gen_migrations",
+        "run_migrations",
+        "write_tests",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "deploy"
+      ],
+      "recallHit": false,
+      "ms": 25635
+    }
+  ]
+}
