@@ -45,6 +45,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { buildCoreModelRegistry, EMBED_RESOURCE_ISOLATION } from './provider-bridge.js';
 import { formatBashOutput } from './bash-output.js';
+import { safeLine } from './render-kit.js';
 import { makeGraphWidgetFactory } from './graph-widget.js';
 import { registerGraphCommands } from './graph-overlay.js';
 import { setOutcomeWidget, clearOutcome } from './outcome.js';
@@ -243,6 +244,9 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
  * the scope (graph identity) is supplied by the terminal closure, never by the
  * model (C3: the graph, not the model, owns the scope).
  */
+/** Collapsed-preview height for execute_bash output (ctrl+o expands to full). */
+const BASH_PREVIEW_LINES = 6;
+
 function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition[] {
   const executeBash = defineTool({
     name: 'execute_bash',
@@ -264,6 +268,31 @@ function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition
         content: [{ type: 'text' as const, text: formatBashOutput(result.text) }],
         details: { command },
         isError: result.isError,
+      };
+    },
+    // Collapse long output to a short preview by default (ctrl+o expands) — the
+    // model still gets the full text in context; only the DISPLAY is trimmed, so
+    // a `dir`/`curl` dump doesn't flood the chat. Custom tools have no preview
+    // renderer by default (unlike pi's native bash/ls), which is why raw output
+    // used to fill the screen. pi re-invokes this with a fresh `expanded` on ctrl+o.
+    renderResult: (result, options, theme) => {
+      const text = (result.content ?? [])
+        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+      const lines = text.split('\n');
+      return {
+        render(width: number): string[] {
+          if (options.expanded || lines.length <= BASH_PREVIEW_LINES) {
+            return lines.map((l) => safeLine(theme.fg('toolOutput', l), width, '…'));
+          }
+          const shown = lines
+            .slice(0, BASH_PREVIEW_LINES)
+            .map((l) => safeLine(theme.fg('toolOutput', l), width, '…'));
+          shown.push(theme.fg('muted', `… ${lines.length - BASH_PREVIEW_LINES} more lines · ctrl+o to expand`));
+          return shown;
+        },
+        invalidate(): void {},
       };
     },
   });
@@ -355,6 +384,10 @@ export async function createMemexTerminalRuntime(opts: {
           theme: MEMEX_THEME_NAME,
           editorPaddingX: EDITOR_PADDING_X,
           quietStartup: true,
+          // Hide the model's raw chain-of-thought by default — it's noise for a
+          // user, not "information they directly need". Toggle in-session with
+          // the thinking key if you want to see reasoning.
+          hideThinkingBlock: true,
         }),
         resourceLoaderOptions: {
           ...EMBED_RESOURCE_ISOLATION,
