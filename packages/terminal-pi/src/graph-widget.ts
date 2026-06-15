@@ -45,88 +45,54 @@ function approvalsChip(theme: ThemeLike, n: number): string {
   return n > 0 ? theme.fg('warning', `${GLYPH.warn} ${n} pending`) : '';
 }
 
-function countsLine(theme: ThemeLike, snap: GraphSnapshot, pad: string): string {
-  const dot = theme.fg('dim', GLYPH.dot);
-  const parts = [
-    `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'turns')}`,
-    `${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'events')}`,
-  ];
-  const chip = approvalsChip(theme, snap.pendingApprovals);
-  if (chip) parts.push(chip);
-  return pad + parts.join(` ${dot} `);
-}
-
-function lessonLine(theme: ThemeLike, snap: GraphSnapshot, pad: string, width: number): string {
-  if (!snap.lastLesson) {
-    return pad + theme.fg('dim', 'no lessons yet · they crystallize as scopes close');
-  }
-  const conf = theme.fg('success', snap.lastLesson.confidence.toFixed(2));
-  const head = `${pad}${theme.fg('accent', GLYPH.action)} ${theme.fg('dim', 'lesson')} ${conf}  `;
-  const room = Math.max(8, width - visibleWidth(head));
-  return head + theme.fg('text', firstLine(snap.lastLesson.content, room));
-}
-
 /**
  * Pure: snapshot + density → widget lines. Exported for tests. Width-safe; never
- * throws. (Real colors come from pi's Theme; an identity ThemeLike makes the
- * layout assertable.)
+ * throws. Single-responsibility chrome: shows graph STATE only — the model and
+ * cwd live in pi's footer, so the widget never repeats them. Empty states (no
+ * lesson) are omitted, not narrated.
  */
 export function buildWidgetLines(
   theme: ThemeLike,
   width: number,
   snap: GraphSnapshot,
   density: Density,
-  modelLabel: string,
 ): string[] {
   if (density === 'off' || width < 8) return [];
 
   const short = snap.scopeId.slice(0, 8);
   const dot = theme.fg('dim', GLYPH.dot);
+  const brand = theme.bold(theme.fg('accent', `${GLYPH.brand} memex`));
   const scopeGlyph = statusGlyph(theme, snap.status === 'active' ? 'active' : 'idle');
+  const statusWord = theme.fg(snap.status === 'active' ? 'success' : 'dim', snap.status);
+  const counts = `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'turns')} ${dot} ${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'events')}`;
+  const chip = approvalsChip(theme, snap.pendingApprovals);
   const clamp = (lines: string[]): string[] => lines.map((l) => safeLine(l, width, '…'));
 
-  // MIN — one quiet line, no rules.
+  // MIN — brand + scope, nothing else.
   if (density === 'min') {
-    const chip = approvalsChip(theme, snap.pendingApprovals);
-    const stats = [
-      `${theme.fg('text', short)}`,
-      `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'turns')}`,
-      `${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'events')}`,
-      chip,
-    ].filter(Boolean);
-    return clamp([`${theme.bold(theme.fg('accent', `${GLYPH.brand} memex`))} ${dot} ${stats.join(` ${dot} `)}`]);
+    return clamp([`${brand} ${dot} ${theme.fg('text', short)}`]);
   }
 
-  // SMALL — title rule + a single status line.
+  // SMALL — one dense line: brand + scope + status + counts (+ chip).
   if (density === 'small') {
-    const chip = approvalsChip(theme, snap.pendingApprovals);
-    const line = [
-      `${scopeGlyph} ${theme.fg('dim', 'scope')} ${theme.fg('text', short)}`,
-      `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'turns')}`,
-      `${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'events')}`,
-      chip,
-    ].filter(Boolean);
-    return clamp([ruleWithTitle(theme, width), `   ${line.join(` ${dot} `)}`]);
+    const parts = [brand, `${scopeGlyph} ${theme.fg('text', short)} ${statusWord}`, counts];
+    if (chip) parts.push(chip);
+    return clamp([parts.join(` ${dot} `)]);
   }
 
-  // FULL — title rule + scope/model + counts + lesson + hints + closing rule.
-  const pad = '   ';
-  const statusWord = theme.fg(snap.status === 'active' ? 'success' : 'dim', snap.status);
-  const left = `${pad}${scopeGlyph} ${theme.fg('dim', 'scope')} ${theme.fg('text', short)}`;
-  const right = `${theme.fg('dim', modelLabel)} ${dot} ${statusWord}`;
-  const gap = Math.max(2, width - visibleWidth(left) - visibleWidth(right));
-  const scopeLine = left + ' '.repeat(gap) + right;
-
-  const hints = `${pad}${theme.fg('dim', '/density')} ${dot} ${theme.fg('dim', '/graph')} ${dot} ${theme.fg('dim', '/memory')}`;
-
-  return clamp([
-    ruleWithTitle(theme, width),
-    scopeLine,
-    countsLine(theme, snap, pad),
-    lessonLine(theme, snap, pad, width),
-    hints,
-    theme.fg('borderMuted', '─'.repeat(width)),
-  ]);
+  // FULL — header rule + status, the latest lesson (only if any), command hints.
+  const lines = [ruleWithTitle(theme, width)];
+  const statusParts = [`${scopeGlyph} ${theme.fg('text', short)} ${statusWord}`, counts];
+  if (chip) statusParts.push(chip);
+  lines.push(' ' + statusParts.join(` ${dot} `));
+  if (snap.lastLesson) {
+    const head = ` ${theme.fg('accent', GLYPH.action)} `;
+    const tail = `  ${theme.fg('dim', `(${snap.lastLesson.confidence.toFixed(2)})`)}`;
+    const room = Math.max(8, width - visibleWidth(head) - visibleWidth(tail) - 1);
+    lines.push(head + theme.fg('text', firstLine(snap.lastLesson.content, room)) + tail);
+  }
+  lines.push(` ${theme.fg('dim', '/density')} ${dot} ${theme.fg('dim', '/graph')} ${dot} ${theme.fg('dim', '/memory')}`);
+  return clamp(lines);
 }
 
 // ── Density persistence (survives restarts, mirrors gsd's preference store) ────
@@ -162,10 +128,9 @@ function writeDensity(stateDir: string, density: Density): void {
 export function makeGraphWidgetFactory(opts: {
   pool: Pool;
   scopeId: string;
-  modelLabel: string;
   stateDir: string;
 }): ExtensionFactory {
-  const { pool, scopeId, modelLabel, stateDir } = opts;
+  const { pool, scopeId, stateDir } = opts;
   let density = readDensity(stateDir);
   let snapshot = emptySnapshot(scopeId);
   let tuiRef: { requestRender(): void } | null = null;
@@ -213,7 +178,7 @@ export function makeGraphWidgetFactory(opts: {
           return {
             render(width: number): string[] {
               if (cachedLines && cachedWidth === width) return cachedLines;
-              cachedLines = buildWidgetLines(theme as ThemeLike, width, snapshot, density, modelLabel);
+              cachedLines = buildWidgetLines(theme as ThemeLike, width, snapshot, density);
               cachedWidth = width;
               return cachedLines;
             },

@@ -28,60 +28,71 @@ describe('nextDensity', () => {
 
 describe('buildWidgetLines', () => {
   it('off renders nothing', () => {
-    expect(buildWidgetLines(theme, 80, base, 'off', 'nvidia·qwen3')).toEqual([]);
+    expect(buildWidgetLines(theme, 80, base, 'off')).toEqual([]);
   });
 
   it('refuses to render in a too-narrow terminal', () => {
-    expect(buildWidgetLines(theme, 6, base, 'full', 'm')).toEqual([]);
+    expect(buildWidgetLines(theme, 6, base, 'full')).toEqual([]);
   });
 
-  it('min is a single line with brand, scope and counts', () => {
-    const lines = buildWidgetLines(theme, 80, base, 'min', 'nvidia·qwen3');
+  it('min is one line: brand + scope, nothing else', () => {
+    const lines = buildWidgetLines(theme, 80, base, 'min');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('memex');
+    expect(lines[0]).toContain('3d2e981e');
+    expect(lines[0]).not.toContain('turns');
+  });
+
+  it('small is one dense line with brand, scope and counts', () => {
+    const lines = buildWidgetLines(theme, 80, base, 'small');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('memex');
     expect(lines[0]).toContain('3d2e981e');
     expect(lines[0]).toContain('12');
-    expect(lines[0]).toContain('47');
+    expect(lines[0]).toContain('events');
   });
 
-  it('small is a title rule + one status line', () => {
-    const lines = buildWidgetLines(theme, 80, base, 'small', 'nvidia·qwen3');
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('memex');
-    expect(lines[1]).toContain('scope');
-  });
-
-  it('full is six lines: rule, scope, counts, lesson, hints, rule', () => {
-    const lines = buildWidgetLines(theme, 80, base, 'full', 'nvidia·qwen3');
-    expect(lines).toHaveLength(6);
+  it('full (no lesson) is three lines: rule, status, hints', () => {
+    const lines = buildWidgetLines(theme, 80, base, 'full');
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toContain('memex'); // header rule
-    expect(lines[1]).toContain('3d2e981e'); // scope line
-    expect(lines[1]).toContain('nvidia·qwen3'); // model label
-    expect(lines[2]).toContain('turns'); // counts
-    expect(lines[4]).toContain('/density'); // hints
-    expect(lines[5].replace(/─/g, '')).toBe(''); // closing rule
+    expect(lines[1]).toContain('3d2e981e'); // status
+    expect(lines[1]).toContain('turns');
+    expect(lines[2]).toContain('/density'); // hints
   });
 
-  it('shows a pending-approvals chip only when there are pending approvals', () => {
-    expect(buildWidgetLines(theme, 80, base, 'full', 'm')[2]).not.toContain('pending');
-    const withPending = { ...base, pendingApprovals: 2 };
-    expect(buildWidgetLines(theme, 80, withPending, 'full', 'm')[2]).toContain('2 pending');
+  it('never repeats the model label (footer owns it)', () => {
+    const text = buildWidgetLines(theme, 80, base, 'full').join('\n');
+    expect(text).not.toContain('qwen');
+    expect(text).not.toContain('gemini');
   });
 
-  it('shows an empty-state when there is no lesson, the lesson otherwise', () => {
-    expect(buildWidgetLines(theme, 80, base, 'full', 'm')[3]).toContain('no lessons yet');
+  it('omits the lesson line entirely when there is none (no empty-state noise)', () => {
+    const text = buildWidgetLines(theme, 80, base, 'full').join('\n');
+    expect(text).not.toContain('no lessons');
+  });
+
+  it('adds a lesson line (4 lines) when a lesson exists', () => {
     const withLesson = {
       ...base,
       lastLesson: { content: 'Prefer resolveProfile over hardcoded baseUrl', confidence: 0.82 },
     };
-    const line = buildWidgetLines(theme, 80, withLesson, 'full', 'm')[3];
-    expect(line).toContain('0.82');
-    expect(line).toContain('resolveProfile');
+    const lines = buildWidgetLines(theme, 80, withLesson, 'full');
+    expect(lines).toHaveLength(4);
+    expect(lines[2]).toContain('resolveProfile');
+    expect(lines[2]).toContain('0.82');
+  });
+
+  it('shows a pending-approvals chip only when there are pending approvals', () => {
+    expect(buildWidgetLines(theme, 80, base, 'full')[1]).not.toContain('pending');
+    const withPending = { ...base, pendingApprovals: 2 };
+    expect(buildWidgetLines(theme, 80, withPending, 'full')[1]).toContain('2 pending');
   });
 
   it('keeps every line within the terminal width', () => {
     for (const d of ['min', 'small', 'full'] as Density[]) {
-      for (const line of buildWidgetLines(theme, 60, { ...base, pendingApprovals: 3 }, d, 'nvidia·qwen3')) {
+      const snap = { ...base, pendingApprovals: 3, lastLesson: { content: 'x'.repeat(200), confidence: 0.5 } };
+      for (const line of buildWidgetLines(theme, 60, snap, d)) {
         expect(visibleWidth(line)).toBeLessThanOrEqual(60);
       }
     }

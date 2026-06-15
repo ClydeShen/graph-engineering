@@ -50,7 +50,7 @@ describe('graph widget lifecycle (simulated hasUI)', () => {
 
   it('installs an aboveEditor widget on session_start and renders snapshot data', async () => {
     const h = harness();
-    makeGraphWidgetFactory({ pool, scopeId, modelLabel: 'nvidia·qwen3', stateDir })(h.pi);
+    makeGraphWidgetFactory({ pool, scopeId, stateDir })(h.pi);
 
     await h.handlers['session_start']({}, h.ctx);
     expect(h.widgetFactory).toBeDefined();
@@ -67,21 +67,21 @@ describe('graph widget lifecycle (simulated hasUI)', () => {
     expect(() => comp.dispose()).not.toThrow();
   });
 
-  it('/density cycles the widget from full (6 lines) to small (2 lines)', async () => {
+  it('/density cycles the widget from full (4 lines w/ lesson) to small (1 line)', async () => {
     const h = harness();
-    makeGraphWidgetFactory({ pool, scopeId, modelLabel: 'm', stateDir })(h.pi);
+    makeGraphWidgetFactory({ pool, scopeId, stateDir })(h.pi);
     await h.handlers['session_start']({}, h.ctx);
     const comp = h.widgetFactory!({ requestRender: () => {} }, theme);
 
-    expect(comp.render(80)).toHaveLength(6); // full
+    expect(comp.render(80)).toHaveLength(4); // full: rule + status + lesson + hints
     await h.commands['density'].handler('', h.ctx);
-    expect(comp.render(80)).toHaveLength(2); // small
+    expect(comp.render(80)).toHaveLength(1); // small
     comp.dispose();
   });
 
   it('is a no-op without a UI (the -m / print path)', async () => {
     const h = harness();
-    makeGraphWidgetFactory({ pool, scopeId, modelLabel: 'm', stateDir })(h.pi);
+    makeGraphWidgetFactory({ pool, scopeId, stateDir })(h.pi);
     await h.handlers['session_start']({}, { hasUI: false, ui: h.ctx.ui });
     expect(h.widgetFactory).toBeUndefined();
   });

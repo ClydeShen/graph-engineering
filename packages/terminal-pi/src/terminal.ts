@@ -44,6 +44,7 @@ import {
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { buildCoreModelRegistry, EMBED_RESOURCE_ISOLATION } from './provider-bridge.js';
+import { formatBashOutput } from './bash-output.js';
 import { makeGraphWidgetFactory } from './graph-widget.js';
 import { registerGraphCommands } from './graph-overlay.js';
 import { setOutcomeWidget, clearOutcome } from './outcome.js';
@@ -176,33 +177,6 @@ function makeC3Factory(pool: Pool, scopeId: string): ExtensionFactory {
 }
 
 /**
- * Memex chrome (identity layer): a branded header at the top of the chat and a
- * status segment in pi's footer. Uses the theme's semantic colors so it tracks
- * the Observatory palette. Set on session_start; guarded on hasUI so the -m /
- * print path (no TUI) skips it. Returns plain Component objects (only render() is
- * required) — no pi-tui import needed.
- */
-function makeChromeFactory(scopeId: string, modelLabel: string): ExtensionFactory {
-  const shortScope = scopeId.slice(0, 8);
-  return (pi) => {
-    pi.on('session_start', async (_event, ctx) => {
-      if (!ctx.hasUI) return;
-      ctx.ui.setHeader((_tui, theme) => ({
-        render(width: number): string[] {
-          const mark = theme.bold(theme.fg('accent', '✦ MemexTerminal'));
-          const meta = theme.fg('dim', `${modelLabel}  ·  scope ${shortScope}`);
-          const rule = theme.fg('borderMuted', '─'.repeat(Math.max(1, width)));
-          // Leading blank = breathing room above the banner (paddingY by hand).
-          return ['', `${mark}   ${meta}`, rule];
-        },
-        invalidate() {},
-      }));
-      ctx.ui.setStatus('memex', `scope ${shortScope}  ·  /memory  ·  /console`);
-    });
-  };
-}
-
-/**
  * Approval (ADR-57 D-4): intercept gated tools at tool_call. File a real
  * ApprovalService request, decide (ctx.ui.confirm in a TUI; CommandGate policy
  * headless), record the decision, and block on deny. The audit row is the SSOT;
@@ -287,7 +261,7 @@ function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition
         cwd,
       });
       return {
-        content: [{ type: 'text' as const, text: result.text }],
+        content: [{ type: 'text' as const, text: formatBashOutput(result.text) }],
         details: { command },
         isError: result.isError,
       };
@@ -355,14 +329,13 @@ export async function createMemexTerminalRuntime(opts: {
   const model = modelRegistry.find(core.name, core.model);
   if (!model) throw new Error(`${core.name}/${core.model} not in registry: ${modelRegistry.getError() ?? '?'}`);
 
-  const modelLabel = `${core.name}·${core.model}`;
   const factories: ExtensionFactory[] = [
     makeC3Factory(pool, scopeId),
     makeApprovalFactory(pool, scopeId),
-    makeChromeFactory(scopeId, modelLabel),
-    // The graph as working memory: persistent at-a-glance widget (full/small/min/
-    // off via /density) + /graph and /memory read-only browsers.
-    makeGraphWidgetFactory({ pool, scopeId, modelLabel, stateDir: agentDir }),
+    // The graph as working memory and the sole memex chrome: a persistent
+    // at-a-glance widget (full/small/min/off via /density) + /graph and /memory
+    // read-only browsers. Model/cwd/tokens live in pi's footer — not repeated here.
+    makeGraphWidgetFactory({ pool, scopeId, stateDir: agentDir }),
     (pi) => registerGraphCommands(pi, pool, scopeId),
   ];
   const tools = makeCoreTools(pool, scopeId, cwd);
