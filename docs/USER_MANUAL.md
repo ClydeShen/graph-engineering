@@ -530,22 +530,23 @@ npx tsx scripts/eval/journey.ts
 
 ## 9. MemexTerminal (Built-in TUI)
 
-MemexTerminal is the built-in default TUI — purely a Gateway client, holding
-no state of its own.
+MemexTerminal is the built-in default TUI. The agentic terminal — a Pi-embedded
+TUI whose brain is the graph (ADR-57) — launches with:
 
 ```sh
-npx tsx packages/terminal/src/index.ts
+memex chat
 ```
 
-On startup it:
+It can run tools (execute_bash, schedule_task), gates dangerous actions through
+approval, and projects the graph as its working memory each turn. The graph is
+the durable record; the terminal holds no authoritative state of its own.
 
-1. Reads `shell.gateway_url` (or falls back to
-   `http://127.0.0.1:<gateway.port>`) and `gateway.token` from
-   `~/.memex/config.json`; both can be overridden with the
-   `MEMEX_GATEWAY_URL` / `MEMEX_GATEWAY_TOKEN` environment variables.
-2. Creates a new Scope (`session:terminal:<timestamp>`).
-3. Subscribes to that Scope's live Trail events over WS, printing each one as
-   `⟶ [event_type] {...}`.
+> The legacy thin client (`packages/terminal`) is a **non-agentic** conversation-
+> core client — a scriptable probe of the ADR-54 single-responder core, also used
+> as the `npm run dev` foreground. It holds no state, reading `shell.gateway_url`
+> (or `http://127.0.0.1:<gateway.port>`) and `gateway.token` from
+> `~/.memex/config.json` (overridable via `MEMEX_GATEWAY_URL` /
+> `MEMEX_GATEWAY_TOKEN`), creating a Scope and streaming its Trail events over WS.
 
 To use it: type at the `memex>` prompt and press Enter — this writes a
 `task_spawned` event and prints a confirmation (`✓ recorded <hash> (won)`).

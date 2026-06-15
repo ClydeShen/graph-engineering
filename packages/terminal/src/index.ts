@@ -38,10 +38,13 @@ async function main(): Promise<void> {
     `http://127.0.0.1:${config?.gateway?.port ?? DEFAULT_GATEWAY_PORT}`;
   const token = process.env['MEMEX_GATEWAY_TOKEN'] ?? config?.gateway?.token;
 
+  // This thin client is the non-agentic conversation-core surface (ADR-54). The
+  // agentic Pi terminal now lives in the product as `memex chat` (ADR-57); the
+  // old in-client --agent flag is retired — redirect there.
   if (process.argv.includes('--agent')) {
     console.error(
-      '--agent mode is retired: conversation has one responder (the gateway core, ADR-54).\n' +
-        'To use Pi as a coding agent against the graph, run: memex connect pi',
+      '--agent is retired here: this is the non-agentic conversation client.\n' +
+        'For the agentic Pi terminal (tools, approval, graph memory), run: memex chat',
     );
     process.exit(1);
   }
