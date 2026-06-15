@@ -27,6 +27,7 @@ import { processAgentTurn } from '@graph/gateway/process-agent-turn';
 import { loadConversationHistory, conversationMemoryBlock } from '@graph/gateway/conversation';
 import { ApprovalService } from '@graph/gateway/security/approval';
 import { runExecuteBash } from '@graph/gateway/mcp/execute-bash';
+import { upsertCronJob } from '@graph/gateway-bot/cron';
 import {
   createAgentSessionRuntime,
   createAgentSessionServices,
@@ -65,7 +66,7 @@ export const MEMEX_TERMINAL_SYSTEM_ROLE =
   'silently; never quote it, echo its heading, or mention that it exists.';
 
 /** Tools gated through the approval hook (tool_call → ApprovalService double-write). */
-const GATED_TOOLS = new Set(['execute_bash']);
+const GATED_TOOLS = new Set(['execute_bash', 'schedule_task']);
 
 /** The scope's current tip = predecessor for the next append. */
 async function tip(pool: Pool, scopeId: string): Promise<string> {
@@ -168,10 +169,17 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
   return (pi) => {
     pi.on('tool_call', async (event: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> => {
       if (!GATED_TOOLS.has(event.toolName)) return undefined;
-      const command = String((event.input as { command?: unknown }).command ?? '');
-      const verdict = checkCommand(command);
-      const approvalId = await approvals.request(scopeId, 'mcp-agent', command);
-      const approved = ctx.hasUI ? await ctx.ui.confirm('Approve command?', command) : verdict.allowed;
+      // execute_bash carries a command → safety gate (CommandGate). Other gated
+      // tools (schedule_task) are autonomy-gated, not safety-gated: headless they
+      // proceed (the local operator consented by scripting the run); in a TUI the
+      // human confirms either way. The audit row is written regardless (SSOT).
+      const isCommand = event.toolName === 'execute_bash';
+      const subject = isCommand
+        ? String((event.input as { command?: unknown }).command ?? '')
+        : `${event.toolName} ${JSON.stringify(event.input)}`;
+      const headlessOk = isCommand ? checkCommand(subject).allowed : true;
+      const approvalId = await approvals.request(scopeId, 'mcp-agent', subject);
+      const approved = ctx.hasUI ? await ctx.ui.confirm('Approve action?', subject) : headlessOk;
       await approvals.decide(approvalId, approved, 'once');
       if (!approved) return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
       return undefined;
@@ -208,7 +216,37 @@ function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition
       };
     },
   });
-  return [executeBash];
+  // schedule_task (ADR-57 D-6) — Hermes-parity autonomy tool, terminal-only.
+  // Graph-native: appends a cron_job to the cron registry scope; the running
+  // gateway-bot's CronService.tick() fires it (ADR-45). Approval-gated. Never
+  // exposed to the channel conversation core (ADR-54 / Phase 14 redline).
+  const scheduleTask = defineTool({
+    name: 'schedule_task',
+    label: 'Schedule Task',
+    description:
+      'Schedule a recurring future task. `schedule` is a 5-field cron expression ' +
+      '(minute hour day-of-month month day-of-week). When it fires, the gateway runs ' +
+      '`prompt` in a fresh scope and delivers the result to `deliver` (default: all ' +
+      'configured channels). Requires approval.',
+    parameters: Type.Object({
+      schedule: Type.String(),
+      prompt: Type.String(),
+      deliver: Type.Optional(Type.String()),
+    }),
+    async execute(_id, params) {
+      const p = params as { schedule: string; prompt: string; deliver?: string };
+      const name = `terminal:${Date.now().toString(36)}`;
+      const deliver = p.deliver ?? 'all';
+      await upsertCronJob(pool, { name, schedule: p.schedule, prompt: p.prompt, deliver, enabled: true });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ scheduled: name, schedule: p.schedule, deliver }) }],
+        details: { name },
+        isError: false,
+      };
+    },
+  });
+
+  return [executeBash, scheduleTask];
 }
 
 /** Pi agent dir for the embed — memex-owned, kept away from the user's ~/.pi. */

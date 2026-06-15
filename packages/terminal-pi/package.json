@@ -9,6 +9,7 @@
     "@graph/shared": "*",
     "@graph/control-plane": "*",
     "@graph/gateway": "*",
+    "@graph/gateway-bot": "*",
     "@earendil-works/pi-coding-agent": "^0.79.3",
     "pg": "*",
     "typebox": "^1.1.38"

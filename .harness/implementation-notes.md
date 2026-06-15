@@ -1355,3 +1355,28 @@ execute_bash 在 before_agent_start↔agent_end 间 append 了事件、移动了
 - **C3 跨进程**:turn1(进程A)存 teal → turn2(进程B,全新 pi session,同 --scope)纯靠图
   投影答 "teal"。组装终端端到端实现 Graph=工作记忆。
 - typecheck 干净(仍仅 7 个旧 proof 脚本错误);InteractiveMode 交互路径需 TTY,留活体 journey。
+
+### Build-out #7 — memex chat 接线 + cwd(2026-06-15)
+
+`cli/src/index.ts` chat dispatch 从 `@graph/terminal`(瘦客户端)→ `@graph/terminal-pi`(agentic
+终端)。改写瘦客户端「--agent retired」过时头注释(ADR-57 後果):per-surface 律下两者不冲突
+(channel 核心非 agentic / terminal agentic),瘦客户端留作对话核心探针/fallback。execute_bash
+改在终端启动 cwd 跑(coding 终端作用于用户项目),非 tmpdir。活体:`memex chat -m` 经真 cli 跑
+execute_bash 报告输出。
+
+### Build-out #8 — D-6 工具(2026-06-15)
+
+**schedule_task 实现**(图原生):gateway-bot/cron.ts 抽 `upsertCronJob(pool,def)` +
+`ensureCronRegistryScope(pool)` 独立函数(CronService 方法委托,单写路径),gateway-bot 加
+`./cron` 导出。terminal schedule_task 工具(审批门控)append cron_job 到 registry scope,运行中
+gateway-bot CronService.tick() fire(ADR-45)。活体:模型调用 → cron_job 正确落库
+(schedule/prompt 对,readJobTips 可读)。审批工厂泛化:execute_bash 走 CommandGate 安全门;
+其余(schedule_task)autonomy-gated,headless 放行(本地操作者 scripted 即同意)/TUI confirm。
+
+**send_message 延后(设计决策,mid-high)**:正确实现需 ConnectorRegistry(活连接器在 gateway-bot
+进程)。terminal 自建连接器会**重复起 bot inbound 消费者**(两进程抢同一 Telegram=真 bug)。
+可选正解:(a)图原生出站 intent 事件 + gateway-bot 新投递消费者(新基础设施),(b)出站-only
+registry(只调 .send 不 .start,但 gateway-bot 连接器构造是逐平台内联无统一 builder,且需配置
+channel 才能活体验证)。两者都无法在本环境无配置 channel 下活体验证 → **不半成品**(违反 stable
+mandate)。留作专门切片。schedule_task 已覆盖 D-6 的 autonomy-parity;send_message 是 outbound-parity,
+delivery 依赖 channel 配置,与核心终端解耦。

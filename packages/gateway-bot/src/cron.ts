@@ -20,6 +20,31 @@ import type { DeliveryRouter } from './delivery-router.js';
 
 export const CRON_REGISTRY_INTENT = 'cron:registry';
 
+/** Find or create the cron registry scope. Standalone so non-bot processes
+ * (e.g. MemexTerminal's schedule_task tool, ADR-57 D-6) can register jobs the
+ * running gateway-bot's CronService.tick() will fire — one shared write path. */
+export async function ensureCronRegistryScope(pool: Pool): Promise<string> {
+  const { rows } = await pool.query<{ scope_id: string }>(
+    `SELECT scope_id FROM scope_lineage WHERE intent = $1 LIMIT 1`,
+    [CRON_REGISTRY_INTENT],
+  );
+  if (rows.length > 0) return rows[0]!.scope_id;
+  const { scopeId } = await nestScope(pool, CRON_REGISTRY_INTENT);
+  return scopeId;
+}
+
+/** Append a job definition Snapshot (append-only config history, ADR-45 D-1). */
+export async function upsertCronJob(pool: Pool, def: Omit<CronJobDef, 'kind'>): Promise<void> {
+  const registryScopeId = await ensureCronRegistryScope(pool);
+  await writeInfraEvent(
+    pool,
+    registryScopeId,
+    'memory_updated',
+    canonicalJson({ kind: 'cron_job', ...def }),
+    'archived',
+  );
+}
+
 export interface CronJobDef {
   kind: 'cron_job';
   name: string;
@@ -81,25 +106,12 @@ export class CronService {
 
   /** Find or create the cron registry scope. */
   async ensureRegistryScope(): Promise<string> {
-    const { rows } = await this.pool.query<{ scope_id: string }>(
-      `SELECT scope_id FROM scope_lineage WHERE intent = $1 LIMIT 1`,
-      [CRON_REGISTRY_INTENT],
-    );
-    if (rows.length > 0) return rows[0]!.scope_id;
-    const { scopeId } = await nestScope(this.pool, CRON_REGISTRY_INTENT);
-    return scopeId;
+    return ensureCronRegistryScope(this.pool);
   }
 
   /** Append a job definition Snapshot (append-only config history, D-1). */
   async upsertCronJob(def: Omit<CronJobDef, 'kind'>): Promise<void> {
-    const registryScopeId = await this.ensureRegistryScope();
-    await writeInfraEvent(
-      this.pool,
-      registryScopeId,
-      'memory_updated',
-      canonicalJson({ kind: 'cron_job', ...def }),
-      'archived',
-    );
+    await upsertCronJob(this.pool, def);
   }
 
   /** Latest Snapshot per job name (later event wins). */
