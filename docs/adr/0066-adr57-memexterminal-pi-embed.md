@@ -58,8 +58,15 @@ providers[] + ADR-56 profile → `{ api, model, baseUrl, apiKey }`,见 `from-con
 而非共享对象）,但 Pi 拿到原生协议。
 
 机制：`createAgentSessionServices({ modelRegistry })` + `createAgentSessionFromServices
-({ services, model, customTools, noTools })`;ModelRegistry 由 Core 配置生成的
-models.json/provider 注册喂入,`find(provider, modelId)→Model` 作为显式 `model` 传入。
+({ services, model, customTools, noTools })`;ModelRegistry 由 Core 配置生成的 models.json
+（schema `{ providers: { <name>: ProviderConfig } }`）喂入,`find(provider, modelId)→Model`
+作为显式 `model` 传入。落点 = `packages/terminal-pi/src/provider-bridge.ts`。
+
+**实测绿（2026-06-15 真 LLM 活体）**：经 config-share 用 Core 的 nvidia 配置驱动 Pi 一轮,
+qwen3.5 回 `MEMEX-PI-OK`（`run-nvidia.mjs`）。`${NVIDIA_API_KEY}` 插值生效,
+`model resolved/configuredAuth=true`。**踩到一个 bug 并修复**：worktree 根缺 `.env`
+（gitignore,worktree 不复制未跟踪文件）→ Pi/Core 拿不到 key;拷主 checkout `.env` 进
+worktree 即修。
 
 ### D-3：C3——图是 agent 的工作记忆,每 turn 投影注入（不是审计后盾）
 

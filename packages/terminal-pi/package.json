@@ -1,0 +1,11 @@
+{
+  "name": "@graph/terminal-pi",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "src/provider-bridge.ts",
+  "dependencies": {
+    "@graph/shared": "*",
+    "@earendil-works/pi-coding-agent": "^0.79.3"
+  }
+}
