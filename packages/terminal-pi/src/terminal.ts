@@ -346,7 +346,14 @@ export async function createMemexTerminalRuntime(opts: {
         modelRegistry,
         // In-memory so the Memex theme + input padding apply WITHOUT persisting to
         // the user's ~/.pi settings (embed isolation).
-        settingsManager: SettingsManager.inMemory({ theme: MEMEX_THEME_NAME, editorPaddingX: EDITOR_PADDING_X }),
+        // quietStartup suppresses pi's "loaded resources" banner ([Extensions]
+        // <inline:1/2/3>, [Themes] memex) — internal noise that breaks the clean
+        // Memex startup. The Memex header is the only thing shown at the top.
+        settingsManager: SettingsManager.inMemory({
+          theme: MEMEX_THEME_NAME,
+          editorPaddingX: EDITOR_PADDING_X,
+          quietStartup: true,
+        }),
         resourceLoaderOptions: {
           ...EMBED_RESOURCE_ISOLATION,
           systemPrompt: MEMEX_TERMINAL_SYSTEM_ROLE,
