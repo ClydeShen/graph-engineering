@@ -1563,3 +1563,40 @@ acceptance journey 11/11 green against a fresh gateway booted from current sourc
 (incl. acquisition gate + ask_user round-trip = the refactored autonomy tools'
 services; ADR-49 regression gate vs the 2026-06-14 snapshot passed with zero metric
 drift). New code runs completely and stably.
+
+---
+
+## Code-quality sweep — 3 iterations (2026-06-16, /improve + baseline×2)
+
+Continued the roam-driven sweep, then re-ran the same detect→fix→verify loop twice
+more per user directive. Each iteration: re-index roam → safe ≥mid-confidence
+change → tsc + targeted tests + full suite (793) → commit. Final E2E journey 11/11
+green against a fresh gateway booted from current source; ADR-49 snapshot gate
+zero drift across all three.
+
+- **Iteration 1 (bdec96a7)** — split `runMcpCommand` (cx 76) and
+  `runCapabilityCommand` (cx 47) into per-subcommand handlers + thin dispatcher
+  (same deepening as buildMcpServer). Fixed a stale `@see` in execute-bash.ts
+  (server.ts tool 8 → tools/exec.ts) left by the prior session.
+- **Iteration 2 (b8e5ac99)** — split `handleWsMessage` (cx 63, 16 returns) into
+  handleSubscribe/handleUserMessage/handleAgentEvent, each typed on its narrowed
+  WsClientMessage union member. Guarded by ws.test.ts (12 tests).
+- **Iteration 3 (fead4250)** — no safe code win remained: every remaining hotspot
+  is a React page component (WorkspacePage/Sessions/Universe/Forest — visual-
+  regression risk, thin tests, visual verify partly blocked) or sensitive runtime
+  with weak orchestration test coverage (GatewayBot.start has a history of silent
+  "written-but-not-wired" bugs and NO test for start(); runOnboard is interactive;
+  runConversationTurn is ADR-54 TRIPWIRE-protected). Refactoring any of those
+  autonomously under a no-regression bar is higher-risk-than-reward — deliberately
+  deferred. Iteration 3 instead fixed a genuinely stale doc: ARCHITECTURE.md §7
+  listed 8 MCP tools (predated the Phase 20/ADR-53 autonomy family) — corrected to
+  13 + the mcp/tools/ registry structure.
+
+**Discipline notes (carried from the prior sweep):**
+- roam's dead-export list is false-positive-dominated for this codebase (Next.js
+  routing, JSX usage, and barrel re-exports all read as "no production consumers"
+  — e.g. Input flagged dead while used by 80 places). Not used for deletion.
+- Memory was NOT aggressively pruned: older "BLOCKED" session records are
+  superseded in context by later entries and reflect what was true when written;
+  wholesale rewriting is high-judgement / low-value churn that loses cross-session
+  context. Surfaced rather than destroyed.

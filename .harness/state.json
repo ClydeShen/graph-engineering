@@ -8,8 +8,8 @@
   },
   "position": {
     "phase": "03-execute",
-    "active": "代码质量/架构 sweep 完成(roam 驱动 + /goal)。MCP 工具注册表深化(buildMcpServer 161→thin,mcp/tools/);死代码清理;终端 de-dup(不 rename)。",
+    "active": "代码质量 sweep 三轮完成(roam 驱动)。dispatcher 深化模式贯穿:buildMcpServer→runMcpCommand/runCapabilityCommand→handleWsMessage,全离 critical 榜。剩余热点(React 组件/敏感运行时)有据延后。",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "已推送。4 commits(3e3767a5 死码 / 52cfd2ee MCP tools registry / 71060fe4 terminal docs + 检查点)。tsc 0 / 串行 793 测试绿(==基线零回归) / 活体 E2E journey 11/11 绿(新启 gateway,含 acquisition+ask_user) / ADR-49 回归门零漂移。candidate #4(test-only exports)有据延后。详见 implementation-notes 末节。"
+    "stopped_at": "已推送。本批 4 commits(bdec96a7 cli dispatcher / b8e5ac99 ws dispatcher / fead4250 ARCHITECTURE §7 修正 / 检查点)。tsc 0 / 串行 793 测试绿(三轮均零回归) / 最终 E2E journey 11/11 绿(新启 gateway 跑当前源码) / ADR-49 回归门零漂移。第3轮诚实结论=无安全码改赢点(React 视觉风险/敏感运行时无编排测试),转文档清理。roam 死码列表误报主导(勿用于删除);记忆未激进删(呈报代替)。详见 implementation-notes 末两节。"
   }
 }
