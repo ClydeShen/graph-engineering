@@ -1444,3 +1444,32 @@ Component 接口必需 `render(width)=>string[]` + **`invalidate()`**(非可选,
 
 **验证**:typecheck 0;build smoke = runtime 建成 + chrome factory 加载无错(session_start hasUI
 守卫,-m 跳过);header 组件 render 结构预览正确。颜色/视觉布局待 TTY(NVIDIA BLOCK 同上)。
+
+### Build-out #12 — config-share provider 解析修复 + Gemini 兼容(2026-06-15)
+
+用户切到 Gemini 后 `memex chat` 报 `400 status code (no body)`。两层 bug,逐层修:
+
+**Fix 1 — baseUrl/api 按 provider 解析(不再硬编码 nvidia)**:`resolveCoreProvider` 原硬编码
+`api='openai-completions'` + `baseUrl ?? nvidia`,把 Gemini model 发到 **NVIDIA 端点** → 400。
+改为镜像 Core 自己的 `from-config.ts buildOne`:`resolveProfile(entry)` → `api=profile.api`,
+`baseUrl=entry.baseUrl ?? profile.baseUrl`,`apiKey=entry.apiKey ?? env[profile.envVar]`。
+验:resolveCoreProvider 现解析 gemini → `generativelanguage.googleapis.com/v1beta/openai` +
+openai-completions + GEMINI_API_KEY(不再 nvidia)。
+
+**Fix 2 — Gemini openai-compat compat shim**:修对端点后仍 400。抓 pi 实际请求(globalThis.fetch
+拦截)发现 pi-ai 发了 `"store"` 参数,Gemini 报 `Unknown name "store"`。根因:pi-ai `detectCompat`
+的非标准 provider 清单**不含 Gemini** → 当通用 OpenAI → `supportsStore:true` → 发 store。
+pi-ai 支持 model 级 `compat` 覆盖(openai-completions.js getCompat L957)。`compatFor(p)` 对
+baseUrl 含 generativelanguage 的注入 Gemini-safe compat(supportsStore/ReasoningEffort/DeveloperRole/
+StrictMode/LongCacheRetention:false + maxTokensField:'max_tokens')。验:**Gemini 纯对话活体通**("PONG")。
+
+**⚠ 上游限制(非我可修)——Gemini thinking 模型 + 工具**:agentic 路径(execute_bash)下,工具
+执行后的续请求 400:`Function call is missing a thought_signature in functionCall parts`。Gemini
+thinking 模型(gemini-2.5/3.5-flash)要求把响应里的 `extra_content.google.thought_signature` 在
+后续 assistant function_call 消息回传;**pi-ai 不做这个 Gemini 特有往返** → 工具用不了。
+bridge/models.json 无法修(在 pi-ai 消息序列化层)。**建议**:agentic 终端用 **NVIDIA qwen**
+(pi 原生全支持工具,之前 -m 全绿;本会话 NVIDIA 间歇不可达)或非 thinking 的 openai-compat 模型。
+Gemini 适合纯对话,工具用 qwen。
+
+**净结果**:config-share 现按 provider 正确解析端点(修了"什么 provider 都发去 nvidia"的真 bug);
+Gemini 纯对话可用;Gemini 工具受 pi-ai 上游 thought_signature 限制。

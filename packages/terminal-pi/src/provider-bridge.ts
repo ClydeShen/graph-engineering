@@ -22,7 +22,7 @@ import {
   type ToolDefinition,
   type ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
-import { loadMemexConfig } from '@graph/shared';
+import { loadMemexConfig, resolveProfile } from '@graph/shared';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,24 +31,51 @@ export interface CoreProvider {
   name: string;
   model: string;
   baseUrl: string;
-  /** Already ${ENV}-interpolated by loadMemexConfig (real key value). */
   apiKey: string;
-  /** OpenAI-compatible for NVIDIA/Ollama/most onboarded providers. */
   api: 'openai-completions' | 'anthropic-messages';
 }
 
-/** Read Core's highest-priority onboarded provider from ~/.memex/config.json. */
+/**
+ * Read Core's highest-priority onboarded provider from ~/.memex/config.json, and
+ * resolve api/baseUrl/apiKey EXACTLY as Core does (from-config.ts buildOne +
+ * resolveProfile) — never hardcode. The earlier hardcode (api='openai-completions',
+ * baseUrl ?? nvidia) sent e.g. a Gemini model to NVIDIA's endpoint → 400. Mirroring
+ * resolveProfile means each provider type (gemini → openai-compat at Google's
+ * baseUrl, anthropic → anthropic-messages, nvidia/ollama/openrouter → their own
+ * baseUrl) dials its real endpoint, just like the channel conversation core.
+ */
 export function resolveCoreProvider(): CoreProvider {
   const cfg = loadMemexConfig();
   const entries = cfg?.providers ?? [];
   if (entries.length === 0) throw new Error('no onboarded provider — run `memex onboard`');
   const e = [...entries].sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9))[0]!;
+  const profile = resolveProfile(e);
   return {
     name: e.name,
     model: e.model,
-    baseUrl: e.baseUrl ?? 'https://integrate.api.nvidia.com/v1',
-    apiKey: e.apiKey ?? '', // loader already interpolated ${NVIDIA_API_KEY}
-    api: 'openai-completions', // ADR-56 nvidia profile; Anthropic is the exception
+    baseUrl: e.baseUrl ?? profile.baseUrl ?? '',
+    apiKey: e.apiKey ?? (profile.envVar ? process.env[profile.envVar] ?? '' : ''),
+    api: profile.api,
+  };
+}
+
+/**
+ * pi-ai compat overrides for OpenAI-compat endpoints pi does NOT recognize as
+ * non-standard (its detectCompat list omits them), so it would send OpenAI-only
+ * params they reject. Gemini's openai endpoint 400s on `store` ("Unknown name
+ * store") — pi only sends it when compat.supportsStore is true (the default for
+ * unrecognized hosts). We force the Gemini-safe set; other providers (nvidia,
+ * ollama, openrouter…) are recognized by pi, so we leave compat unset for them.
+ */
+function compatFor(p: CoreProvider): Record<string, unknown> | undefined {
+  if (!p.baseUrl.includes('generativelanguage.googleapis.com')) return undefined;
+  return {
+    supportsStore: false, // the actual 400 culprit
+    supportsReasoningEffort: false,
+    supportsDeveloperRole: false, // Gemini uses the system role, not "developer"
+    supportsStrictMode: false,
+    supportsLongCacheRetention: false,
+    maxTokensField: 'max_tokens', // verified working against the Gemini endpoint
   };
 }
 
@@ -56,6 +83,7 @@ export function resolveCoreProvider(): CoreProvider {
 function writeModelsJson(p: CoreProvider): string {
   const dir = mkdtempSync(join(tmpdir(), 'memex-pi-'));
   const path = join(dir, 'models.json');
+  const compat = compatFor(p);
   writeFileSync(
     path,
     JSON.stringify({
@@ -77,6 +105,7 @@ function writeModelsJson(p: CoreProvider): string {
               // mid-stream (a truncated tool-call argument surfaces in pi-ai as
               // "Unexpected end of JSON input").
               maxTokens: 8192,
+              ...(compat ? { compat } : {}),
             },
           ],
         },
