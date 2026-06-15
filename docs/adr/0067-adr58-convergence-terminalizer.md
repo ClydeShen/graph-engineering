@@ -1,6 +1,6 @@
 # ADR-58 — Convergence terminalizer (happy-path task termination)
 
-- **Status**: Proposed (gates GH #29; blocks the faithful GH #24 A/B)
+- **Status**: Accepted (implemented + tested; GH #29)
 - **Date**: 2026-06-16
 - **Context source**: live-verified finding F-1 (see `.harness/implementation-notes-emergence-ab.md`)
 

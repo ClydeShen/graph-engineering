@@ -233,6 +233,18 @@ async function handleCompleteTask(pool: Pool, args: z.infer<typeof CompleteSchem
     payload: { ...result, status: 'completed' },
   });
 
+  // ADR-58: terminalize the task_spawned row so the scope can converge. The
+  // completion above only appends a memory_updated record; without this the
+  // task_spawned row stays 'processing'/'pending_scheduling' forever and the
+  // convergence SQL (which now counts task_spawned) never flips. Status is
+  // mutable metadata (not in the version_hash) — same append-safe UPDATE pattern
+  // as claim (→processing) and frontier cycle-kill (→terminated).
+  await pool.query(
+    `UPDATE execution_event_log SET status = 'terminated'
+     WHERE scope_id = $1 AND entity_id = $2 AND event_type = 'task_spawned'`,
+    [resolvedScopeId, task_id],
+  );
+
   return {
     content: [{ type: 'text' as const, text: JSON.stringify({ done: true }) }],
   };

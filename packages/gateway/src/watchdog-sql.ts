@@ -45,11 +45,21 @@ export async function checkSuspended(pool: Pool, scopeId: string): Promise<boole
  */
 export const INLINE_WATCHDOG_SQL = `
   SELECT
-    NOT EXISTS (
-      SELECT 1 FROM execution_event_log
-      WHERE scope_id = $1
-        AND status NOT IN ('terminated', 'archived')
-        AND event_type NOT IN ('scope_closed', 'conflict_detected')
+    (
+      -- ADR-58: a scope converges when every task it spawned is done. The
+      -- EXISTS guard means a scope that never spawned a task (a pure
+      -- conversation — ADR-54 records turns as memory_updated only) never
+      -- auto-converges, so chats are not closed after their first turn.
+      EXISTS (
+        SELECT 1 FROM execution_event_log
+        WHERE scope_id = $1 AND event_type = 'task_spawned'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM execution_event_log
+        WHERE scope_id = $1
+          AND event_type = 'task_spawned'
+          AND status NOT IN ('terminated', 'archived')
+      )
     ) AS is_converged,
     NOT EXISTS (
       SELECT 1 FROM execution_event_log
