@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "idle",
-    "started_at": "2026-06-14T14:00:00.000Z",
-    "last_session": "2026-06-14T18:00:00.000Z",
-    "last_active": "2026-06-14T18:00:00.000Z"
+    "status": "in_progress",
+    "started_at": "2026-06-15T03:00:00.000Z",
+    "last_session": "2026-06-15T01:30:00.000Z",
+    "last_active": "2026-06-15T03:00:00.000Z"
   },
   "position": {
-    "phase": "01-discuss",
-    "active": "设计大弧收口：MemexTerminal #25(五梁+Y) + workspace/artifact/persona #28(7决策,取代ADR-52) + console artifact #27。tracker #24-28 + ROADMAP §23 + 3 memory 全落盘。下个 session 意图 = design→plan→execute。",
+    "phase": "03-execute",
+    "active": "MemexTerminal Pi-embed (ADR-57) build-out 量产切片。Tracer + #1 provider-bridge + #2 C3 loop + #3 approval 已落 master (efa1817c..814f87c0)。当前切片 = 绑 execute_bash 真工具进 Pi（D-5 量产）。",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "fuller 收口 #28② 同名重建身份(B:不裁决/存标签/靠拓扑分簇)。残留设计=MemexTerminal X(工具执行+审批,未钻)+#28④Plugins页+落地细节。并行 DEV 轨(21-console authenticated embedding 活体验证)停在 .harness/phases/ui-console/.continue-here.json，未丢。"
+    "stopped_at": "build-out #4 绑 execute_bash 完成并提交：抽 runExecuteBash 共用函数（gateway/mcp/execute-bash.ts，MCP+Pi 两路共用消除漂移）+ Pi defineTool（只吃 command，scope 由 terminal 供）+ 审批 hook + run-exec-bash.mts。活体三连全绿（良性端到端落账本 / 危险 block / 裸 pi 内置 getActiveToolNames=[] 压制）。下一刀 = 修内嵌 embed 未与外部 ~/.pi 扩展隔离（spawn_task/complete_task 泄漏，buildSessionWithCoreBrain 关外部自动发现）。命名 A 方案/只动 terminal/pi-extension=BYO 不动 已记 memory。"
   }
 }

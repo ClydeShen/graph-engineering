@@ -20,11 +20,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { occWrite, checkCommand, projectFromCwd, recordScopeProject } from '@graph/shared';
+import { occWrite } from '@graph/shared';
 import { ZERO_HASH, AGENT_HEARTBEAT_TTL_S } from '@graph/shared';
 import {
   formatGuardReport,
@@ -42,27 +42,7 @@ import { ApprovalService } from '../security/approval.js';
 import { AskUserService } from '../security/ask-user.js';
 import { requestInstall, executeInstall, searchCapabilities } from '../security/acquisition.js';
 import { buildBrowserRunArgs } from '../security/browser-capability.js';
-import {
-  buildDockerRunArgs,
-  approvalRequiredForBackend,
-  resolveExecBackend,
-} from '../security/exec-backend.js';
-
-const SCRUB_KEYS = new Set([
-  'DATABASE_URL', 'LLM_API_KEY', 'GRAPH_RUNTIME_SECRET',
-  'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'DISCORD_PUBLIC_KEY',
-  // Phase 20: the vault KEK must never reach execute_bash subprocesses —
-  // with it, container/host code could unwrap every stored credential.
-  'MEMEX_VAULT_KEK', 'MEMEX_GATEWAY_TOKEN',
-]);
-
-function scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(env)) {
-    if (!SCRUB_KEYS.has(k)) out[k] = v;
-  }
-  return out;
-}
+import { runExecuteBash } from './execute-bash.js';
 
 // ── Zod primitives ──────────────────────────────────────────────────────────
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -470,131 +450,17 @@ export function buildMcpServer(pool: Pool): McpServer {
         }),
       },
       async ({ command, scope_id, predecessor_hash }) => {
-        const verdict = checkCommand(command);
-        const entityId = randomUUID();
-
-        // ADR-47 D-4: the backend decides containment. Fail-closed when docker is
-        // requested but unreachable — never silently run on the host, because the
-        // docker backend bypasses dangerous-pattern approval (contained commands
-        // can't reach the host; host exec with that bypass would be catastrophic).
-        const backend = await resolveExecBackend();
-        if (backend === null) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text' as const,
-                text:
-                  'BLOCKED: EXEC_BACKEND=docker but docker is unreachable. Refusing to fall ' +
-                  'back to host execution (fail-closed). Start docker or unset EXEC_BACKEND.',
-              },
-            ],
-          };
-        }
-
-        const gate = approvalRequiredForBackend(backend, verdict);
-        // (!verdict.allowed narrows the union; gate flags are only set when blocked.)
-        if (!verdict.allowed && (gate.blocked || gate.requiresApproval)) {
-          // Blocked-attempt audit — failures are first-class graph events.
-          try {
-            await occWrite(pool, {
-              scopeId: scope_id,
-              entityId,
-              predecessorHash: predecessor_hash,
-              eventType: 'memory_updated',
-              payload: { command, status: 'blocked', tier: verdict.tier, reason: verdict.reason, backend },
-            });
-          } catch {
-            // best-effort; must not suppress the block response
-          }
-          const msg = gate.blocked
-            ? `BLOCKED (hardline): ${verdict.reason}. Cannot execute.`
-            : `BLOCKED (requires approval): ${verdict.reason}. Use the graph runtime console to approve.`;
-          return { isError: true, content: [{ type: 'text' as const, text: msg }] };
-        }
-
-        // A dangerous command reaching here ran CONTAINED (docker bypassed approval
-        // because it cannot reach the host) — mark it in the trail.
-        const ranContained = backend === 'docker' && !verdict.allowed;
-
-        try {
-          let stdout: string;
-          let stderr: string;
-          if (backend === 'docker') {
-            const execFileAsync = promisify(execFile);
-            const args = buildDockerRunArgs(command, {
-              network: 'none', // execute_bash gets NO egress (contrast: browser=bridge)
-              ...(process.env['EXECUTE_BASH_IMAGE']
-                ? { image: process.env['EXECUTE_BASH_IMAGE'] }
-                : {}),
-            });
-            ({ stdout, stderr } = await execFileAsync('docker', args, {
-              timeout: 35000, // container spin-up + command
-              maxBuffer: 512 * 1024,
-            }));
-          } else {
-            // CONSOLE-REDESIGN §11.1: the local working folder is this scope's
-            // project. Record it (first-write-wins) so the Now universe clusters
-            // and the Workspace page groups by it. tmp/ephemeral cwd → no project.
-            const project = projectFromCwd(EXECUTE_BASH_CWD);
-            if (project) await recordScopeProject(pool, scope_id, project);
-            const execAsync = promisify(exec);
-            ({ stdout, stderr } = await execAsync(command, {
-              timeout: 30000,
-              maxBuffer: 512 * 1024,
-              cwd: EXECUTE_BASH_CWD,
-              env: scrubEnv(process.env),
-            }));
-          }
-          await occWrite(pool, {
-            scopeId: scope_id,
-            entityId,
-            predecessorHash: predecessor_hash,
-            eventType: 'memory_updated',
-            payload: {
-              command,
-              stdout,
-              stderr,
-              exit_code: 0,
-              backend,
-              ...(ranContained ? { tier: verdict.tier, approval_bypassed: true } : {}),
-            },
-          });
-          return {
-            content: [
-              { type: 'text' as const, text: JSON.stringify({ stdout, stderr, exit_code: 0, backend }) },
-            ],
-          };
-        } catch (err) {
-          const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };
-          if (typeof e.code === 'number') {
-            // Non-zero exit — record result, not an error
-            try {
-              await occWrite(pool, {
-                scopeId: scope_id,
-                entityId,
-                predecessorHash: predecessor_hash,
-                eventType: 'memory_updated',
-                payload: { command, stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code, backend },
-              });
-            } catch {
-              // best-effort
-            }
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: JSON.stringify({ stdout: e.stdout ?? '', stderr: e.stderr ?? '', exit_code: e.code, backend }),
-                },
-              ],
-            };
-          }
-          // Timeout or maxBuffer exceeded
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: e.message ?? String(err), backend }) }],
-          };
-        }
+        // Single implementation shared with the in-process Pi tool (ADR-57 D-5).
+        const result = await runExecuteBash(pool, {
+          command,
+          scopeId: scope_id,
+          predecessorHash: predecessor_hash,
+          cwd: EXECUTE_BASH_CWD,
+        });
+        return {
+          ...(result.isError ? { isError: true } : {}),
+          content: [{ type: 'text' as const, text: result.text }],
+        };
       },
     );
   }

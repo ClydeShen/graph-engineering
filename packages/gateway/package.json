@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./process-agent-turn": "./src/process-agent-turn.ts",
     "./conversation": "./src/conversation/core.ts",
-    "./security/approval": "./src/security/approval.ts"
+    "./security/approval": "./src/security/approval.ts",
+    "./mcp/execute-bash": "./src/mcp/execute-bash.ts"
   },
   "dependencies": {
     "@graph/control-plane": "*",

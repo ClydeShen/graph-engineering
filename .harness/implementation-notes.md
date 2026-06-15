@@ -1233,3 +1233,82 @@ Evidence:
 Realizes §9 intent ("see what state the work is in") natively: galaxy(channel) vs
 task geometry distinction + active/converged/closed/suspended material treatment.
 Executed via ui-ux-pro-max skill (user mandate). Text left-aligned.
+
+## 2026-06-15 — MemexTerminal Pi-embed build-out (ADR-57 / spike 009 / GH #25)
+
+X 梁（工具执行 + 审批表面）= 从现状到 Hermes-like agent 的唯一阻塞设计。授权后
+单弧动工，在 worktree `feat/memexterminal-pi-embed` 做完合并回 master（efa1817c..814f87c0）。
+**之前的 state/.continue-here 停在 01-discuss「X梁待授权」，已过时**——本次会话刷新对齐。
+
+**决议（fuller 会话，ADR-57 0066）**:
+- **R-A 库内嵌**:MemexTerminal = 基于 `@earendil-works/pi-coding-agent` 的进程，
+  in-process import MemexCore 函数，不走 MCP。
+- **C3 图为工作记忆**:每 turn 从图投影注入 Pi，turn 末冲回账本；Pi 持有的 message
+  list 从不是权威状态（Graph → Context 在 terminal 也成立）。
+- **脑 = config-share**（纠正 ADR-57 原 D-2 in-process 委托）:Core 的 `LLMProvider` 是
+  `chat(messages)→string`（非流式、非原生 tool-call），in-process 委托会让 Pi 丧失原生
+  tool-calling → 否决。正解 = 共享 Core provider **配置**（baseUrl/apiKey/model/api）→
+  写临时 models.json → pi ModelRegistry，Pi 直连同一 OpenAI 兼容 endpoint。
+- **审批** = `tool_call` hook → `ctx.ui.confirm`（TUI）/ CommandGate 策略（headless）
+  双写 `ApprovalService`，deny 返回 `{block:true}`；审计行是 SSOT，本地 confirm 是 UX 快路。
+
+**真 Pi API（读 dist/*.d.ts 核实，非 docs）**:嵌入入口 = `createAgentSessionServices` +
+`createAgentSessionFromServices({ noTools:'builtin', customTools, model })`；驱动 =
+`session.prompt(text)`；工具 = `defineTool({name,parameters:Type.Object,execute})`；
+hook = `ExtensionAPI.on("before_agent_start"|"agent_end"|"tool_call"|…)` 经
+`resourceLoaderOptions.extensionFactories` 注册。`before_agent_start`=per-user-prompt
+（kill-criterion 双绿），故注入点选它，冲回点选 `agent_end`（per-prompt，含整轮 messages[]）。
+
+**五根线活体验过**（各带 run-*.mts 证明，packages/terminal-pi/src/）:
+1. tracer(efa1817c) — 嵌入跑绿 + 触发粒度双绿。
+2. provider-bridge.ts / run-nvidia(2ec4861f) — config-share，真 NVIDIA qwen3.5 经 Pi 回复。
+3. run-c3.mts/run-ledger.mts/run-c3-loop.mts(9a809006..73f9d1ee) — 注入→冲回→闭环；
+   fresh session 从图召回 "teal" = Graph 即工作记忆。
+4. run-approval.mts(814f87c0) — 危险命令 hook block(executed=false) + approval_request
+   denied + requested/denied 双审计落账本。
+
+**用户锁定约束（本次会话）**:MemexTerminal **始终通过 `memex chat` 启动** → MemexTerminal
+(Pi-embed，现包 `@graph/terminal-pi`) 最终取代 `@graph/terminal` 瘦客户端成为 `memex chat`
+的实现，**非** `memex connect pi`。确认 ADR-57「後果」中 `terminal/index.ts` 的「`--agent`
+retired」注释作废、需改写。命名 A 方案：Pi-embed 终态升为规范短名 `@graph/terminal`（真 rename
+留到最终接线刀，需先到 REPL/`-m` 功能对等）；范围只动 terminal，不做全局 @graph→@memex。
+`pi-extension` = BYO（`memex connect pi`，含 fork+shadow 排练模式），不动，核心+shell 稳后统一处理。
+
+### Build-out line #4 — 绑真 execute_bash 进 Pi（D-5 量产第一步，2026-06-15）
+
+**做法（消除双实现漂移，ADR-57 後果）**:
+- 把 `server.ts` tool 8 内联的 execute_bash body 抽成 `gateway/src/mcp/execute-bash.ts`
+  的 `runExecuteBash(pool,{command,scopeId,predecessorHash,cwd?})` —— 容器化/CommandGate/
+  fail-closed/scrubEnv/账本写入全在一份里。MCP-over-HTTP tool 8 与 in-process Pi 两路**调
+  同一函数**。gateway 加 `./mcp/execute-bash` 子路径导出。
+- Pi 工具(`defineTool`)只吃 `{command}`,scopeId + predecessor tip 由 **terminal 闭包供**
+  (C3:图归 terminal 所有,不让模型供 scope)。审批 hook 复用 run-approval 那套。
+- 证明脚本 `terminal-pi/src/run-exec-bash.mts`。
+
+**execute_bash 的图语义**:每次调用 = 图中**一个新 Entity + 一个 Snapshot**(event_type=
+`memory_updated`,predecessor=当前 tip),非塞进已有点;被 block 的尝试同样产生独立点
+(失败是一等 trail 数据)。
+
+**活体三连全绿**(真 DB + 真 NVIDIA qwen3.5):
+1. 良性 `echo` 经 `runExecuteBash` 端到端 + 结果落账本(backend=local)。
+2. 危险命令审批门 block(run-approval.mts 已证)。
+3. **裸 pi 内置压制**:`session.getActiveToolNames()` = 实际开给模型的工具集(区别于
+   `getToolDefinition` 定义注册表 —— spike 残留把两者搞混,bash 是 defined-but-disabled)。
+   验得 `rawExposed=[]`(bash/read/edit/write 全关),只暴露 `execute_bash`。**enabled≠
+   registered 残留就此澄清并验证。**
+
+**pi 自带 bash vs Core execute_bash**:pi bash = 宿主裸逃逸(无门/无容器/无 scrubEnv/无留痕,
+vault KEK 会泄进子进程);Core execute_bash = CommandGate + docker network=none fail-closed +
+scrubEnv + occWrite 留痕 + 审批。两者并存会让模型绕开全部安全 → 必须压制 pi bash。
+
+### ⚠️ 待修(下一刀)——内嵌 embed 未与外部 `~/.pi` 扩展隔离
+
+活体发现:`getActiveToolNames()` = `["spawn_task","complete_task","execute_bash"]`。前两个
+是 **pi-extension(BYO)的工具**,根因 = 用户曾跑 `memex connect pi`,扩展装进
+`~/.pi/agent/extensions/graph-runtime/`,**内嵌 MemexTerminal 会话经 createAgentSessionServices
+自动发现并加载了 `~/.pi` 外部扩展**。
+- 安全不破(裸 bash 仍关;spawn_task/complete_task 只代理 gateway MCP,非宿主逃逸)。
+- 但**隔离破了**:embed 应只加载我们的 in-process factory,不该捞 `~/.pi` —— 正是「BYO 归 BYO」
+  要避免的串台。
+- **修法(下一刀)**:`buildSessionWithCoreBrain` 关掉外部 extension 自动发现(限定
+  resourceLoader 只用传入的 extensionFactories)。属 embed 隔离独立主题,不阻塞本刀。
