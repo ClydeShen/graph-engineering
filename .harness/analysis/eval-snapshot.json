@@ -1,14 +1,14 @@
 {
-  "taken_at": "2026-06-11T22:06:51.508Z",
+  "taken_at": "2026-06-14T23:43:31.145Z",
   "hit_rate": {
     "injections": 0,
     "successes": 0,
     "hitRate": null
   },
   "retention": {
-    "totalLessons": 2,
+    "totalLessons": 0,
     "reinforcedLessons": 0,
-    "retentionRatio": 0.5,
+    "retentionRatio": null,
     "avgReinforcement": 0
   },
   "compression": {

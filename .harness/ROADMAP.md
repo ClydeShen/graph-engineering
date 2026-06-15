@@ -834,7 +834,9 @@ Plans:
 
 ---
 
-## 23-memex-terminal 📋 待执行（设计定稿 2026-06-14，GH #25，权威 = memory `project_memex_terminal_design.md`）
+## 23-memex-terminal 🔄 弧已落地（设计定稿 2026-06-14，**实现 = ADR-57 Pi-embed，2026-06-15**，GH #25 仍开放）
+
+> **落地状态（2026-06-15，24 commits）：** `memex chat` 启动 Pi-embed MemexTerminal（库内嵌 `@earendil-works/pi-coding-agent`，**非 MCP** —— ADR-57 反转了下方梁 2「单应答者」为 per-surface 律）。已落：execute_bash + schedule_task（D-6）接线、审批门控、身份层（Observatory 主题 + header/footer + quietStartup）、provider bridge 修复 + Gemini agentic（undici.install 抗覆盖 fetch shim + thought_signature 往返，活体通）、TUI 打磨（graph-as-working-memory widget / outcome 面板 / `/graph` `/memory` 只读 overlay / execute_bash 折叠）。**epic #25 未关** —— 统一多模态信封协议、artifact 引用模型、完整 X 分支（工具执行+审批面）仍为后续切片。权威 = `docs/adr/0066-adr57-memexterminal-pi-embed.md`。
 
 **目标：** 把 MemexTerminal 从 v1 readline 聊天 REPL 升级为 Pi-SDK 构建的、类 Claude Code 的 TUI，后端大脑是图。取代 Phase 18 #6「MemexTerminal Pi-SDK agent 模式」的薄提，给出完整设计。
 

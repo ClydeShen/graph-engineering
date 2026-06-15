@@ -1,6 +1,6 @@
 # Project Snapshot — MemexOS
 
-> Generated 2026-06-14. Consolidated current-state across tracker / ADR / ROADMAP / docs / memory / code.
+> Generated 2026-06-15. Consolidated current-state across tracker / ADR / ROADMAP / docs / memory / code.
 > Regenerate when phase position or tracker state changes materially. This is a derived view — sources of truth are linked below.
 
 ## 1. Authority map (which source wins)
@@ -29,18 +29,18 @@
 | 20 autonomous-assistant | ✅ code-complete (ADR-53) — browser image/live journey remain |
 | 21 console-redesign | 🔄 batches 1–12 landed (682 tests); **remaining → GH #27** |
 | 22 workspace-project | 🔄 batch 3 partial; **remaining → GH #28** |
-| 23 memex-terminal | 📋 design locked (5 beams + Y); **→ GH #25**; X undrilled |
+| 23 memex-terminal | 🔄 **arc landed** (ADR-57 Pi-embed): `memex chat` launches the Pi-embed MemexTerminal — execute_bash + schedule_task wired, identity layer (theme/header/footer), provider bridge + Gemini agentic fixed (undici.install-survivable fetch shim), TUI polish (graph widget, outcome panel, /graph /memory overlays). **24 commits, epic #25 not closed** — multimodal envelope / artifact model / full X branch remain |
 | Post-1.0 | skill hardening (#26), multimodal I/O, host computer-use, Federated Trail Mesh, ACP, SSH backend |
 
-ADRs: through **ADR-56** (file `docs/adr/0065-adr56-provider-profile-registry.md`). Note filename offset: ADR-N lives in file `00(N+9)`.
-state.json position: `21-console-redesign` (onboarding+provider arc pushed, fd5fd7c7..4379761c).
+ADRs: through **ADR-57** (file `docs/adr/0066-adr57-memexterminal-pi-embed.md`). Note filename offset: ADR-N lives in file `00(N+9)`.
+state.json position: `03-execute` (MemexTerminal arc; 24 commits local on master).
 
 ## 3. Tracker — open issues (post-reconciliation 2026-06-14)
 
 | # | Title | Label | Notes |
 |---|---|---|---|
 | #24 | spike: A/B-validate the emergence loop (做实核心) | on-hold | PARKED — resume on user "freeze-ready" + live LLM |
-| #25 | epic: MemexTerminal 补强 (Pi-SDK Claude-Code-like TUI) | on-hold | 5 beams locked; X (tool exec+approval) undrilled; epic to slice |
+| #25 | epic: MemexTerminal 补强 (Pi-SDK Claude-Code-like TUI) | on-hold | **arc landed via ADR-57 Pi-embed** (24 commits): `memex chat` TUI, execute_bash + schedule_task, identity layer, Gemini agentic, /graph /memory overlays. Remaining: multimodal envelope, artifact model, send_message, full X branch |
 | #26 | icebox(post-1.0): skill hardening | on-hold | future vision; not to implement; downstream of #24 |
 | #27 | Phase 21 remaining: console write path + Now art + live verify | needs-review | appendix-A writes security-sensitive |
 | #28 | Phase 22 remaining: workspace/project deep integration | needs-review | §9 B-class decisions open |
@@ -57,11 +57,10 @@ state.json position: `21-console-redesign` (onboarding+provider arc pushed, fd5f
 ## 5. Standing live-verification debt (implemented, not live-verified)
 
 - Phase 18–20 live-host runs (WSL2/macOS/Linux install, docker containment inspect, browser image build, tennis-court journey).
-- Onboarding+provider: authenticated `/embeddings` round-trip unverified (awaiting user re-onboard NVIDIA).
-- Local blocker on record: Gemini key revoked / Ollama not installed (Console live test session).
+- Onboarding+provider: authenticated `/embeddings` round-trip — NVIDIA + BGE-M3 now reachable (doctor 0-fail, supersedes the Console-live-test block).
+- MemexTerminal: Gemini 3.5-flash agentic verified live (thought_signature round-trip via fetch shim, 27cee228); NVIDIA qwen agentic verified.
 - Policy: `feedback_live_verification_policy` (logic-done vs live-done).
 
 ## 6. Uncommitted working tree (at snapshot time)
 
-3 modified, unrelated to the above, pending commit/stash before any freeze (cf. #24 freeze workflow):
-`packages/cli/bin/memex.mjs`, `packages/console/src/lib/forest-universe.ts`, `packages/terminal/bin/memex-terminal.mjs`.
+Clean except harness checkpoint files (committed alongside this snapshot). **24 commits are local-only on `master`** (MemexTerminal arc) — pushed during this sync.
