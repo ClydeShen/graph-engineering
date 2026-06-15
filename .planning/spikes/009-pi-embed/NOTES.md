@@ -49,10 +49,37 @@
 6. `on("tool_call")` → `ctx.ui.confirm` 跑一次。
 7. 跑一轮,确认 1→6 端到端 + kill-criterion。绿 = 留作地基,转量产切片。
 
-## 残留未知
+## Tracer 结果（2026-06-15,`tracer.mjs` 实跑绿）
 
-- `[ASSUMPTION]` `before_agent_start` 粒度（= kill-criterion,步骤 4 验）。
-- `[ASSUMPTION]` `streamSimple` 签名能否干净包住 Core 的 `LLMProvider.chat/chatTurn`
-  接口（步骤 2 stub→real 验）。
-- coding-agent 自带 bash/edit/write 工具与 Core `execute_bash`（CommandGate+容器化）
-  的关系：是禁用自带 bash 只用 Core 的,还是让 Core 接管 backend?（量产期决策,非 tracer）。
+真 API 已核实（读 `dist/**/*.d.ts`,非 docs）:
+- 嵌入入口 = `createAgentSession({ noTools, customTools, sessionManager, model, modelRegistry })`
+  → `{ session: AgentSession }`(`core/sdk.ts`,有 `@example` 程序化用法)。
+- 驱动 = `session.prompt(text)` / `session.subscribe(listener)`。
+- 工具 = `defineTool({name,parameters:Type.Object,async execute(id,params)})` + `customTools[]`。
+- hook = `ExtensionAPI.on("before_agent_start"|"turn_start"|"turn_end"|"tool_call"|
+  "before_provider_request"|"agent_end"…)`(`extensions/types.d.ts`),in-process 注册
+  走 `loadExtensionFromFactory`。
+
+**kill-criterion = 双绿（类型 + 活体）**:
+- `BeforeAgentStartEvent` 注释逐字 "Fired after user submits prompt but before agent loop"
+  → **per-user-prompt**。`agent_end` 带 `messages[]` 亦 per-prompt。`turn_start/turn_end`
+  带 `turnIndex` = per-internal-turn。
+- `tracer.mjs` 实跑事件序列:`agent_start → turn_start → message_start/end ×2 → turn_end
+  → agent_end`(一条 prompt)。agent_* 括住整条 prompt,turn_* 是内部轮。**确认**。
+
+**ADR-57 精修（据活体）**:
+- 注入点 = extension `before_agent_start` handler(不在 `session.subscribe` 流里——它是
+  extension-runner 事件)；冲回点 = `agent_end`(per-prompt,含整轮 `messages[]`),比
+  `turn_end` 干净;`turn_end` 留作细粒度 trail。
+- `createAgentSession` 无 model/key 也跑完一轮(有默认兜底)——provider 接入是 build-out
+  的事,非阻塞。
+
+## 残留未知（移交 build-out,非 tracer 阻塞）
+
+- 安全抑制:`noTools:'builtin'` 后 `getToolDefinition('bash')` 仍非空(疑 enabled≠registered)。
+  build-out 要按**实际 enabled 工具集**核验 pi 裸 bash 真被关,只暴露 Core 容器化 `execute_bash`。
+- provider 接线:把 Core onboarded `LLMProvider` 包成 pi-ai `Model`/custom provider
+  (`registerProvider`/`streamSimple`),验流式。pi-ai 包布局异常(整仓发布),直接走
+  coding-agent 转出的 `ModelRegistry`/`getModel` 路径,勿深挖 pi-ai 内部。
+- C3 注入实体:`before_agent_start` handler 内调 Core `assembleContext`+history → 返回
+  `{ messages, systemPrompt }`;`agent_end` handler 内 `occWrite` 冲回。

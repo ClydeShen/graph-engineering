@@ -1,6 +1,6 @@
 # ADR 57｜MemexTerminal = Pi SDK 库内嵌（R-A）+ 图为工作记忆（C3）
 
-status: accepted（2026-06-15；fuller 会话拍板，docs 已结算 Pi 能力，tracer bullet 待验集成）
+status: accepted（2026-06-15；fuller 会话拍板，docs+真 .d.ts 已结算 Pi 能力，tracer bullet 实跑绿）
 日期: 2026-06-15
 
 ---
@@ -55,12 +55,17 @@ console 的脑,同一个。
 Pi 自持上下文、账本沦为 append-only log,会把 20+ Phase 建的 assembleContext /
 reflection 注入 / CCR / 晶化反哺 / capability endorsement 对 terminal 整体旁路）。
 
-- **跨 turn 上下文**由 Core 每轮从图投影,经 `before_agent_start` 注入 Pi 的起始
-  `messages` + `systemPrompt`（= 现 `runConversationTurn` 的 `loadConversationHistory`
-  + reflection/CCR,只是回路主人换成 Pi）。
+- **跨 turn 上下文**由 Core 每轮从图投影,经 extension `before_agent_start` handler
+  注入 Pi 的起始 `messages` + `systemPrompt`（= 现 `runConversationTurn` 的
+  `loadConversationHistory` + reflection/CCR,只是回路主人换成 Pi）。`before_agent_start`
+  注释逐字 "Fired after user submits prompt but before agent loop" → per-user-prompt,
+  正是重投影点（tracer 实跑确认:它是 extension-runner 事件,不在 `session.subscribe`
+  流里,注入必须走 extension handler）。
 - **turn 内** loop 状态（工具迭代、审批暂停）由 Pi 临时持有——本就是临时,无妨。
-- **整轮**经 `turn_end` 经 `occWrite` 写回账本。Pi「持有」的 message list 每轮被图
-  重新播种、再冲回图,**从不是权威状态**——是恰好活在 Pi 进程里的一份每轮投影。
+- **整轮**经 `agent_end`（per-prompt,带整轮 `messages[]`）经 `occWrite` 写回账本；
+  `turn_end`（per-internal-turn,带 `turnIndex`）留作细粒度 trail。Pi「持有」的
+  message list 每轮被图重新播种、再冲回图,**从不是权威状态**——是恰好活在 Pi 进程里
+  的一份每轮投影。
 
 这保住了 Memex 根本大法「Graph → Context, never Context = State」**在 terminal 也成立**。
 
