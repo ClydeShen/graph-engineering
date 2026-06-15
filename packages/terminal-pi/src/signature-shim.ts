@@ -26,6 +26,51 @@
 
 const SHIM_FLAG = Symbol.for('memex.signature-shim.installed');
 
+/** A 4xx whose body is empty — the case pi-ai misreads as a context overflow. */
+export function isBareBody(text: string): boolean {
+  return text.trim() === '';
+}
+
+/**
+ * A 4xx response carrying a descriptive body. pi-ai's isContextOverflow treats a
+ * bare "400/413 (no body)" as a context overflow (a Cerebras quirk) and runs a
+ * destructive compact-and-retry that fails with a misleading message. Giving the
+ * error a body — deliberately free of any overflow phrase — makes pi surface the
+ * real bad-request instead of looping on a phantom overflow.
+ */
+export function overflowSafeBadRequest(status: number): Response {
+  const body = JSON.stringify({
+    error: {
+      message:
+        `The model endpoint returned HTTP ${status} with no error body. This is a ` +
+        `bad request (often a transient endpoint hiccup, or an invalid message ` +
+        `sequence after history compaction) — not an oversized prompt. Retry, or ` +
+        `switch models if it persists.`,
+    },
+  });
+  return new Response(body, { status, headers: { 'content-type': 'application/json' } });
+}
+
+/** Debug: print the outgoing message structure (roles, tool_calls, signatures). */
+function dumpRequest(body: string, sigById: Map<string, unknown>): void {
+  try {
+    const p = JSON.parse(body) as { messages?: Array<Record<string, unknown>> };
+    const rows = (p.messages ?? []).map((m, i) => {
+      const role = m['role'];
+      const tcs = Array.isArray(m['tool_calls']) ? (m['tool_calls'] as Array<Record<string, unknown>>) : [];
+      const tcInfo = tcs.map((tc) => {
+        const id = String(tc['id'] ?? '?');
+        return `${id.slice(0, 8)}${tc['extra_content'] ? '+sig' : sigById.has(id) ? '~have' : '!nosig'}`;
+      });
+      const tcid = m['tool_call_id'] ? `→${String(m['tool_call_id']).slice(0, 8)}` : '';
+      return `${i}:${role}${tcInfo.length ? `[${tcInfo.join(',')}]` : ''}${tcid}`;
+    });
+    process.stderr.write(`\n[shim] req msgs: ${rows.join(' ')}\n`);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** A request whose path is the OpenAI-compatible chat endpoint (any provider). */
 function isChatCompletions(url: string): boolean {
   return url.includes('/chat/completions');
@@ -152,13 +197,36 @@ export function installSignatureShim(): void {
   if (typeof realFetch !== 'function') return;
   const sigById = new Map<string, unknown>();
 
+  const debug = !!process.env['MEMEX_SHIM_DEBUG'];
   const wrapped: typeof fetch = async (input, init) => {
     const url = urlOf(input);
     const isChat = isChatCompletions(url);
     if (isChat && init && typeof init.body === 'string') {
+      if (debug) dumpRequest(init.body, sigById);
       init = { ...init, body: injectExtraContent(init.body, sigById) };
     }
-    const res = await realFetch(input as Parameters<typeof fetch>[0], init);
+    let res = await realFetch(input as Parameters<typeof fetch>[0], init);
+
+    // Bare-4xx normalization: a 400/413 with an empty body is not a context
+    // overflow (pi-ai misclassifies it as one). The model request is idempotent
+    // (same messages), so retry once — recovers transient hiccups the OpenAI SDK
+    // won't retry for a 400 — then, if still bare, hand pi an honest error body.
+    if (isChat && (res.status === 400 || res.status === 413)) {
+      const text = await res.clone().text().catch(() => '');
+      if (isBareBody(text)) {
+        if (debug) process.stderr.write(`\n[shim] bare ${res.status} — retry once\n`);
+        res = await realFetch(input as Parameters<typeof fetch>[0], init);
+        if (res.status === 400 || res.status === 413) {
+          const retryText = await res.clone().text().catch(() => '');
+          if (isBareBody(retryText)) return overflowSafeBadRequest(res.status);
+        }
+      }
+    }
+
+    if (isChat && debug && !res.ok) {
+      const body = await res.clone().text().catch(() => '<unreadable>');
+      process.stderr.write(`\n[shim] ${res.status} body: ${body.slice(0, 800)}\n`);
+    }
     // Only tee the SSE stream; non-streaming responses (errors, key-tier probes)
     // pass through untouched.
     const isStream = res.headers.get('content-type')?.includes('text/event-stream') ?? false;

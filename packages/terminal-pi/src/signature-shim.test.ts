@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { injectExtraContent, harvestSseChunk } from './signature-shim.js';
+import { injectExtraContent, harvestSseChunk, isBareBody, overflowSafeBadRequest } from './signature-shim.js';
 
 /**
  * The signature round-trip is provider-agnostic: harvest whatever extra_content a
@@ -112,5 +112,36 @@ describe('injectExtraContent', () => {
   it('returns the body unchanged on non-JSON input', () => {
     const sigById = new Map<string, unknown>([['call_1', gemSig]]);
     expect(injectExtraContent('not json', sigById)).toBe('not json');
+  });
+});
+
+describe('bare-4xx normalization', () => {
+  it('detects an empty body (and whitespace-only) as bare', () => {
+    expect(isBareBody('')).toBe(true);
+    expect(isBareBody('   \n')).toBe(true);
+    expect(isBareBody('{"error":{}}')).toBe(false);
+  });
+
+  it('produces a 4xx response that carries a body', async () => {
+    const res = overflowSafeBadRequest(400);
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(text.length).toBeGreaterThan(0);
+    expect(JSON.parse(text).error.message).toContain('400');
+  });
+
+  it("the normalized message can't re-trigger pi-ai's overflow patterns", async () => {
+    const text = await overflowSafeBadRequest(400).text();
+    // The exact patterns from pi-ai/utils/overflow.js that a bare/oversized error would hit.
+    const overflowProbes = [
+      /\(no body\)/i,
+      /context[_ ]length[_ ]exceeded/i,
+      /exceeds (?:the )?(?:model'?s )?maximum context length/i,
+      /input token count.*exceeds the maximum/i,
+      /too many tokens/i,
+      /token limit exceeded/i,
+      /prompt is too long/i,
+    ];
+    for (const p of overflowProbes) expect(p.test(text)).toBe(false);
   });
 });
