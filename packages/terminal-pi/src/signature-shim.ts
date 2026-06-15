@@ -24,25 +24,7 @@
  * @see D:/Repo/specimens/hermes-agent/agent/transports/chat_completions.py
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 const SHIM_FLAG = Symbol.for('memex.signature-shim.installed');
-
-// TEMPORARY diagnostic: the TUI swallows stderr, so trace chat requests to a file
-// (~/.memex/shim.log). Lets us see whether the wrapped fetch actually processes a
-// request in the real InteractiveMode session. Remove once the bare-400 path is
-// confirmed.
-function shimLog(msg: string): void {
-  try {
-    const dir = join(homedir(), '.memex');
-    mkdirSync(dir, { recursive: true });
-    appendFileSync(join(dir, 'shim.log'), `${new Date().toISOString()} ${msg}\n`);
-  } catch {
-    /* best-effort */
-  }
-}
 
 /** A 4xx whose body is empty — the case pi-ai misreads as a context overflow. */
 export function isBareBody(text: string): boolean {
@@ -220,22 +202,14 @@ export function installSignatureShim(): void {
   const sigById = new Map<string, unknown>();
 
   const debug = !!process.env['MEMEX_SHIM_DEBUG'];
-  shimLog(`INSTALLED realFetch=${typeof realFetch}`);
   const wrapped: typeof fetch = async (input, init) => {
     const url = urlOf(input);
     const isChat = isChatCompletions(url);
-    shimLog(`CALL ${url.replace(/^https?:\/\//, '').split('?')[0] || `<${typeof input}>`} isChat=${isChat}`);
-    if (isChat) {
-      shimLog(`REQ ${url.replace(/^https?:\/\//, '').split('?')[0]} bodyLen=${typeof init?.body === 'string' ? init.body.length : typeof init?.body}`);
-    }
     if (isChat && init && typeof init.body === 'string') {
       if (debug) dumpRequest(init.body, sigById);
       init = { ...init, body: injectExtraContent(init.body, sigById) };
     }
     let res = await realFetch(input as Parameters<typeof fetch>[0], init);
-    if (isChat) {
-      shimLog(`RESP status=${res.status} ok=${res.ok} ctype=${res.headers.get('content-type') ?? ''}`);
-    }
 
     // Bare-4xx normalization: a 400/413 with an empty body is not a context
     // overflow (pi-ai misclassifies it as one). The model request is idempotent
@@ -243,17 +217,12 @@ export function installSignatureShim(): void {
     // won't retry for a 400 — then, if still bare, hand pi an honest error body.
     if (isChat && (res.status === 400 || res.status === 413)) {
       const text = await res.clone().text().catch(() => '');
-      shimLog(`4XX status=${res.status} bare=${isBareBody(text)} bodyLen=${text.length} body=${text.slice(0, 200)}`);
       if (isBareBody(text)) {
         if (debug) process.stderr.write(`\n[shim] bare ${res.status} — retry once\n`);
         res = await realFetch(input as Parameters<typeof fetch>[0], init);
-        shimLog(`RETRY status=${res.status}`);
         if (res.status === 400 || res.status === 413) {
           const retryText = await res.clone().text().catch(() => '');
-          if (isBareBody(retryText)) {
-            shimLog(`NORMALIZED ${res.status}`);
-            return overflowSafeBadRequest(res.status);
-          }
+          if (isBareBody(retryText)) return overflowSafeBadRequest(res.status);
         }
       }
     }
@@ -289,5 +258,4 @@ export function installSignatureShim(): void {
     },
   });
   g[SHIM_FLAG] = true;
-  shimLog(`ASSIGNED globalThis.fetch===wrapped? ${(globalThis as { fetch?: unknown }).fetch === wrapped}`);
 }
