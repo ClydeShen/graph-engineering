@@ -6,6 +6,8 @@
   "main": "src/provider-bridge.ts",
   "dependencies": {
     "@graph/shared": "*",
-    "@earendil-works/pi-coding-agent": "^0.79.3"
+    "@graph/control-plane": "*",
+    "@earendil-works/pi-coding-agent": "^0.79.3",
+    "pg": "*"
   }
 }
