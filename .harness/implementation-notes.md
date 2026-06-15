@@ -1517,3 +1517,49 @@ Verification:
   race in code I didn't touch. `vitest run --no-file-parallelism` → 782/782 green.
   My terminal-pi tests never fail; they're pure/stub (no DB), they only shifted
   parallel scheduling enough to expose the existing race.
+
+---
+
+## Code-quality / architecture sweep (2026-06-16, /goal autonomous)
+
+Driven by `/improve-codebase-architecture` (roam-precise) + a `/goal`. Baseline:
+793 tests green, roam health 6/100, worst cognitive complexity `buildMcpServer`=161.
+
+**Candidate #1 (shipped, 52cfd2ee) — deepen the MCP tool registry.** `buildMcpServer`
+was the #1 complexity hotspot: 13 tools inlined as nested handlers in one 161-cx
+function, unreachable for reuse → the Pi terminal re-declared execute_bash/
+schedule_task (the drift ADR-57 consequence #3 named). Split into `mcp/tools/`:
+each tool = a named top-level handler (own testable unit) + a factory binding it
+to a Pool. `buildMcpServer` is now a thin registration loop (cx ~3, off the
+critical list). Pattern validated against the **hermes specimen** (`tools/`
+registry decoupled from the dispatch loop). Behaviour byte-for-byte preserved;
+order preserved; env-gated tools (execute_bash/browser) return null when disabled.
+Dropped the vestigial `ZERO_HASH` re-export (no consumers).
+
+**Candidate #3 (shipped, 3e3767a5) — conservative dead-code sweep.** Deleted the
+last orphan tracer proof `run-exec-bash.mts` + unused `renderBar`. Did NOT chase
+roam's 80-dead-export list: hand-verification found false positives (`graphSignature`
+IS used by the canvases — roam missed the `.tsx` imports), test-only seams, and
+latent-unwired features (`DiscordConnector`, `recordConfigChange`) whose deletion
+would silently remove capability. Verify-before-cut discipline.
+
+**Candidate #2 (shipped, 71060fe4) — terminal de-dup, decision = NO rename now.**
+`@graph/terminal` (thin readline) still earns its keep as the `npm run dev`
+foreground + non-agentic conversation-core probe; the terminal-pi → @graph/terminal
+rename stays a deliberate move gated on REPL/-m parity (per memory), not forced
+under an autonomous goal. Cleaned only the real friction: stale USER_MANUAL §9
+entry (`npx tsx packages/terminal/...` → `memex chat`) + the `--agent` guard
+message (pre-ADR-57 `memex connect pi` → `memex chat`).
+
+**Candidate #4 (deferred, documented) — test-only exports.** ~32 exports exist
+only as test seams (implementation leaking past the interface). Lowest-confidence,
+needs per-export judgement; mass-touching 32 seams under a no-regression goal is
+the churn KISS/YAGNI warns against. Handle opportunistically when touching each
+module, not as a sweep.
+
+**Verification (goal exit criteria).** tsc 0 · full suite 793/793 serial (== baseline,
+zero regression) · roam confirms `buildMcpServer` off the critical list · live E2E
+acceptance journey 11/11 green against a fresh gateway booted from current source
+(incl. acquisition gate + ask_user round-trip = the refactored autonomy tools'
+services; ADR-49 regression gate vs the 2026-06-14 snapshot passed with zero metric
+drift). New code runs completely and stably.
