@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./process-agent-turn": "./src/process-agent-turn.ts",
-    "./conversation": "./src/conversation/core.ts"
+    "./conversation": "./src/conversation/core.ts",
+    "./security/approval": "./src/security/approval.ts"
   },
   "dependencies": {
     "@graph/control-plane": "*",

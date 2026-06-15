@@ -114,6 +114,15 @@ schedule_task）在 `tool_call` hook 拦截:本地 `ctx.ui.confirm()` 插进聊�
 approval_*` 审计事件 + 可经 DeliveryRouter 跨渠道回声）。本地 confirm 是 UX 快路径,
 `ApprovalService` 是审计权威——两者不互斥,审计行是 SSOT。
 
+**实测绿（2026-06-15,`run-approval.mts`）**：`tool_call` hook 拦截 gated `shell_exec`
+（execute_bash stand-in）→ `checkCommand` 判 `rm -rf …` 为 block → `ApprovalService.
+request`（双写#1:approval_request 行 + `approval_requested` 审计）→ 决策（无 TUI 时
+落 CommandGate 策略 deny;TUI 时 `ctx.ui.confirm`）→ `ApprovalService.decide`（双写#2:
+`approval_denied` 审计）→ 返回 `{ block:true }`。验证:`executed=false`(命令从未跑) +
+`approval_request.status='denied'` + 审计事件 requested/denied 双双落 `execution_event_log`。
+gateway 新增子路径导出 `./security/approval`。残留:`ctx.ui.confirm` 的真 TUI 路径需活体 TUI
+验（headless 走策略 fallback）;session/always 决策记忆;两个新工具 send_message/schedule_task（D-6）。
+
 ### D-5：分两段交付——骨架(tracer) 先,量产(tool-binding) 后
 
 - **tracer bullet（本弧）**:Pi 嵌入 + D-2 `streamSimple` 跑通一轮 + 绑 **1 个**最简
