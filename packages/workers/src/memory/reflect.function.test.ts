@@ -136,6 +136,73 @@ describe('memReflect', () => {
     expect(result.content).toContain('## Procedural Memory');
   });
 
+  // ── GH #24: emergence-loop injection toggle ────────────────────────────────
+
+  it('inject_procedural:false skips procedural + anti tiers but keeps episodic/semantic', async () => {
+    const captured: string[] = [];
+    const pool = makePool((sql) => {
+      captured.push(sql);
+      // These rows WOULD be injected if the procedural tier ran — assert it does not.
+      if (sql.includes('is_anti_pattern = TRUE')) {
+        return Promise.resolve({ rows: [{ id: 'neg-1', intent_description: 'should be skipped' }] });
+      }
+      if (sql.includes('procedural_memory')) {
+        return Promise.resolve({
+          rows: [{ id: 'pos-1', intent_description: 'should be skipped', template_graph: { version: 1 }, rrf_score: 0.9 }],
+        });
+      }
+      if (sql.includes('episodic_memory')) {
+        return Promise.resolve({
+          rows: [{ id: 'e1', intent_summary: 'kept', outcome_summary: 'still here', rrf_score: 0.8 }],
+        });
+      }
+      if (sql.includes('semantic_memory')) {
+        return Promise.resolve({ rows: [{ id: 's1', content: 'semantic kept', rrf_score: 0.7 }] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const embed = makeEmbed();
+
+    const result = await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+      inject_procedural: false,
+    });
+
+    // Procedural tier fully suppressed — no injection, no proceduralIds.
+    expect(result.sections.procedural).toBe('');
+    expect(result.sections.antiPatterns).toBe('');
+    expect(result.proceduralIds).toEqual([]);
+    expect(result.content).not.toContain('## Procedural Memory');
+    expect(result.content).not.toContain('## Anti-Patterns');
+    // Episodic/semantic retrieval unchanged.
+    expect(result.content).toContain('kept');
+    expect(result.content).toContain('semantic kept');
+    // The procedural + anti SQL must never have been issued.
+    expect(captured.some((s) => s.includes('procedural_memory'))).toBe(false);
+    expect(captured.some((s) => s.includes('is_anti_pattern = TRUE'))).toBe(false);
+  });
+
+  it('inject_procedural defaults to true (procedural tier runs when omitted)', async () => {
+    const captured: string[] = [];
+    const pool = makePool((sql) => {
+      captured.push(sql);
+      return Promise.resolve({ rows: [] });
+    });
+    const embed = makeEmbed();
+
+    await memReflect(pool, embed, {
+      query_text: 'test',
+      trigger_type: 'cold_start',
+      w_max: 5000,
+      scope_id: 'scope-1',
+    });
+
+    expect(captured.some((s) => s.includes('procedural_memory'))).toBe(true);
+  });
+
   it('anti-pattern query filters correlation_confidence=low and uses BM25 only', async () => {
     const captured: string[] = [];
     const pool = makePool((sql) => {

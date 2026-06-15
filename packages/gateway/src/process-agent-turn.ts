@@ -35,7 +35,7 @@ import {
 } from '@graph/shared';
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
 import { insertWorkingMemory } from '@graph/workers/memory/working-memory';
-import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
+import { recordTemplateInjection, penalizeInjectedTemplates } from '@graph/workers/memory/template-injection';
 
 /**
  * Extract a short, retrieval-relevant string from an event payload for mem::reflect's
@@ -54,6 +54,17 @@ function extractQueryText(payload: unknown): string {
   }
   const json = JSON.stringify(payload);
   return json.length > 500 ? json.slice(0, 500) : json;
+}
+
+/**
+ * Emergence-loop injection switch (GH #24). Reads MEMEX_INJECT_PROCEDURAL as a
+ * deployment config flag at call time. OFF only for the explicit `0`/`false`
+ * values; everything else (including unset) is ON, so production and existing
+ * tests are unaffected. Also useful for hardening debug / production triage.
+ */
+function proceduralInjectionEnabled(): boolean {
+  const v = process.env.MEMEX_INJECT_PROCEDURAL;
+  return v !== '0' && v !== 'false';
 }
 
 export type AgentEventInput = z.infer<typeof EventBodySchema>;
@@ -173,6 +184,11 @@ export async function processAgentTurn(
           trigger_type: triggerType,
           w_max: wMax,
           scope_id: scopeId,
+          // Emergence-loop injection toggle (GH #24). Deployment config read at
+          // this single seam (mirrors CONTEXT_W_MAX): MEMEX_INJECT_PROCEDURAL=0
+          // disables the procedural+anti tiers so the A/B can run an OFF arm.
+          // Unset/anything-but-0/false → ON (production behaviour unchanged).
+          inject_procedural: proceduralInjectionEnabled(),
         } satisfies MemReflectInput);
         context.reflectionContent = reflection.content;
         context.reflectionTokens = reflection.tokens;
@@ -200,6 +216,15 @@ export async function processAgentTurn(
         LOG_EVENTS.CONTEXT_OOM,
       );
       await writeContextOomThrottled(pool, scopeId);
+      // Reinforcement-loop failure side (GH #24): the scope is being suspended —
+      // it failed to converge within budget. Penalize the templates injected
+      // into it (failure_count+1), the symmetric negative of converged closure's
+      // success_count+1. Best-effort: a penalty failure must not mask the OOM.
+      try {
+        await penalizeInjectedTemplates(pool, scopeId);
+      } catch {
+        /* penalty is a metric correction, never a reason to alter the OOM return */
+      }
       return { suspended: false, version_hash, occ_result, context: null };
     }
     logger.child({ component: 'gateway', scope_id: scopeId }).warn(

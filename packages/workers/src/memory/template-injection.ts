@@ -40,3 +40,36 @@ export async function recordTemplateInjection(
 
   return { recorded: rows.length };
 }
+
+/**
+ * Penalize the templates injected into a scope that terminated WITHOUT
+ * converging (GH #24). Symmetric to TemplateProposalWorker's converged-closure
+ * reinforcement (`success_count + 1`): when a scope is suspended (ADR-39
+ * context-OOM lockout — it failed to reach convergence within budget), the
+ * templates that were injected into it get `failure_count + 1`.
+ *
+ * This closes the unfalsifiable hitRate: `eval-metrics.ts →
+ * trailDiscoveryHitRate = Σsuccess_count / Σinjection_count` could only ever
+ * rise because nothing wrote failure_count (CLAUDE.md §5 Proxy Signal). With a
+ * negative outcome path the metric becomes non-monotonic and Popper-falsifiable.
+ *
+ * Standalone pool function (like recordTemplateInjection) so the Gateway can
+ * call it from the suspension branch without a MemoryRepository.
+ *
+ * Near-idempotent by construction: once a scope is suspended, processAgentTurn's
+ * checkSuspended short-circuits every later turn, so the suspension branch — and
+ * thus this call — fires at most once per scope.
+ */
+export async function penalizeInjectedTemplates(
+  pool: Pool,
+  scopeId: string,
+): Promise<{ penalized: number }> {
+  const { rowCount } = await pool.query(
+    `UPDATE procedural_memory
+     SET failure_count = failure_count + 1,
+         last_used_at = NOW()
+     WHERE id IN (SELECT template_id FROM template_injection WHERE scope_id = $1)`,
+    [scopeId],
+  );
+  return { penalized: rowCount ?? 0 };
+}

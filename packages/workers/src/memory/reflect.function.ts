@@ -27,6 +27,14 @@ export interface MemReflectInput {
    * Omitted → only shared/global rows are visible.
    */
   principal?: string;
+  /**
+   * Emergence-loop injection toggle (GH #24). When false, the procedural +
+   * anti-pattern tiers are skipped entirely; episodic/semantic retrieval is
+   * unchanged. Isolates the Phase 10 trail-discovery loop (template recall →
+   * injection → reinforcement) so its causal effect on events-to-convergence
+   * can be measured. Default true (production behaviour unchanged).
+   */
+  inject_procedural?: boolean;
 }
 
 /**
@@ -461,18 +469,30 @@ export async function memReflect(
   // anonymous request sees only shared/global rows.
   const principal = input.principal ?? '';
 
+  // Steps 1 + 1b — Procedural tier (positive templates + anti-patterns). This
+  // is the emergence-loop injection surface; the GH #24 toggle gates exactly
+  // these two steps, leaving episodic/semantic (steps 2–3) untouched.
+  const injectProcedural = input.inject_procedural ?? true;
+
   // Step 1 — Procedural (positive templates, three-signal rerank)
-  const procRows = degraded
-    ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
-    : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
-  const { text: procText, ids: proceduralIds } = formatProcedural(procRows, budget);
+  let procText = '';
+  let proceduralIds: string[] = [];
+  if (injectProcedural) {
+    const procRows = degraded
+      ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
+      : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
+    ({ text: procText, ids: proceduralIds } = formatProcedural(procRows, budget));
+  }
   const pTokens = countTokens(procText);
 
   // Step 1b — Anti-patterns (negative injection, Phase 10): slotted directly after
   // positive procedural in the truncation order — both are procedural-tier content.
   // (Already BM25-only by design — anti-pattern rows carry no intent_embedding.)
-  const antiRows = await searchAntiPatterns(pool, input.query_text, 2, principal);
-  const antiText = formatAntiPatterns(antiRows, Math.max(0, budget - pTokens));
+  let antiText = '';
+  if (injectProcedural) {
+    const antiRows = await searchAntiPatterns(pool, input.query_text, 2, principal);
+    antiText = formatAntiPatterns(antiRows, Math.max(0, budget - pTokens));
+  }
   const aTokens = countTokens(antiText);
 
   // Step 2 — Episodic
