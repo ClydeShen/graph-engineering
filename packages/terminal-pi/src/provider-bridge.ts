@@ -102,18 +102,22 @@ export const EMBED_RESOURCE_ISOLATION = {
 } as const;
 
 /**
- * Resolve Core's onboarded provider into a Pi ModelRegistry + Model (config-share,
- * D-2). Shared by buildSessionWithCoreBrain (proof scripts) and the MemexTerminal
- * runtime factory (terminal.ts) so both dial the same brain the same way.
+ * Resolve Core's onboarded provider into a Pi ModelRegistry (config-share, D-2).
+ * Shared by buildSessionWithCoreBrain and the MemexTerminal runtime factory
+ * (terminal.ts) so both dial the same brain the same way. The Model is resolved
+ * by the caller via resolveCoreModel() (its type — pi-ai's Model — can't be
+ * named in an exported signature, so it stays local to each caller).
  */
-export function buildCoreModelRegistry() {
+export function buildCoreModelRegistry(): {
+  core: CoreProvider;
+  authStorage: AuthStorage;
+  modelRegistry: ModelRegistry;
+} {
   const core = resolveCoreProvider();
   const authStorage = AuthStorage.create();
   const modelRegistry = ModelRegistry.create(authStorage, writeModelsJson(core));
   modelRegistry.refresh();
-  const model = modelRegistry.find(core.name, core.model);
-  if (!model) throw new Error(`${core.name}/${core.model} not in registry: ${modelRegistry.getError() ?? '?'}`);
-  return { core, authStorage, modelRegistry, model };
+  return { core, authStorage, modelRegistry };
 }
 
 /**
@@ -130,7 +134,9 @@ export async function buildSessionWithCoreBrain(opts: {
    */
   extensionFactories?: ExtensionFactory[];
 } = {}) {
-  const { core, authStorage, modelRegistry, model } = buildCoreModelRegistry();
+  const { core, authStorage, modelRegistry } = buildCoreModelRegistry();
+  const model = modelRegistry.find(core.name, core.model);
+  if (!model) throw new Error(`${core.name}/${core.model} not in registry: ${modelRegistry.getError() ?? '?'}`);
 
   const services = await createAgentSessionServices({
     cwd: opts.cwd ?? process.cwd(),

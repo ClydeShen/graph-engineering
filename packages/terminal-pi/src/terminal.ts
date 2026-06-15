@@ -274,7 +274,9 @@ export async function createMemexTerminalRuntime(opts: {
   const { pool, scopeId } = opts;
   const cwd = opts.cwd ?? process.cwd();
   const agentDir = memexAgentDir();
-  const { authStorage, modelRegistry, model } = buildCoreModelRegistry();
+  const { core, authStorage, modelRegistry } = buildCoreModelRegistry();
+  const model = modelRegistry.find(core.name, core.model);
+  if (!model) throw new Error(`${core.name}/${core.model} not in registry: ${modelRegistry.getError() ?? '?'}`);
 
   const factories: ExtensionFactory[] = [makeC3Factory(pool, scopeId), makeApprovalFactory(pool, scopeId)];
   const tools = makeCoreTools(pool, scopeId, cwd);
