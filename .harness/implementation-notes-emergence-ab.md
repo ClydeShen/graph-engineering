@@ -51,5 +51,63 @@ Even if suspension is a coarse failure proxy, it cannot bias the events-to-conve
 ## Scaffolding (kept as regression eval OR deleted — decided at landing)
 - trap-task fixture + A/B runner
 
+## ⚠ BLOCKER FINDING (F-1) — convergence has no happy-path terminalizer
+
+While designing the trap-task runner I traced the convergence mechanics end to end
+and hit a structural problem that gates the A/B's dependent variable
+(events-to-convergence).
+
+Convergence SQL (identical in `watchdog-sql.ts` inline gateway path AND
+`control-plane/watchdog.ts` Tier 3):
+```
+is_converged = NOT EXISTS (row WHERE status NOT IN ('terminated','archived')
+                              AND event_type NOT IN ('scope_closed','conflict_detected'))
+```
+
+But the status lifecycle of agent-written events is:
+- every OCC write defaults `status='pending_scheduling'` (migration 002:60; occWrite
+  never sets status, the CTE omits the column)
+- `claim_next_task` sets the task_spawned row → `'processing'` (core.ts:36)
+- `complete_task` writes a NEW memory_updated row → default `'pending_scheduling'`
+
+Exhaustive grep for terminal-status transitions on execution_event_log across all
+packages finds only THREE writers of `status='terminated'/'archived'`:
+1. `frontier.worker.ts:155` — terminates **cycle-detected** tasks only (error path)
+2. the `scope_closed` INSERT itself (the closure event row, not the task rows)
+3. `handleContextOom` → `'suspended'` (the failure path artifact #2 hooks)
+
+⟹ There is **no happy-path step that terminalizes a completed task**. A scope that
+spawns any subtask leaves a `processing` task_spawned row + a `pending_scheduling`
+memory_updated row, both non-terminal and non-(closed/conflict). So
+`is_converged` stays FALSE forever and the watchdog never emits `scope_closed`.
+
+Consequence for #24: the success side of the emergence loop
+(`scope_closed → TemplateProposalWorker → reinforceTemplate → success_count+1`)
+may **never fire in normal multi-task operation** — a deeper instance of the same
+Proxy-Signal class as the failure_count gap. No test in the repo drives a scope to
+convergence end-to-end (all either mock `checkConvergence` or stop at complete_task),
+which is consistent with this.
+
+Confidence: HIGH — now LIVE-VERIFIED. `scripts/eval/ab-convergence-probe.ts`
+(in-process gateway buildApp vs graph_test) drove a scope through
+plan_created → spawn → claim → complete and queried the convergence SQL at each
+step. Result:
+```
+[after plan_created (no subtasks)]  is_converged=false  plan_created=pending_scheduling
+[after spawn_subtask]               is_converged=false  +task_spawned=pending_scheduling
+[after claim_next_task]             is_converged=false   task_spawned=processing
+[after complete_task]               is_converged=false   +memory_updated=pending_scheduling
+```
+Even an EMPTY scope (plan_created only) never converges — plan_created itself
+stays `pending_scheduling`. No happy-path event reaches a terminal status, so the
+convergence SQL is unsatisfiable for any scope created via the standard
+gateway + MCP path. The success side of the emergence loop does not fire here.
+
+Implication: the A/B "events-to-convergence" dependent variable cannot be
+instrumented faithfully until either (a) the missing terminalizer is found, or (b)
+this is confirmed as a real architectural gap and a happy-path task-termination
+step is added. The two permanent artifacts are unaffected and stand on their own.
+
 ## Open / deferred
 - Whether the trap fixture stays on the board as a regression (issue HITL note) — decide at step 6.
+- F-1 must be resolved before the live A/B (task #4) can run.
