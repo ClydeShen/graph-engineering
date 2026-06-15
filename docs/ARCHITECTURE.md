@@ -207,7 +207,10 @@ The MCP server (`/mcp`, `/mcp/messages`) implements the MCP Streamable HTTP 2025
 `WebStandardStreamableHTTPServerTransport` (stateless — fresh transport per request). SSE at
 `/mcp/sse` carries availability signals only (no task content).
 
-Eight tools are registered (tool 8 conditional on `EXECUTE_BASH_ENABLED=true`):
+Tools live in a registry (`mcp/tools/` — `core.ts`, `autonomy.ts`, `exec.ts`); `buildMcpServer`
+loops it and registers each enabled tool. Two are env-gated (`execute_bash` →
+`EXECUTE_BASH_ENABLED`, `browser` → `MEMEX_BROWSER_ENABLED`) and skipped when their flag is unset.
+Trust gating (which principal may call which tool) happens at the HTTP `/mcp` route, not here.
 
 | Tool | Description |
 |---|---|
@@ -218,7 +221,12 @@ Eight tools are registered (tool 8 conditional on `EXECUTE_BASH_ENABLED=true`):
 | `wait_all_tasks` | Poll until all specified task UUIDs reach a terminal status (`completed`/`done`) or timeout. Returns `{ timed_out, completed, pending }`. |
 | `register_agent` | Upsert an external AgentCard into `agent_registry` (`ON CONFLICT DO UPDATE` refreshes heartbeat). Returns `{ registered: agent_id }`. |
 | `query_context` | Return the most recent N events for a `scope_id`. |
-| `execute_bash` | Execute a shell command (requires `EXECUTE_BASH_ENABLED=true`). Gated by `CommandGate` (hardline and dangerous commands blocked). Writes result as `memory_updated` audit event. |
+| `execute_bash` | Execute a shell command (env-gated `EXECUTE_BASH_ENABLED`). Gated by `CommandGate` (hardline and dangerous commands blocked). Shared impl with the in-process Pi terminal (ADR-57). Writes result as `memory_updated` audit event. |
+| `ask_user` | Ask the human a free-form question; returns `question_id` immediately. Poll `ask_user_status`. Silence (10 min) = `timed_out`. (ADR-53) |
+| `ask_user_status` | Check an `ask_user` question: `pending` \| `answered` (+answer) \| `timed_out`. |
+| `capability_search` | Search installable capabilities (presets + skill registries) for an ability the agent lacks. (ADR-51) |
+| `capability_install` | Two-phase install: first call files a human approval (guard scan in the body) and returns `approval_id`; re-call with `approval_id` to execute. An agent cannot grant itself authority. (ADR-53) |
+| `browser` | Controlled browser action inside an isolated container (`navigate` \| `read` \| `fill` \| `click` \| `screenshot`); env-gated `MEMEX_BROWSER_ENABLED`. Screenshots are saved as artifacts (ADR-52). |
 
 ---
 
