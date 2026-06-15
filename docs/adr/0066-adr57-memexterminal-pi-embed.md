@@ -86,6 +86,15 @@ reflection 注入 / CCR / 晶化反哺 / capability endorsement 对 terminal 整
   message list 每轮被图重新播种、再冲回图,**从不是权威状态**——是恰好活在 Pi 进程里
   的一份每轮投影。
 
+**注入机制实测绿（2026-06-15,真 LLM）**：in-process `ExtensionFactory` 经
+`createAgentSessionServices({ resourceLoaderOptions:{ extensionFactories } })` 注入。
+`before_agent_start` 往 systemPrompt 注入一段哨兵投影（`The user's project codename is
+ORCHID-7`）,问 nvidia qwen3.5"项目代号是什么"→ 回 `ORCHID-7`（它只可能从注入知道）
+→ **投影确实到达 Pi 的脑**;`before_agent_start` 触发 1 次（per-user-prompt）;
+`agent_end` 抓到整轮 `messages[]`（回写料够）。见 `packages/terminal-pi/src/run-c3.mts`。
+build-out 残留 = 把哨兵 stand-in 换成真 `assembleContext(graph,scopeId)`+history,把
+`agent_end` 的 log 换成真 `occWrite`（需 pool + scope,gateway 持有）。
+
 这保住了 Memex 根本大法「Graph → Context, never Context = State」**在 terminal 也成立**。
 
 ### D-4：审批 = `tool_call` hook → `ctx.ui.confirm` 双写 `ApprovalService`

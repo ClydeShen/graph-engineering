@@ -20,6 +20,7 @@ import {
   ModelRegistry,
   AuthStorage,
   type ToolDefinition,
+  type ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
 import { loadMemexConfig } from '@graph/shared';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -90,6 +91,11 @@ function writeModelsJson(p: CoreProvider): string {
 export async function buildSessionWithCoreBrain(opts: {
   customTools?: ToolDefinition[];
   cwd?: string;
+  /**
+   * C3 hooks (ADR-57 D-3): in-process extensions that inject the graph
+   * projection at before_agent_start and flush the turn at agent_end.
+   */
+  extensionFactories?: ExtensionFactory[];
 } = {}) {
   const core = resolveCoreProvider();
   const authStorage = AuthStorage.create();
@@ -102,6 +108,7 @@ export async function buildSessionWithCoreBrain(opts: {
     cwd: opts.cwd ?? process.cwd(),
     authStorage,
     modelRegistry,
+    ...(opts.extensionFactories ? { resourceLoaderOptions: { extensionFactories: opts.extensionFactories } } : {}),
   });
   const { session } = await createAgentSessionFromServices({
     services,
