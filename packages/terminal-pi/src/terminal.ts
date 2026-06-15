@@ -270,6 +270,13 @@ function makeCoreTools(pool: Pool, scopeId: string, cwd: string): ToolDefinition
         isError: result.isError,
       };
     },
+    // Show the command being run, so a terse result ("exit 3") is never mysterious.
+    renderCall: (args, theme) => ({
+      render(width: number): string[] {
+        return [safeLine(`${theme.fg('toolTitle', '$')} ${theme.fg('text', args.command)}`, width, '…')];
+      },
+      invalidate(): void {},
+    }),
     // Collapse long output to a short preview by default (ctrl+o expands) — the
     // model still gets the full text in context; only the DISPLAY is trimmed, so
     // a `dir`/`curl` dump doesn't flood the chat. Custom tools have no preview
