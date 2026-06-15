@@ -67,11 +67,6 @@ export function wrapVisibleText(text: string, width: number): string[] {
   );
 }
 
-/** A horizontal rule across the width. */
-export function renderBar(theme: ThemeLike, width: number, color = 'borderMuted'): string {
-  return safeLine(theme.fg(color, '─'.repeat(Math.max(0, width))), width, '');
-}
-
 /** Key-hint footer: "↑↓ scroll · esc close". */
 export function renderKeyHints(theme: ThemeLike, hints: string[], width: number): string {
   return safeLine(theme.fg('dim', hints.filter(Boolean).join('  ·  ')), width);
