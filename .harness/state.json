@@ -1,15 +1,15 @@
 {
   "version": "1.1",
   "session": {
-    "status": "in_progress",
+    "status": "idle",
     "started_at": "2026-06-15T03:00:00.000Z",
-    "last_session": "2026-06-15T01:30:00.000Z",
-    "last_active": "2026-06-15T03:00:00.000Z"
+    "last_session": "2026-06-15T06:30:00.000Z",
+    "last_active": "2026-06-15T06:30:00.000Z"
   },
   "position": {
     "phase": "03-execute",
-    "active": "MemexTerminal (Pi-embed, ADR-57) 弧收口（自主 GOAL 完成）。D-1~D-5 全实现+活体；D-6 schedule_task 实现/send_message 延后；embed 隔离修复；memex chat 接线 terminal-pi。typecheck 0 + 726 测试零回归 + 完整 agentic journey 活体。",
+    "active": "MemexTerminal 身份层(主题/header/footer/quietStartup)落成并视觉确认。config-share provider 解析真 bug 修复(硬编码 nvidia → resolveProfile per-provider)+ Gemini compat shim(纯对话通)。下一任务 = fork pi-ai 补 Gemini thought_signature 往返(provider-agnostic, 参考 hermes specimen)。",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "MemexTerminal 弧收口（commits 68c057a3..44475114）：embed 隔离 / 组装真终端(terminal.ts+index.ts, InteractiveMode DRY) / memex chat→terminal-pi / schedule_task(D-6) / 删取代 proof+typecheck 0。全测试 726 passed 零回归; 完整 agentic journey 活体(写文件→读回→报告,落盘+落 trail)。剩余: interactive TTY 活体 / send_message 专门切片(channel 依赖) / A-plan 最终 rename(terminal-pi→@graph/terminal)。"
+    "stopped_at": "身份层 commits 979ea11b..ec64b9de(Observatory 主题 + 品牌 header/footer + quietStartup,用户截图视觉确认)。provider bridge commit 1af378d7:resolveCoreProvider 镜像 from-config(修'所有 provider 都发去 nvidia'真 bug)+ Gemini openai-compat compat shim(supportsStore:false 等,纯对话活体通'PONG')。Gemini thinking 模型工具调用受 pi-ai 不回传 thought_signature 上游限制(下一任务 fork)。"
   }
 }

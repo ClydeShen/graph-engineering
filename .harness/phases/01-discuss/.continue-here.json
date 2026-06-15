@@ -4,32 +4,36 @@
   "task": 1,
   "total_tasks": 1,
   "status": "in_progress",
-  "last_updated": "2026-06-15T03:00:00.000Z",
-  "current_state": "MemexTerminal Pi-embed (ADR-57 / spike 009 / GH #25) build-out 进行中。前序状态文件停在 01-discuss（X梁待授权），已过时——X梁授权后已动工并合并 master。已落 build-out 线：tracer(efa1817c) + #1 provider-bridge config-share(2ec4861f) + #2 C3 loop 注入/冲回/闭环(9a809006..73f9d1ee) + #3 approval tool_call 双写(814f87c0)。五根线（脑/工具/注入/冲回/审批）端到端通，run-*.mts 全绿。当前切片 = D-5 量产第一步：绑真 execute_bash 进 Pi。",
+  "last_updated": "2026-06-15T06:30:00.000Z",
+  "current_state": "MemexTerminal (Pi-embed) 弧 + 身份层落成。本会话:embed 隔离修复、组装真终端(terminal.ts InteractiveMode DRY)、memex chat→terminal-pi、schedule_task(D-6)、Observatory 主题+品牌 header/footer+quietStartup(用户截图视觉确认生效)、config-share provider 解析真 bug 修复 + Gemini compat shim(纯对话活体通)。下一任务 = fork pi-ai 补 Gemini thought_signature 往返,且要 provider-agnostic(用户随时切任意模型,thinking 或非)。",
   "completed_work": [
-    "ADR-57 落档 0066（R-A 库内嵌 + C3 图为工作记忆）e5ba6385",
-    "tracer: pi-coding-agent 嵌入跑绿，kill-criterion 确认 before_agent_start=per-user-prompt (efa1817c)",
-    "build-out #1: provider-bridge.ts config-share 借 Core 脑（纠正 ADR-57 D-2 in-process 委托）2ec4861f",
-    "build-out #2: C3 注入(processAgentTurn+assembleContext) → 冲回(occWrite) → 闭环(fresh session 从图召回) 9a809006..73f9d1ee",
-    "build-out #3: approval tool_call hook 双写 ApprovalService + block on deny 814f87c0"
+    "embed 隔离(EMBED_RESOURCE_ISOLATION,不吸收 ~/.pi)— commit (master, 早于 68c057a3)",
+    "组装真 MemexTerminal:terminal.ts(createMemexTerminalRuntime:脑/C3/工具/审批/隔离)+ index.ts(-m / InteractiveMode TUI)— 68c057a3",
+    "memex chat dispatch → @graph/terminal-pi + 改写瘦客户端过时注释 — 798f8dee",
+    "D-6 schedule_task(图原生 upsertCronJob,审批门控)— 1ad3480b",
+    "删取代的 5 个 tracer proof + 修不可移植返回类型 → typecheck 全工作区 0 — 44475114",
+    "审批只对危险命令 confirm + maxTokens 4096→8192 — 9c7140a3",
+    "Observatory 主题(memex-theme.json 51-token)+ SettingsManager.inMemory 注入 — 979ea11b",
+    "品牌 header(✦ banner)+ footer status(makeChromeFactory) — d2fa7ee8",
+    "quietStartup 关启动噪音 — ec64b9de(用户截图确认 header/footer/主题视觉生效)",
+    "config-share provider 解析修复:resolveCoreProvider 镜像 from-config(resolveProfile)+ Gemini compat shim — 1af378d7(Gemini 纯对话活体通)"
   ],
-    "[下一刀] 修内嵌 embed 未与外部 ~/.pi 扩展隔离：活体发现 getActiveToolNames 含 pi-extension 的 spawn_task/complete_task（用户曾跑 memex connect pi，~/.pi/agent/extensions/graph-runtime 被自动发现加载）。安全不破但隔离破，BYO 串台。修法=buildSessionWithCoreBrain 关外部 extension 自动发现，限定 resourceLoader 只用传入 factories。详见 implementation-notes",
-    "[已完成] 绑 execute_bash: 抽 runExecuteBash 共用函数 + Pi defineTool + 审批 hook + run-exec-bash.mts。活体三连全绿，已提交",
-    "绑 scope create/resume/switch（管 session）",
-    "补两个 Hermes-parity 工具 send_message(channel)/schedule_task(when)，仅 terminal agentic profile，channel 永不获得（ADR-54/Phase14 红线）",
-    "13 个 MCP tool handler 从 buildMcpServer 抽独立函数，in-process Pi 与 MCP-over-HTTP 共用一份消除漂移",
-    "ctx.ui.confirm 真 TUI 路径活体验 + session/always 决策记忆",
-    "artifact 流式产物落文件（ADR-52 路径）",
-    "最终接线: terminal-pi 成为 `memex chat` 实现（取代 @graph/terminal 瘦客户端）；改写 terminal/index.ts 「--agent retired」过时注释",
-    "补 implementation-notes terminal-pi build-out 段"
+  "remaining_work": [
+    "[下一任务-用户指令] fork pi-ai 补 Gemini thought_signature 往返:Gemini thinking 模型(2.5/3.5-flash)工具调用要求把响应里 extra_content.google.thought_signature 在后续 assistant function_call 消息回传;pi-ai 不做 → 工具用不了(Function call is missing a thought_signature)。位置在 pi-ai 消息序列化(node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/openai-completions.js,getCompat/buildParams 附近)",
+    "[关键约束] 必须 provider-agnostic / 自适应:用户随时切任意可用模型(thinking 或非 thinking)。不要 Gemini 硬编码。先看 hermes specimen(D:\\Repo\\specimens\\hermes-agent)怎么处理 provider 切换 + thinking 模型 + 签名往返",
+    "fork 策略待定:patch node_modules(脆)/ vendor pi-ai 分叉 / 上游 PR / 或在 bridge 层用 fetch shim 截获响应存 thought_signature 再在请求注回(provider-agnostic shim,可能比 fork 轻)",
+    "NVIDIA qwen 恢复后:完整 agentic 活体验收(工具/journey)+ 视觉 TUI 确认主题全貌",
+    "send_message(D-6 另一半,channel 依赖)+ A-plan 最终 rename(terminal-pi→@graph/terminal)+ 消息间距(需 fork InteractiveMode,已知不做)"
   ],
   "decisions_made": [
-    "config-share 取代 in-process 委托（Core LLMProvider 非流式/非原生 tool-call，会让 Pi 丧失原生 tool-calling）",
-    "execute_bash 抽共用函数让两路（MCP-HTTP + in-process Pi）调同一份，避免双实现漂移（ADR-57 後果）",
-    "Pi execute_bash 工具只吃 {command}，scopeId+predecessor_hash 由 terminal 绑定供（C3 模型：scope 归 terminal 所有，不让模型供）",
-    "用户锁定：MemexTerminal 始终通过 `memex chat` 启动 → terminal-pi 最终取代 @graph/terminal 瘦客户端，非 memex connect pi（确认 ADR-57 後果中 --agent retired 注释作废）"
+    "身份层 = identity layer over pi(主题+header/footer extension),不自研 TUI 渲染器(ADR-57 DRY,用户 AskUserQuestion 确认)",
+    "消息垂直间距:pi 不暴露(registerMessageRenderer 仅 custom 类型)→ 不 fork InteractiveMode;靠主题 per-message bg 分隔",
+    "config-share 必须镜像 Core 的 from-config 解析,不硬编码任何 provider(本会话修的真 bug 根源)",
+    "Gemini 纯对话靠 compat shim 可用;Gemini 工具受 pi-ai 上游限制,agentic 建议用 qwen —— 但用户要求 fork 让 Gemini 工具也能用 + provider-agnostic"
   ],
-  "blockers": [],
-  "context": "权威设计 = docs/adr/0066-adr57-memexterminal-pi-embed.md + .planning/spikes/009-pi-embed/NOTES.md + memory project_memexterminal_pi_embed_adr57。代码在 packages/terminal-pi/src/（provider-bridge.ts + run-*.mts）。真 execute_bash 在 packages/gateway/src/mcp/server.ts L456-600（EXECUTE_BASH_ENABLED gate + resolveExecBackend 容器化 fail-closed）。引擎栈/DB 需在跑（run-*.mts 连真 DATABASE_URL）。",
-  "next_action": "绑 execute_bash：1) 新建 packages/gateway/src/mcp/execute-bash.ts 抽 runExecuteBash + scrubEnv/SCRUB_KEYS；2) server.ts tool 8 改调它（证无漂移）；3) terminal-pi 新建 exec-bash 工具 defineTool 调 runExecuteBash + 复用 approval hook；4) run-exec-bash.mts 验证良性命令跑通 + 危险命令被审批 block。"
+  "blockers": [
+    "NVIDIA endpoint 本会话间歇不可达(直连 curl 超时)→ qwen 完整 agentic 活体 + 视觉 TUI 全貌验证部分 BLOCKED(状态会变,下会话重测)"
+  ],
+  "context": "权威设计=docs/adr/0066-adr57-memexterminal-pi-embed.md + .harness/implementation-notes.md(build-out #4~#12)。代码=packages/terminal-pi/src/{terminal.ts,index.ts,provider-bridge.ts} + memex-theme.json。provider 解析参考=packages/shared/src/llm/from-config.ts(buildOne)+ provider-profiles.ts(resolveProfile)。pi-ai compat=node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/openai-completions.js(detectCompat/getCompat L900-975)。memory: project_terminal_identity_and_provider_bridge + project_memexterminal_arc_complete + project_channel_hermes_deep_dive(hermes 参考)。typecheck 0 + 726 测试零回归(本会话前)。引擎栈/DB 需在跑。",
+  "next_action": "读 hermes specimen(D:\\Repo\\specimens\\hermes-agent)看其 provider 切换 + thinking 模型 + thought_signature 处理,据此设计 provider-agnostic 方案补 Gemini(及任意 thinking 模型)的签名往返;评估 fetch-shim(截响应存签名→请求注回)vs fork pi-ai 两条路,选轻者。"
 }
