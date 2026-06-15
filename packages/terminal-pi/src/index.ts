@@ -71,6 +71,12 @@ async function scopeTipId(pool: pg.Pool, scopeId: string): Promise<number> {
 
 async function main(): Promise<void> {
   loadDotEnv();
+  // Hermetic embed: suppress pi's startup network operations — the "Update
+  // Available" / "Package Updates" banners, remote tool downloads, and install
+  // telemetry. PI_OFFLINE only gates pi-coding-agent's startup; the model API
+  // path (pi-ai) has no such check, so config-share keeps reaching the provider.
+  // Overridable: an explicit PI_OFFLINE (shell or .env) wins.
+  if (process.env['PI_OFFLINE'] === undefined) process.env['PI_OFFLINE'] = '1';
   const pool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
 
   const singleMessage = argValue('-m') ?? argValue('--message');
