@@ -73,7 +73,10 @@ function writeModelsJson(p: CoreProvider): string {
               input: ['text'],
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
               contextWindow: 128000,
-              maxTokens: 4096,
+              // Headroom so a long reply + a tool-call JSON aren't truncated
+              // mid-stream (a truncated tool-call argument surfaces in pi-ai as
+              // "Unexpected end of JSON input").
+              maxTokens: 8192,
             },
           ],
         },

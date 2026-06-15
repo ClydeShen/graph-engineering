@@ -169,17 +169,28 @@ function makeApprovalFactory(pool: Pool, scopeId: string): ExtensionFactory {
   return (pi) => {
     pi.on('tool_call', async (event: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> => {
       if (!GATED_TOOLS.has(event.toolName)) return undefined;
-      // execute_bash carries a command → safety gate (CommandGate). Other gated
-      // tools (schedule_task) are autonomy-gated, not safety-gated: headless they
-      // proceed (the local operator consented by scripting the run); in a TUI the
-      // human confirms either way. The audit row is written regardless (SSOT).
-      const isCommand = event.toolName === 'execute_bash';
-      const subject = isCommand
-        ? String((event.input as { command?: unknown }).command ?? '')
-        : `${event.toolName} ${JSON.stringify(event.input)}`;
-      const headlessOk = isCommand ? checkCommand(subject).allowed : true;
+
+      if (event.toolName === 'execute_bash') {
+        // Safety gate (CommandGate). Benign commands run WITHOUT a confirm dialog
+        // — matching the MCP path and -m, and keeping the interactive stream
+        // free of a prompt on every echo/date/ls. runExecuteBash still records
+        // every run to the ledger and independently enforces CommandGate (defense
+        // in depth). Only dangerous commands file an approval and gate.
+        const command = String((event.input as { command?: unknown }).command ?? '');
+        if (checkCommand(command).allowed) return undefined;
+        const approvalId = await approvals.request(scopeId, 'mcp-agent', command);
+        const approved = ctx.hasUI ? await ctx.ui.confirm('Approve dangerous command?', command) : false;
+        await approvals.decide(approvalId, approved, 'once');
+        if (!approved) return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
+        return undefined;
+      }
+
+      // Autonomy-gated tools (schedule_task): always file an approval. In a TUI the
+      // human confirms; headless the local operator consented by scripting. The
+      // audit row is the SSOT either way.
+      const subject = `${event.toolName} ${JSON.stringify(event.input)}`;
       const approvalId = await approvals.request(scopeId, 'mcp-agent', subject);
-      const approved = ctx.hasUI ? await ctx.ui.confirm('Approve action?', subject) : headlessOk;
+      const approved = ctx.hasUI ? await ctx.ui.confirm('Approve action?', subject) : true;
       await approvals.decide(approvalId, approved, 'once');
       if (!approved) return { block: true, reason: `denied by approval ${approvalId.slice(0, 8)}` };
       return undefined;
