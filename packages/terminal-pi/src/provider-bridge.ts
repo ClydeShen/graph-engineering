@@ -26,6 +26,7 @@ import { loadMemexConfig, resolveProfile } from '@graph/shared';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { installSignatureShim } from './signature-shim.js';
 
 export interface CoreProvider {
   name: string;
@@ -145,6 +146,11 @@ export function buildCoreModelRegistry(): {
   authStorage: AuthStorage;
   modelRegistry: ModelRegistry;
 } {
+  // Install the provider-agnostic thinking-model signature round-trip before any
+  // model call. Idempotent; this is the shared chokepoint for both the runtime
+  // factory (terminal.ts) and buildSessionWithCoreBrain, so Gemini (and any other
+  // provider that needs extra_content echoed) works the moment a session starts.
+  installSignatureShim();
   const core = resolveCoreProvider();
   const authStorage = AuthStorage.create();
   const modelRegistry = ModelRegistry.create(authStorage, writeModelsJson(core));
