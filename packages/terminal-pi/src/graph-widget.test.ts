@@ -43,22 +43,25 @@ describe('buildWidgetLines', () => {
     expect(lines[0]).not.toContain('turns');
   });
 
-  it('small is one dense line with brand, scope and counts', () => {
+  it('small is one dense line with brand, session and counts in plain language', () => {
     const lines = buildWidgetLines(theme, 80, base, 'small');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('memex');
+    expect(lines[0]).toContain('session');
     expect(lines[0]).toContain('3d2e981e');
     expect(lines[0]).toContain('12');
-    expect(lines[0]).toContain('events');
+    expect(lines[0]).toContain('in memory');
   });
 
-  it('full (no lesson) is three lines: rule, status, hints', () => {
+  it('full (no lesson) is three lines: rule, session, labeled commands', () => {
     const lines = buildWidgetLines(theme, 80, base, 'full');
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain('memex'); // header rule
-    expect(lines[1]).toContain('3d2e981e'); // status
-    expect(lines[1]).toContain('turns');
-    expect(lines[2]).toContain('/density'); // hints
+    expect(lines[1]).toContain('session'); // plain-language status
+    expect(lines[1]).toContain('3d2e981e');
+    expect(lines[1]).toContain('exchanges');
+    expect(lines[2]).toContain('/density'); // command
+    expect(lines[2]).toContain('history'); // its plain-word label
   });
 
   it('never repeats the model label (footer owns it)', () => {

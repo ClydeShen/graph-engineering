@@ -64,34 +64,39 @@ export function buildWidgetLines(
   const brand = theme.bold(theme.fg('accent', `${GLYPH.brand} memex`));
   const scopeGlyph = statusGlyph(theme, snap.status === 'active' ? 'active' : 'idle');
   const statusWord = theme.fg(snap.status === 'active' ? 'success' : 'dim', snap.status);
-  const counts = `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'turns')} ${dot} ${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'events')}`;
+  // Plain language — the panel is for users, not graph engineers. "session" not
+  // raw scope id, "exchanges" not "turns", "in memory" not "events".
+  const session = `${scopeGlyph} ${theme.fg('dim', 'session')} ${theme.fg('text', short)} ${statusWord}`;
+  const counts = `${theme.fg('text', String(snap.turns))} ${theme.fg('dim', 'exchanges')} ${dot} ${theme.fg('text', String(snap.events))} ${theme.fg('dim', 'in memory')}`;
   const chip = approvalsChip(theme, snap.pendingApprovals);
+  // Command + a one-word meaning (nav-label pattern: never a bare command name).
+  const cmd = (name: string, label: string): string => `${theme.fg('muted', name)} ${theme.fg('dim', label)}`;
   const clamp = (lines: string[]): string[] => lines.map((l) => safeLine(l, width, '…'));
 
-  // MIN — brand + scope, nothing else.
+  // MIN — brand + session, nothing else.
   if (density === 'min') {
-    return clamp([`${brand} ${dot} ${theme.fg('text', short)}`]);
+    return clamp([`${brand} ${dot} ${theme.fg('dim', 'session')} ${theme.fg('text', short)}`]);
   }
 
-  // SMALL — one dense line: brand + scope + status + counts (+ chip).
+  // SMALL — one dense line: brand + session + counts (+ chip).
   if (density === 'small') {
-    const parts = [brand, `${scopeGlyph} ${theme.fg('text', short)} ${statusWord}`, counts];
+    const parts = [brand, session, counts];
     if (chip) parts.push(chip);
     return clamp([parts.join(` ${dot} `)]);
   }
 
-  // FULL — header rule + status, the latest lesson (only if any), command hints.
+  // FULL — header rule + session, the latest lesson (only if any), labeled commands.
   const lines = [ruleWithTitle(theme, width)];
-  const statusParts = [`${scopeGlyph} ${theme.fg('text', short)} ${statusWord}`, counts];
+  const statusParts = [session, counts];
   if (chip) statusParts.push(chip);
   lines.push(' ' + statusParts.join(` ${dot} `));
   if (snap.lastLesson) {
-    const head = ` ${theme.fg('accent', GLYPH.action)} `;
+    const head = ` ${theme.fg('accent', GLYPH.action)} ${theme.fg('dim', 'learned')} `;
     const tail = `  ${theme.fg('dim', `(${snap.lastLesson.confidence.toFixed(2)})`)}`;
     const room = Math.max(8, width - visibleWidth(head) - visibleWidth(tail) - 1);
     lines.push(head + theme.fg('text', firstLine(snap.lastLesson.content, room)) + tail);
   }
-  lines.push(` ${theme.fg('dim', '/density')} ${dot} ${theme.fg('dim', '/graph')} ${dot} ${theme.fg('dim', '/memory')}`);
+  lines.push(` ${cmd('/graph', 'history')} ${dot} ${cmd('/memory', 'lessons')} ${dot} ${cmd('/density', 'detail')}`);
   return clamp(lines);
 }
 
