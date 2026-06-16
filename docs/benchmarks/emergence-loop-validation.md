@@ -28,10 +28,15 @@ forever. A targeted fix — crystallize the **corrected** optimal order that avo
 observed mistakes, not the path taken — makes the curve **decline**: the agent makes
 the non-obvious mistake exactly once (run 1: 26 events), then is optimal on every run
 thereafter (runs 2–10: 24 events, zero gate failures). **越用越聪明 holds end-to-end,
-once crystallization distills corrected structure rather than the trajectory.** The
-work also surfaced and fixed two latent defects (an unfalsifiable success metric and a
-missing convergence terminalizer) that had silently prevented the loop's success path
-from firing at all — the prerequisite that made this measurement possible.
+once crystallization distills corrected structure rather than the trajectory.**
+Scaled to 18 steps with six counter-intuitive quirks, the effect grows (13%) and
+learning still emerges, though it becomes gradual and plateaus one quirk short of
+optimal — the loop learns most of the hidden structure, not all. A methodological
+corollary: effect size tracks *genuinely hidden* structure, not task size — quirks
+that match a strong model's training priors produce no effect and nothing to learn.
+The work also surfaced and fixed two latent defects (an unfalsifiable success metric
+and a missing convergence terminalizer) that had silently prevented the loop's success
+path from firing at all — the prerequisite that made this measurement possible.
 
 ## 1. Introduction
 
@@ -211,13 +216,77 @@ first-third **24.7** → last-third **24.0**. The system measurably got smarter 
 priori. **越用越聪明 holds end-to-end, once crystallization distills the corrected
 structure rather than replaying the executed trajectory.**
 
+### 5.5 Scaled validation: 18 steps, 6 quirks — and what "hidden" really means
+
+To test robustness we scaled the task to **18 steps** with **6 non-obvious
+prerequisites** (a microservice with CI/CD + observability). The first attempt
+produced a sharp methodological finding:
+
+- **Quirks that match standard practice are not hidden to a strong model.** Our
+  first six quirks were realistic-but-conventional CI/CD rules (lint-before-build,
+  scan-the-image, test-in-container). gpt-oss-120b inferred *all* of them from
+  training: the OFF (uninjected) arm hit **zero** gate failures (38 events, same as
+  ON). There was nothing to learn because there was no structure the model did not
+  already have. **Effect size is a function of genuinely hidden structure, not task
+  size.**
+- We redesigned the six quirks to **reverse** intuition — project-specific rules a
+  model's priors actively mislead it on: `db_schema` after `write_api` (schema
+  derived from the API), `lint` after `write_tests`, `security_scan` before the
+  build, `run_migrations` after `run_tests`, `setup_monitoring` after `deploy`.
+  Now the model's natural CI/CD order violates them.
+
+**A/B (8 reps/arm) with the counter-intuitive quirks:**
+
+| arm | events | gate failures / run | recall |
+|---|---|---|---|
+| ON  | 38.3 ± 0.7 [38–40] | 0.1 | 100% |
+| OFF | 43.5 ± 3.4 [38–48] | 2.8 | — |
+
+Δ = **12%** — double the 11-step DAG's 6%, confirming the effect grows with hidden
+structure. ON is near-perfect (one of eight runs slipped a single failure); OFF
+averages 2.8 gate failures with high variance (some runs trip 5 of the 6 reversed
+rules, one got lucky at 0). The model still infers part of the order, so the effect
+is the size of the *truly* counter-intuitive subset.
+
+**Learning curve (10 runs, full loop):**
+
+| run | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| events | 46 | 46 | 48 | 42 | 40 | 40 | 40 | 42 | 40 | 40 |
+| gate failures | 4 | 4 | 5 | 2 | 1 | 1 | 1 | 2 | 1 | 1 |
+
+first-third **46.7** → last-third **40.7** — **13% improvement** (larger than the
+11-step DAG's, as expected: more genuinely-hidden structure). Gate failures fall
+from 4–5 (cold) to a steady 1. The loop scales — **but the learning here is gradual
+and partial, not the clean step function of §5.4**:
+
+- It does **not** reach the injected optimum (38 events / 0 failures). It plateaus
+  near **40 with one residual gate failure**. The system learns *most* of the six
+  reversed rules, not all of them.
+- The descent spans several runs (notably runs 1–4) rather than snapping after one,
+  because crystallizing a clean corrected order over **six** reversed constraints —
+  and recall mixing an accumulating set of partial templates — is a harder
+  distillation than the single-quirk case.
+
+This is the honest scaled result: **越用越聪明 holds and the magnitude grows with
+hidden structure (13% > the small-DAG effect), but at higher complexity the
+autonomous loop captures most of the hidden structure, not all — learning is real,
+measurable, and incremental rather than perfect.** A precise next target for L2:
+consolidate the accumulating partial templates so recall delivers one clean
+corrected runbook rather than a mixture.
+
 ## 6. Threats to validity
 
-- **Model capability.** A strong model infers most of the DAG, so the effect
-  concentrates on the non-obvious quirks; effect size scales with the density of
-  hidden structure, not with whether the loop works. (Established earlier on a toy
-  trap whose severity, when dialed from a recoverable 1-step mistake to a
-  catastrophic one, moved the effect from ~7% to "OFF cannot finish at all".)
+- **Model capability — effect ∝ hidden structure, not task size.** A strong model
+  infers most of a DAG, so the measurable effect is exactly the subset of structure
+  it could *not* have known. This is demonstrated directly (§5.5): an 18-step DAG
+  whose quirks matched standard CI/CD practice produced **zero** effect (the model
+  inferred all of them); only when the quirks were redesigned to *reverse* the
+  model's priors did the effect (and the learning curve) reappear, larger than the
+  small DAG's. A null result is therefore not evidence the loop fails — it can mean
+  the task held no structure worth learning. (Also established on a toy trap whose
+  severity, dialed from a recoverable 1-step mistake to a catastrophic one, moved
+  the effect from ~7% to "OFF cannot finish at all".)
 - **Single trajectory (curve).** temperature 0 makes each run near-deterministic
   given its templates, so the curve is a clean step transition rather than a noisy
   average; it shows *when* learning happens, not a smoothed rate.
@@ -265,6 +334,13 @@ Three results, in increasing importance:
    crystallize the **corrected** optimal order, not the path taken — makes the curve
    decline: the non-obvious mistake is made exactly once and never again
    (26 → 24 across runs 1→2, flat-optimal thereafter). **越用越聪明 holds end-to-end.**
+4. **It scales — with an honest ceiling.** On an 18-step DAG with six counter-intuitive
+   quirks (§5.5) the curve declines 13% (46.7 → 40.7), a *larger* effect than the small
+   DAG, confirming the gain grows with genuinely hidden structure. But learning is
+   gradual and partial — it plateaus one quirk short of optimal, because crystallizing
+   and recalling a clean corrected order over six reversed rules (with templates
+   accumulating) is harder. The loop learns most of the hidden structure, not all; the
+   next L2 target is template consolidation.
 
 The value of this benchmark is that it converted a slogan into a measurement,
 falsified the naive version, localized the failure to a precise mechanism
@@ -275,9 +351,14 @@ not faithfully record what *did*** — otherwise it reinforces its own first mis
 Re-running this harness is the standing regression test for the core product claim.
 
 ### Provenance
-- A/B: `.harness/analysis/faithful-ab/ab-1781565457508.json` (8 reps/arm)
-- curve, baseline (flat): `.harness/analysis/faithful-ab/curve-1781565760663.json`
-- curve, after L2 fix (declining): `.harness/analysis/faithful-ab/curve-1781567981220.json`
+- **11-step DAG, 2 quirks** (§4–§5):
+  - A/B: `.harness/analysis/faithful-ab/ab-1781565457508.json` (8 reps/arm)
+  - curve, baseline (flat): `curve-1781565760663.json`
+  - curve, after L2 fix (declining): `curve-1781567981220.json`
+- **18-step DAG, 6 counter-intuitive quirks** (§5.5, scaled validation):
+  - A/B: `ab-1781570646578.json` (8 reps/arm, Δ12%)
+  - curve, after L2 fix (declining 13%): `curve-1781569692836.json`
 - model `openai/gpt-oss-120b`, temperature 0.
 - Fixes: D1 (failure_count) `11ef17e5`; D2 (convergence terminalizer) `9ebd175a`,
   ADR-58 `docs/adr/0067-…`; L2 (corrected-order crystallization) `08c2af7f`.
+- Apparatus at the 18-step DAG: commit `2584fd7e` (`scripts/eval/faithful-ab/dag.ts`).
