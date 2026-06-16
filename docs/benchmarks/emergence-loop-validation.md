@@ -75,8 +75,10 @@ and overwrites a buffer as it works. Memex inverts that. Every agent action is
 recorded as an immutable, content-addressed event in an append-only ledger (the
 execution graph, internally the Trail Mesh). Nothing is overwritten. The context for
 any single step is projected from the graph on demand, so the graph is the source of
-truth and the context window is a derived view. The design follows Vannevar Bush's
-1945 Memex: memory as associative trails rather than a hierarchical, mutable store.
+truth and the context window is a derived view. The name and the design come from
+Vannevar Bush's 1945 proposal: he described a hypothetical device, the Memex, that
+would extend human memory through associative trails rather than hierarchical
+indexes. This runtime makes those trails computable for agents.
 
 A unit of work is a scope: a task together with the sub-tasks it spawns. Agents write
 a small fixed set of event types, the ones that matter here being `task_spawned`

@@ -48,6 +48,12 @@ Unlike systems that record only successful paths, Memex records everything: succ
 
 When a Scope closes, CrystallizeWorker queries the episodic trail, calls an LLM to distill structure and insight, and writes a Crystal entity. The Crystal triggers LessonSaveWorker, which deduplicates by SHA-256 fingerprint and reinforces confidence via the Ebbinghaus formula: `confidence += 0.1 * (1 - confidence)`. Lessons that cross the export threshold become portable skill definitions in agentskills.io format.
 
+### Does it actually learn? (Benchmark)
+
+"Learns from repetition" is an empirical claim, so we measured it causally rather than asserting it. On a microservice-setup task with hidden dependency ordering, a cold agent makes a non-obvious mistake once; after the loop crystallizes the *corrected* order, later runs avoid it and events-to-convergence drops from 26 to 24 and holds. The effect grows with genuinely hidden structure (12% on an 18-step variant) and becomes gradual at higher complexity. The same harness surfaced and fixed two latent defects that had kept the loop's success path from ever firing.
+
+Full method, data, and the re-runnable harness: **[Loop Engineering: a causal benchmark of self-improvement](docs/benchmarks/emergence-loop-validation.md)**.
+
 ---
 
 ## Architecture
@@ -165,6 +171,7 @@ Phases 1–16 form the **1.0 candidate** (479 tests, `tsc` clean). See `.harness
 - **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — install and blaze your first Trail in five minutes
 - **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)** — full user manual: installation (all platforms), configuration, every feature, troubleshooting
 - **[docs/api/reference.md](docs/api/reference.md)** — REST + MCP API reference
+- **[docs/benchmarks/emergence-loop-validation.md](docs/benchmarks/emergence-loop-validation.md)** — Loop Engineering: causal benchmark that the loop measurably improves with use
 - **[docs/guides/](docs/guides/)** — developer guides (getting started, configuration, deployment, development)
 - **[SECURITY.md](SECURITY.md)** — trust model and vulnerability disclosure
 - **[docs/adr/](docs/adr/)** — architectural decision records
