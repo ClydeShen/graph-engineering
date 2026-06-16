@@ -1,50 +1,57 @@
-# Does an agent runtime measurably improve with use? A causal benchmark of the Memex emergence loop
+# Loop Engineering: a causal benchmark of self-improvement in the Memex agent runtime
 
 > Status: living benchmark document. Numbers come from `scripts/eval/faithful-ab/`
 > run against a live LLM and are committed with the raw JSON in
-> `.harness/analysis/faithful-ab/`. Re-runnable; see Section 7.
+> `.harness/analysis/faithful-ab/`. Re-runnable; see Section 8.
 
 ## Abstract
 
-Memex claims an agent runtime that becomes more efficient with use: successful
-execution structures are crystallized into procedural templates, recalled on
-similar later tasks, and reinforced when they help. We test this claim causally
-rather than anecdotally. On an 11-step "stand up a microservice" task with a real
-dependency DAG and two non-obvious ordering quirks, we measure events-to-convergence
-(the number of immutable ledger events a live LLM agent emits before the task
-converges) under two designs: (A) a controlled A/B that toggles template injection
-on or off, and (B) a learning curve that runs the full loop (crystallize, recall,
-reinforce) across repeated cold-start runs.
+Memex is a graph-native agent runtime whose central bet is that reusable procedures
+should not be authored but should emerge: a successful run is distilled into a
+procedural template, recalled on similar later tasks, and reinforced when it helps.
+We call the practice of building, measuring, and repairing that feedback loop Loop
+Engineering, and this document is a Loop Engineering case study. The question is
+empirical and falsifiable: does the loop actually make the runtime reach a goal in
+fewer steps as it accumulates experience?
+
+We test it causally rather than anecdotally. On an 11-step "stand up a microservice"
+task with a real dependency DAG and two non-obvious ordering quirks, we measure
+events-to-convergence (the number of immutable ledger events a live LLM agent emits
+before the task completes) under two designs: a controlled A/B that toggles template
+injection on or off, and a learning curve that runs the full loop across repeated
+cold-start runs.
 
 Injection works. A recalled runbook removes the non-obvious-quirk failures an
-uninjected agent hits in 75% of runs: ON 24.0 ± 0.0 events with 0 gate failures,
-OFF 25.5 ± 0.9 with 0.8, a 6% reduction bounded by how much of the DAG a capable
-model already infers. The autonomous learning curve was initially flat, and the
-diagnosis is the contribution. The loop converges, crystallizes, and recalls, but
+uninjected agent hits in 75% of runs: ON 24.0 ± 0.0 events with 0 gate failures, OFF
+25.5 ± 0.9 with 0.8, a 6% reduction bounded by how much of the DAG a capable model
+already infers. The autonomous learning curve was initially flat, and the diagnosis
+is the contribution. The loop converged, crystallized, and recalled, but
 crystallization replayed the executed path including the cold run's mistake. It
 distilled "run_tests, containerize, run_tests (retry)" verbatim, so the agent
 reproduced its first flawed trajectory on every later run. The fix is to crystallize
-the corrected order that avoids the observed mistakes rather than the path taken.
-The curve then declines: the agent makes the non-obvious mistake once (run 1,
-26 events) and is optimal thereafter (runs 2-10, 24 events, zero gate failures). The
-improvement-with-use claim holds end-to-end once crystallization distills corrected
-structure rather than the executed trajectory. Scaled to 18 steps with six
-counter-intuitive quirks the effect grows to 12% and learning still emerges, though
-it becomes gradual and plateaus one quirk short of optimal. A methodological
-corollary: effect size tracks genuinely hidden structure, not task size. Quirks that
-match a strong model's training priors produce no effect and nothing to learn. The
-work also fixed two latent defects, an unfalsifiable success metric and a missing
-convergence terminalizer, that had prevented the loop's success path from firing at
-all. That fix is the precondition that made the measurement possible.
+the corrected order that avoids the observed mistakes rather than the path taken. The
+curve then declines: the agent makes the non-obvious mistake once (run 1, 26 events)
+and is optimal thereafter (runs 2-10, 24 events, zero gate failures). Scaled to 18
+steps with six counter-intuitive quirks the effect grows to 12% and learning still
+emerges, though it becomes gradual and plateaus one quirk short of optimal. A
+methodological corollary: effect size tracks genuinely hidden structure, not task
+size. Quirks that match a strong model's training priors produce no effect and
+nothing to learn. The work also fixed two latent defects, an unfalsifiable success
+metric and a missing convergence terminalizer, that had prevented the loop's success
+path from firing at all. That fix is the precondition that made the measurement
+possible.
 
 ## 1. Introduction
 
-The product claim, "improves with use", is an empirical statement about a learning
-curve, not a feature checkbox. It can be true or false, and a system that cannot
-measure it cannot be trusted to have it. This document builds the measurement
-apparatus and reports what it shows.
+A runtime that claims to "improve with use" is making an empirical statement about a
+learning curve, not advertising a feature. The statement can be true or false, and a
+system that cannot measure it cannot be trusted to have it. Loop Engineering is the
+discipline that takes the claim seriously: build the feedback loop, instrument it,
+and verify on data that experience actually lowers cost. This document builds that
+instrument for Memex and reports what it shows.
 
-We separate three causal links:
+We separate three causal links so that a null result points at a specific stage
+rather than the system as a whole:
 
 - L1, injection to efficiency: does recalling a relevant procedural template make an
   agent reach the goal in fewer steps?
@@ -53,17 +60,51 @@ We separate three causal links:
 - L3, the lifecycle: does the runtime actually converge and fire the loop under
   normal operation?
 
-The A/B (Section 4) isolates L1. The learning curve (Section 5) exercises L1, L2,
-and L3 together and is the direct test of the product claim.
+The A/B (Section 4) isolates L1. The learning curve (Section 5) exercises L1, L2, and
+L3 together and is the direct test of the loop.
 
-## 2. Background: the loop, and two defects that disabled it
+## 2. The Memex runtime and the emergence loop
 
-The Memex loop (Phase 10, "trail discovery") works as follows. On scope close a
-`TemplateProposalWorker` crystallizes the converged event DAG into a procedural
-template. On later cold starts `mem::reflect` recalls templates by hybrid
-(vector + BM25) similarity and injects them into the agent's context. Converged
-reuse reinforces the template (`success_count + 1`); decay supersedes the unused
-(Ebbinghaus).
+This section gives a reader with no prior context enough of the architecture to
+follow the experiments.
+
+### 2.1 A graph-native runtime
+
+Most agent frameworks treat the LLM context window as mutable state: the agent reads
+and overwrites a buffer as it works. Memex inverts that. Every agent action is
+recorded as an immutable, content-addressed event in an append-only ledger (the
+execution graph, internally the Trail Mesh). Nothing is overwritten. The context for
+any single step is projected from the graph on demand, so the graph is the source of
+truth and the context window is a derived view. The design follows Vannevar Bush's
+1945 Memex: memory as associative trails rather than a hierarchical, mutable store.
+
+A unit of work is a scope: a task together with the sub-tasks it spawns. Agents write
+a small fixed set of event types, the ones that matter here being `task_spawned`
+(open a unit of work), `memory_updated` (record a result), `scope_closed` (the scope
+is finished), and `conflict_detected` (two writes raced). A scope converges when all
+the work it spawned is done; the runtime then writes `scope_closed`. Convergence is a
+task-completion signal, not a conversation signal, which matters in Section 3.
+
+### 2.2 No authored workflows; procedures emerge
+
+Memex has no workflow engine: no DAG authoring, no pipeline definitions. Reusable
+procedures are not designed, they emerge as statistical regularities across past
+runs. The mechanism, internally "trail discovery" (Phase 10), is a closed loop:
+
+- Crystallize: when a scope converges, a `TemplateProposalWorker` distills its event
+  DAG into a procedural template (a Lesson) capturing the structure that worked.
+- Recall and inject: on a later cold start, `mem::reflect` retrieves templates by
+  hybrid (vector + BM25) similarity and injects them into the agent's context.
+- Reinforce and decay: a template that helps a scope converge is reinforced
+  (`success_count + 1`); templates that go unused are superseded on an Ebbinghaus
+  decay schedule.
+
+This loop is the runtime's central bet: that an agent which records its trails and
+crystallizes them will get cheaper at recurring work without anyone authoring a
+workflow. Whether the bet pays off is exactly the empirical question this benchmark
+answers.
+
+### 2.3 Two defects that had disabled the loop
 
 Building the benchmark surfaced two latent defects. Together they meant the success
 side of the loop never fired in normal operation.
@@ -73,7 +114,7 @@ side of the loop never fired in normal operation.
   monotonic: it could only rise, never detect the loop getting worse (a Proxy-Signal
   anti-pattern). Fixed by a `failure_count` write path on non-converged terminal
   states (merged `11ef17e5`).
-- D2, no convergence terminalizer (finding F-1). The convergence SQL required every
+- D2, no convergence terminalizer (finding F-1). The convergence check required every
   event row to be terminal, but no happy-path step terminalized a completed task, so
   scopes driven through the standard gateway and MCP path never converged and
   `scope_closed` (which triggers crystallization and reinforcement) never fired. A
@@ -99,8 +140,8 @@ start_db -------------------------------- +-> run_migrations -> run_tests +
 write_api -> write_tests -----------------------------------------------+
 ```
 
-Most edges are intuitive (scaffold first, deploy last). Two are non-obvious quirks
-an agent cannot infer from names and that only a learned runbook carries:
+Most edges are intuitive (scaffold first, deploy last). Two are non-obvious quirks an
+agent cannot infer from names and that only a learned runbook carries:
 
 - Q1: `run_tests` requires `containerize` first (tests run inside the container).
 - Q2: `gen_migrations` requires `add_deps` first (the migration tool is a project
@@ -144,16 +185,16 @@ N=8 times per arm with injection on or off; we compare events-to-convergence.
 
 Injection reduces events by 6% (24.0 vs 25.5). The signal is in the mechanism and its
 reproducibility, not the headline percentage. The ON arm is deterministic: 24 events
-and zero gate failures across all 8 runs, because the recalled runbook makes the
-agent respect the non-obvious quirks every time. The OFF arm trips a quirk in 6 of 8
-runs (the other 2 ordered correctly by chance), each paying one failed attempt, about
-2 wasted events. Injection removes a failure the uninjected agent hits in 75% of
-runs. The magnitude is small because a capable model infers the rest of the 11-step
-DAG unaided; the effect equals the hidden, non-inferable structure the template
-supplies, here two quirks. That is the L1 result: recall produces fewer events,
-deterministically, concentrated on what the agent could not have known.
+and zero gate failures across all 8 runs, because the recalled runbook makes the agent
+respect the non-obvious quirks every time. The OFF arm trips a quirk in 6 of 8 runs
+(the other 2 ordered correctly by chance), each paying one failed attempt, about 2
+wasted events. Injection removes a failure the uninjected agent hits in 75% of runs.
+The magnitude is small because a capable model infers the rest of the 11-step DAG
+unaided; the effect equals the hidden, non-inferable structure the template supplies,
+here two quirks. That is the L1 result: recall produces fewer events, deterministically,
+concentrated on what the agent could not have known.
 
-## 5. Experiment B. Learning curve: improvement with use (L1+L2+L3)
+## 5. Experiment B. Learning curve (L1+L2+L3)
 
 Cold start, with `procedural_memory` wiped. The task runs N=10 times with the full
 loop: injection on, and after each converged run the `TemplateProposalWorker`
@@ -190,8 +231,8 @@ layers.
    distilled encoded that exact sequence, verbatim, from a crystallized template:
    "...run_tests (initial), containerize, run_tests (retry)...". Following that lesson
    reproduces the mistake. The loop was reinforcing its first flawed trajectory, not
-   the optimal one. This is the precise reason improvement with use did not emerge:
-   the system learned the path it took, not the path it should have taken.
+   the optimal one. This is the precise reason no improvement emerged: the system
+   learned the path it took, not the path it should have taken.
 
 ### 5.3 The fix (commit `08c2af7f`)
 
@@ -211,10 +252,10 @@ agent reads. The change is two lines of prompt plus a content enrichment. The
 
 The agent makes the non-obvious mistake exactly once (run 1, cold), crystallizes the
 corrected order, and is optimal on every run thereafter (24 events, zero gate
-failures, runs 2-10). The curve is a clean step function at temperature 0:
-first-third mean 24.7, last-third mean 24.0. The system measurably improved with use,
-and by construction it did so on the one constraint it could not have known a priori.
-Improvement with use holds end-to-end once crystallization distills the corrected
+failures, runs 2-10). The curve is a clean step function at temperature 0: first-third
+mean 24.7, last-third mean 24.0. The runtime measurably got cheaper with use, and by
+construction it did so on the one constraint it could not have known a priori. The
+loop delivers what Loop Engineering targets once crystallization distills the corrected
 structure rather than replaying the executed trajectory.
 
 ### 5.5 Scaled validation: 18 steps, 6 quirks, and what "hidden" means
@@ -224,17 +265,17 @@ To test robustness we scaled the task to 18 steps with six non-obvious prerequis
 methodological finding.
 
 Quirks that match standard practice are not hidden to a strong model. The first six
-quirks were realistic but conventional CI/CD rules (lint before build, scan the
-image, test in container). The model inferred all of them from training: the OFF arm
-hit zero gate failures (38 events, the same as ON). There was nothing to learn
-because there was no structure the model did not already have. Effect size is a
-function of genuinely hidden structure, not task size.
+quirks were realistic but conventional CI/CD rules (lint before build, scan the image,
+test in container). The model inferred all of them from training: the OFF arm hit zero
+gate failures (38 events, the same as ON). There was nothing to learn because there
+was no structure the model did not already have. Effect size is a function of
+genuinely hidden structure, not task size.
 
-We redesigned the six quirks to reverse intuition, as project-specific rules a
-model's priors actively mislead it on: `db_schema` after `write_api` (schema derived
-from the API), `lint` after `write_tests`, `security_scan` before the build,
-`run_migrations` after `run_tests`, `setup_monitoring` after `deploy`. The model's
-natural CI/CD order now violates them.
+We redesigned the six quirks to reverse intuition, as project-specific rules a model's
+priors actively mislead it on: `db_schema` after `write_api` (schema derived from the
+API), `lint` after `write_tests`, `security_scan` before the build, `run_migrations`
+after `run_tests`, `setup_monitoring` after `deploy`. The model's natural CI/CD order
+now violates them.
 
 A/B, 8 reps per arm, with the counter-intuitive quirks:
 
@@ -269,25 +310,25 @@ partial, not the clean step function of Section 5.4.
   recall mixing an accumulating set of partial templates, is a harder distillation
   than the single-quirk case.
 
-This is the honest scaled result. Improvement with use holds and the magnitude grows
-with hidden structure (13%, above the small-DAG effect), but at higher complexity the
-autonomous loop captures most of the hidden structure, not all. Learning is real,
-measurable, and incremental rather than perfect. The next L2 target follows directly:
-consolidate the accumulating partial templates so recall delivers one clean corrected
-runbook rather than a mixture.
+This is the honest scaled result. The loop scales and the magnitude grows with hidden
+structure (13%, above the small-DAG effect), but at higher complexity the autonomous
+loop captures most of the hidden structure, not all. Learning is real, measurable, and
+incremental rather than perfect. The next L2 target follows directly: consolidate the
+accumulating partial templates so recall delivers one clean corrected runbook rather
+than a mixture.
 
 ## 6. Threats to validity
 
-- Model capability; effect scales with hidden structure, not task size. A strong
-  model infers most of a DAG, so the measurable effect is exactly the subset of
-  structure it could not have known. Section 5.5 demonstrates this directly: an
-  18-step DAG whose quirks matched standard CI/CD practice produced zero effect (the
-  model inferred all of them), and only when the quirks were redesigned to reverse the
-  model's priors did the effect and the learning curve reappear, larger than the small
-  DAG's. A null result is therefore not evidence that the loop fails; it can mean the
-  task held no structure worth learning. The same point held on a toy trap whose
-  severity, dialed from a recoverable 1-step mistake to a catastrophic one, moved the
-  effect from about 7% to "OFF cannot finish at all".
+- Model capability; effect scales with hidden structure, not task size. A strong model
+  infers most of a DAG, so the measurable effect is exactly the subset of structure it
+  could not have known. Section 5.5 demonstrates this directly: an 18-step DAG whose
+  quirks matched standard CI/CD practice produced zero effect (the model inferred all
+  of them), and only when the quirks were redesigned to reverse the model's priors did
+  the effect and the learning curve reappear, larger than the small DAG's. A null
+  result is therefore not evidence that the loop fails; it can mean the task held no
+  structure worth learning. The same point held on a toy trap whose severity, dialed
+  from a recoverable 1-step mistake to a catastrophic one, moved the effect from about
+  7% to "OFF cannot finish at all".
 - Single trajectory (curve). Temperature 0 makes each run near-deterministic given its
   templates, so the curve is a clean step transition rather than a noisy average. It
   shows when learning happens, not a smoothed rate.
@@ -295,12 +336,11 @@ runbook rather than a mixture.
   next run depends on the model's intent and outcome extraction. The curve measures
   this end-to-end; it is a feature under test, not an assumption.
 - The `recall` flag is a false negative. The harness's `recallHit` checks for the
-  literal quirk tokens in the injected text, so the baseline curve logs
-  `recall=false` even though a direct `mem::reflect` probe confirms templates were
-  recalled (2 for the goal query). The flat baseline therefore reflects inert recalled
-  content, not absent recall, which is the stronger and correctly diagnosed
-  conclusion. The raw JSON keeps the conservative flag; this document reports the
-  probed result.
+  literal quirk tokens in the injected text, so the baseline curve logs `recall=false`
+  even though a direct `mem::reflect` probe confirms templates were recalled (2 for the
+  goal query). The flat baseline therefore reflects inert recalled content, not absent
+  recall, which is the stronger and correctly diagnosed conclusion. The raw JSON keeps
+  the conservative flag; this document reports the probed result.
 - Harness-triggered `scope_closed`. The convergence decision is real; only its firing
   is harness-driven, because the control-plane daemon is not run in-loop.
 
@@ -329,12 +369,13 @@ Four results, in increasing importance.
    convergence terminalizer) meant the loop's success path never fired in normal
    operation. Both are fixed (`11ef17e5`; `9ebd175a` / ADR-58). The runtime now
    converges, crystallizes, recalls, and reinforces end-to-end.
-3. L2 was the gap; diagnosed, fixed, and the claim now holds. With the plumbing fixed
-   the learning curve was still flat, which exposed the real defect: crystallization
-   distilled the executed trajectory including the cold run's mistake, so the agent
-   reproduced its first flawed path on every run. Crystallizing the corrected order
-   rather than the path taken makes the curve decline; the non-obvious mistake is made
-   once and never again (26 to 24 across runs 1 and 2, flat-optimal thereafter).
+3. L2 was the gap; diagnosed, fixed, and the loop now delivers. With the plumbing
+   fixed the learning curve was still flat, which exposed the real defect:
+   crystallization distilled the executed trajectory including the cold run's mistake,
+   so the agent reproduced its first flawed path on every run. Crystallizing the
+   corrected order rather than the path taken makes the curve decline; the non-obvious
+   mistake is made once and never again (26 to 24 across runs 1 and 2, flat-optimal
+   thereafter).
 4. It scales, with an honest ceiling. On an 18-step DAG with six counter-intuitive
    quirks (Section 5.5) the curve declines 13% (46.7 to 40.7), a larger effect than
    the small DAG, which confirms the gain grows with genuinely hidden structure.
@@ -343,12 +384,13 @@ Four results, in increasing importance.
    templates accumulating, is harder. The loop learns most of the hidden structure,
    not all; the next L2 target is template consolidation.
 
-This benchmark converts a slogan into a measurement, falsifies the naive version,
+The benchmark converts a slogan into a measurement, falsifies the naive version,
 localizes the failure to a precise mechanism (crystallization replays the trajectory
 instead of distilling the corrected structure), and verifies the fix on the same
 instrument. The general lesson is sharper than the bug: a learning system must distill
 what should have happened, not record what did, or it reinforces its own first
-mistakes. Re-running this harness is the standing regression test for the claim.
+mistakes. That is the core discipline of Loop Engineering, and re-running this harness
+is its standing regression test.
 
 ### Provenance
 
