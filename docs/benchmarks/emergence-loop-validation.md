@@ -33,11 +33,13 @@ the corrected order that avoids the observed mistakes rather than the path taken
 curve then declines: the agent makes the non-obvious mistake once (run 1, 26 events)
 and is optimal thereafter (runs 2-10, 24 events, zero gate failures). Scaled to 18
 steps with six counter-intuitive quirks the effect grows to 12% and learning still
-emerges, though it first becomes gradual and plateaus one quirk short of optimal.
-Consolidating the accumulating partial templates into one canonical runbook, keyed on
-the deterministic graph topology rather than a drifting LLM summary, removes that
-plateau: the 18-step curve descends to the optimum and holds it. A methodological
-corollary: effect size tracks genuinely hidden structure, not task
+emerges, though it becomes gradual and plateaus one quirk short of optimal. Template
+consolidation can reach the optimum but is variance-fragile on a non-deterministic
+model: the consolidation step is a closed feedback loop that bimodally either holds the
+optimum or collapses, and making it robust is open work (Section 5.7). A second,
+naturally-occurring precondition (a skill whose backing CLI must be installed before
+use) is learned robustly, because a shallow task cannot lock in a bad template. A
+methodological corollary: effect size tracks genuinely hidden structure, not task
 size. Quirks that match a strong model's training priors produce no effect and
 nothing to learn. The work also fixed two latent defects, an unfalsifiable success
 metric and a missing convergence terminalizer, that had prevented the loop's success
@@ -355,17 +357,82 @@ Re-running the 18-step curve with topology-keyed consolidation:
 | events | 42 | 42 | 46 | 40 | 40 | 40 | 38 | 38 | 38 | 38 |
 | gate failures | 2 | 2 | 4 | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
 
-The curve descends to the injected optimum and holds it: the final four runs are 38
-events with zero gate failures, matching the injected optimum for this task identified
-in Section 5.5. A database count after the run shows one live canonical against nine
-superseded, the consolidation firing on all nine repeats. The plateau is removed.
-Learning at 18 steps is no longer partial; it converges to the optimum and stays there.
+In this run the curve descends to the injected optimum: the final four runs are 38
+events with zero gate failures, and a database count shows one live canonical against
+nine superseded, the consolidation firing on all nine repeats. We first read this as the
+plateau being removed. **Section 5.7 shows that reading was premature: this 38/0 result is
+one good draw, not a robust property.** It is reported here as the observation that
+motivated the deeper investigation, not as a settled claim.
 
-One implementation detail generalizes the Section 5.4 lesson. Recall had never filtered
-superseded procedural templates, so superseding a row did not withhold it from injection
-until that filter was added; the same gap had been silently disabling Ebbinghaus decay
-for positive templates. Consolidation only works once supersession actually removes the
-old runbook from recall.
+One implementation detail generalizes the Section 5.4 lesson and does hold. Recall had
+never filtered superseded procedural templates, so superseding a row did not withhold it
+from injection until that filter was added; the same gap had been silently disabling
+Ebbinghaus decay for positive templates. Consolidation only works once supersession
+actually removes the old runbook from recall.
+
+### 5.7 Reproducibility: consolidation is variance-fragile, and a robust counter-case
+
+The Section 5.6 result did not reproduce. Re-running the same curve on byte-identical code
+produced collapses to the turn cap (121 events, no convergence) instead of 38/0. Treating
+this as a regression hunt rather than accepting the first good number is the contribution
+of this section.
+
+Two confounds were ruled out by investigation. First, the harness wiped only the
+procedural tier at cold start, so episodic and semantic memories accumulated across runs
+and polluted recall; making the cold start wipe every memory tier removed that, but the
+collapse persisted. Second, the model is a hosted endpoint, not a local server that could
+degrade under load. A direct probe settled the actual cause: the hosted model is
+**non-deterministic at temperature 0** (three identical crystallization calls returned
+three different outputs). On a non-deterministic substrate, any single curve is a draw.
+
+The structural diagnosis is that consolidation is a **closed feedback loop**: the canonical
+template is updated from runs that the canonical itself guided. Two natural designs both
+fail on a deep task:
+
+- **LLM prose-merge** (Section 5.6): each run folds its lesson into the prior canonical via
+  an LLM call. That is prose-into-prose feedback; on a non-deterministic model it drifts,
+  and the drift compounds. Outcomes are bimodal: a clean draw holds 38/0, a drifting draw
+  corrupts the runbook (an invented step, a reordered rule) and the corrupted runbook then
+  misleads the agent into collapse. A database dump of a collapsed run shows exactly this:
+  a hallucinated `verify_completion` step that compounded across merges until it buried the
+  real ordering rule.
+- **No merge** (single-shot canonical per topology): removes the drift, but a single-shot
+  lesson is incomplete (Section 5.5), and replacing the canonical with each run's lesson
+  lets one bad single-shot lock in a canonical so misleading that later runs never converge
+  to update it, producing a *permanent* collapse.
+
+Merge drifts; no-merge collapses. This is a genuine open problem, not a solved one, and the
+committed implementation keeps the merge variant as the more recoverable of the two while
+this section documents its ceiling honestly.
+
+A simpler task does not exhibit the instability. We added a second, naturally-occurring
+precondition: a skill whose backing CLI must be installed before use, enforced by a real
+"command not found" rather than a synthetic gate (the shape of the real `agent-browser`
+skill, whose SKILL.md is a discovery stub deferring to a binary that must be installed
+first). Cold, the agent runs the tool, fails, installs, retries, converges; the loop
+crystallizes "install before use"; later runs install first and skip the discovery failure.
+Across ten hermetic runs the discovery failure appears once (the cold run) and then stays
+at zero. This is robust because the task is recoverable in one or two turns, so a
+less-than-perfect template cannot lock in a non-converging trajectory. The same property
+that makes the 18-step task fragile (a deep task amplifies a bad template into a
+non-convergence) is absent when the task is shallow.
+
+Two methodological results follow, and they are the durable output of this section:
+
+1. **A loop on a non-deterministic model needs a statistical regression gate, not a fixed
+   number.** Unit tests cannot catch loop regressions (109 stayed green while a one-line
+   crystallization-prompt change collapsed the curve). The repository ships `npm run
+   eval:loop`, which runs both curves and asserts the loop converges and does not collapse
+   (events below the collapse band), the only form of assertion a non-deterministic loop
+   admits.
+2. **Hermetic cold start is a precondition for measuring emergence.** A benchmark that lets
+   memory accumulate across runs measures DB history, not the loop, and invites
+   after-the-fact causal stories on polluted data. Every curve now truncates all memory
+   tiers before it starts.
+
+The next lever for consolidation robustness, left as deliberate future work, is
+quality-gated canonical updates: only a run at least as good as the current canonical may
+update it, which breaks the closed loop a bad run otherwise uses to lock itself in.
 
 ## 6. Threats to validity
 
@@ -426,15 +493,22 @@ Four results, in increasing importance.
    corrected order rather than the path taken makes the curve decline; the non-obvious
    mistake is made once and never again (26 to 24 across runs 1 and 2, flat-optimal
    thereafter).
-4. It scales to the optimum once templates are consolidated. On an 18-step DAG with six
-   counter-intuitive quirks (Section 5.5) the autonomous curve first declined 13% (46.7
-   to 40.7) but plateaued one quirk short of optimal, because recall injected a mixture
-   of accumulating partial runbooks. Consolidating them into one canonical runbook at
-   crystallization time, keyed on the deterministic graph topology rather than a drifting
-   LLM summary (Section 5.6), removes the plateau: the curve descends to 38 events with
-   zero gate failures and holds it for the final four runs. The diagnosis that the merge
-   key must be deterministic, found by a database count after an intent-keyed version
-   regressed, is part of the contribution.
+4. It scales, and consolidating templates can reach the optimum but is not yet robust.
+   On an 18-step DAG with six counter-intuitive quirks (Section 5.5) the autonomous curve
+   declined 13% (46.7 to 40.7) and plateaued one quirk short of optimal because recall
+   injected a mixture of partial runbooks. Consolidating them into one canonical runbook
+   reached 38/0 in one run (Section 5.6) but did not reproduce: consolidation is a closed
+   feedback loop, and on a non-deterministic model it is variance-fragile (LLM prose-merge
+   drifts and compounds; no-merge collapses on incompleteness). This is documented as an
+   open problem (Section 5.7), with quality-gated canonical updates named as the next lever.
+5. The same instrument that found this is the lasting contribution. A loop on a
+   non-deterministic model cannot be validated by unit tests (109 stayed green through a
+   collapse) or by a single number; it needs a statistical regression gate over hermetic
+   runs (`npm run eval:loop`). That gate, plus the finding that a hermetic cold start is a
+   precondition for measuring emergence at all, is what makes every future change to the
+   loop measurable. A second, naturally-occurring precondition (install a skill's CLI
+   before use) is learned robustly, showing the loop generalizes beyond synthetic DAGs
+   wherever the task is shallow enough that a bad template cannot lock itself in.
 
 The benchmark converts a slogan into a measurement, falsifies the naive version,
 localizes the failure to a precise mechanism (crystallization replays the trajectory
@@ -455,9 +529,15 @@ is its standing regression test.
   - curve, after L2 fix (declining 13%, plateau at 40): `curve-1781569692836.json`
 - 18-step DAG, consolidation (Section 5.6):
   - curve, intent-keyed (regressed, mixture re-formed): `curve-1781579091655.json`
-  - curve, topology-keyed (descends to 38/0 and holds): `curve-1781580434975.json`
-- Model `openai/gpt-oss-120b`, temperature 0.
+  - curve, topology-keyed (reached 38/0 in this draw): `curve-1781580434975.json`
+- 18-step DAG, variance / non-reproduction (Section 5.7): multiple later curves on
+  byte-identical code collapsed to 121 (e.g. `curve-1781586459371.json`,
+  `curve-1781590563176.json`), establishing that the 38/0 was a draw.
+- CLI-precondition task (Section 5.7, B2): `.harness/analysis/cli-precondition/curve-*.json`
+  (discovery failure 1 cold then 0; apparatus `scripts/eval/cli-precondition/`).
+- Model `openai/gpt-oss-120b` (NVIDIA hosted), temperature 0 but non-deterministic.
 - Fixes: D1 (failure_count) `11ef17e5`; D2 (convergence terminalizer) `9ebd175a`,
   ADR-58 `docs/adr/0067-...`; L2 (corrected-order crystallization) `08c2af7f`;
-  consolidation (topology-keyed merge-and-supersede) this commit.
-- Apparatus at the 18-step DAG: commit `2584fd7e` (`scripts/eval/faithful-ab/dag.ts`).
+  consolidation (topology-keyed merge-and-supersede) `b883fe8f` (variance-fragile, §5.7).
+- Regression gate: `npm run eval:loop` (`scripts/eval/loop-gate.ts`); hermetic cold start
+  in `scripts/eval/*/run.ts`. Apparatus at the 18-step DAG: `scripts/eval/faithful-ab/`.

@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-16T04:16:49.296Z",
+    "commit": "b883fe8f74a5f65aed5c853b4828d588bd9865b0",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 3,
+    "events_by_run": [
+      8,
+      6,
+      8
+    ],
+    "discoveryFailures_by_run": [
+      1,
+      0,
+      1
+    ],
+    "installedFirst_by_run": [
+      false,
+      true,
+      false
+    ],
+    "first_third_events_mean": 8,
+    "last_third_events_mean": 8,
+    "improvement_pct": 0
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": false,
+      "ms": 4828
+    },
+    {
+      "label": "run#2",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3484
+    },
+    {
+      "label": "run#3",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5201
+    }
+  ]
+}

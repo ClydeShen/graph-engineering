@@ -170,3 +170,7 @@ Do not rename existing stable identifiers (DB column names, established event st
 - Language: English for code, Chinese acceptable in domain docs
 - Immutable append-only writes — no updates to existing graph nodes
 - PostgreSQL (pgcrypto) for hash computation
+- Loop regression gate: before changing any emergence-loop asset (crystallization /
+  merge / recall prompts or SQL in `template-proposal.worker.ts`, `reflect.function.ts`,
+  `memory-repository.ts`) or swapping the LLM model, run `npm run eval:loop`. Unit tests
+  cannot catch loop regressions — they are behavioral. See `scripts/eval/README.md`.

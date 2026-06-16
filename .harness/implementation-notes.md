@@ -1650,3 +1650,45 @@ fired on all 9 repeats (intent-keyed was 7/3). The 40 plateau is removed.
 Raw: `.harness/analysis/faithful-ab/curve-1781580434975.json` (topology),
 `curve-1781579091655.json` (intent, regressed — kept as the diagnostic record).
 Paper updated: §5.6 + abstract + conclusion + provenance.
+
+---
+
+## B1 consolidation is variance-fragile; B2 + gate + hermeticity (GH #24, 2026-06-16 cont.)
+
+**Correction to the B1 note above.** Its "Validation (passed): 38/0 holds" was a single
+good DRAW, not a robust property. Re-running the same curve on byte-identical code collapsed
+to 121 (turn cap, no convergence). Investigation:
+- Ruled out pollution: the curve wiped only procedural_memory; episodic/semantic accumulated
+  across runs and polluted recall. Fixed: hermetic cold start TRUNCATEs all memory tiers
+  (`scripts/eval/*/run.ts`). Collapse persisted → not (only) pollution.
+- Ruled out local-model degradation: the model is NVIDIA-hosted `openai/gpt-oss-120b`, not
+  ollama. A probe confirmed it is **non-deterministic at temperature 0** (3 identical
+  crystallization calls → 3 different outputs).
+- Structural diagnosis: consolidation is a **closed feedback loop** (canonical updated from
+  runs the canonical guided). Merge = prose→prose feedback → drift compounds → bimodal
+  (38/0 or collapse; a collapsed run's canonical showed a hallucinated `verify_completion`
+  step compounded across merges). No-merge = single-shot incompleteness → one bad run locks
+  in a non-converging canonical → permanent collapse. **Merge drifts; no-merge collapses.**
+
+**Two fix attempts, both falsified by the gate (reverted):**
+1. Constrain the crystallization prompt to in-trace steps → fixed B2's hallucination but
+   **regressed §5** catastrophically (the prompt is brittle/scale-sensitive). Reverted.
+2. Remove the prose-merge (single-shot canonical per topology) → made §5 **worse**
+   (permanent collapse from run 3). Reverted to the committed merge variant (b883fe8f), the
+   more recoverable of the two. `template-proposal.worker.ts` is unchanged from b883fe8f.
+
+**What shipped (loop-code-untouched, durable):**
+- `scripts/eval/cli-precondition/` — B2: a real CLI precondition (install-before-use,
+  enforced by a real node-stub `command not found`, not a synthetic gate). The loop learns
+  it **robustly** (discovery failure 1 cold → 0, ten hermetic runs). Robust because the task
+  is recoverable in 1-2 turns; a bad template can't lock in non-convergence.
+- `scripts/eval/loop-gate.ts` + `npm run eval:loop` — statistical regression gate (converges
+  AND does not collapse), because unit tests can't catch loop regressions (109 green through
+  a collapse) and a non-deterministic loop has no single-number criterion.
+- Hermetic cold start in both curves; `scripts/eval/README.md` + CLAUDE.md gate note.
+- Paper §5.6 corrected (38/0 was a draw), §5.7 added (variance-fragility, B2, methodology),
+  abstract/conclusion/README/provenance corrected.
+
+**Named future work (not attempted):** quality-gated canonical updates — only a run at least
+as good as the current canonical may update it, breaking the closed loop a bad run uses to
+lock itself in. Deserves its own gated pass, not a reactive hotfix.

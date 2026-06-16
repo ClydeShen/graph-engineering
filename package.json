@@ -14,6 +14,7 @@
     "test:integration": "vitest run tests/integration",
     "test": "vitest run",
     "test:db": "node scripts/test-with-db.mjs",
+    "eval:loop": "tsx scripts/eval/loop-gate.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "db:up": "docker compose up -d",

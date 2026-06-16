@@ -1,0 +1,204 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-16T07:09:27.402Z",
+    "commit": "b883fe8f74a5f65aed5c853b4828d588bd9865b0",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 10,
+    "events_by_run": [
+      8,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+    ],
+    "discoveryFailures_by_run": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "installedFirst_by_run": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "first_third_events_mean": 6.666666666666667,
+    "last_third_events_mean": 6,
+    "improvement_pct": 0.10000000000000003
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": false,
+      "ms": 5837
+    },
+    {
+      "label": "run#2",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4789
+    },
+    {
+      "label": "run#3",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3602
+    },
+    {
+      "label": "run#4",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3405
+    },
+    {
+      "label": "run#5",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3031
+    },
+    {
+      "label": "run#6",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4364
+    },
+    {
+      "label": "run#7",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4350
+    },
+    {
+      "label": "run#8",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5143
+    },
+    {
+      "label": "run#9",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 2246
+    },
+    {
+      "label": "run#10",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3246
+    }
+  ]
+}

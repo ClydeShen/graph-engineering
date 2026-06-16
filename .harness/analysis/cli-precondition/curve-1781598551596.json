@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-16T08:29:11.633Z",
+    "commit": "b883fe8f74a5f65aed5c853b4828d588bd9865b0",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 10,
+    "events_by_run": [
+      8,
+      6,
+      8,
+      8,
+      6,
+      6,
+      6,
+      6,
+      8,
+      6
+    ],
+    "discoveryFailures_by_run": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+    ],
+    "installedFirst_by_run": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ],
+    "first_third_events_mean": 7.333333333333333,
+    "last_third_events_mean": 6.666666666666667,
+    "improvement_pct": 0.09090909090909083
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": false,
+      "ms": 8365
+    },
+    {
+      "label": "run#2",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4063
+    },
+    {
+      "label": "run#3",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5530
+    },
+    {
+      "label": "run#4",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 8490
+    },
+    {
+      "label": "run#5",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5480
+    },
+    {
+      "label": "run#6",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3823
+    },
+    {
+      "label": "run#7",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 2596
+    },
+    {
+      "label": "run#8",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3403
+    },
+    {
+      "label": "run#9",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5017
+    },
+    {
+      "label": "run#10",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4230
+    }
+  ]
+}

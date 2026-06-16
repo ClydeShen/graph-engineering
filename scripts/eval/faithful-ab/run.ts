@@ -93,8 +93,14 @@ async function runAB(deps: AgentDeps, reps: number, model: string): Promise<void
 
 // ── Learning-curve mode ──────────────────────────────────────────────────────
 async function runCurve(deps: AgentDeps, runs: number, model: string): Promise<void> {
-  // cold start: wipe ALL procedural templates (no prior knowledge), incl. any seed
-  await deps.pool.query(`DELETE FROM procedural_memory`);
+  // Cold start MUST be hermetic: wipe every memory tier, not just procedural. Episodic
+  // and semantic accumulate across runs (and across other experiments sharing graph_test);
+  // recall pulls from them, so leaving them makes the curve depend on DB history — including
+  // summaries of earlier DEGRADED runs, which poison later runs progressively. A non-hermetic
+  // cold start is why a reverted (byte-identical to validated) worker still regressed.
+  await deps.pool.query(
+    `TRUNCATE procedural_memory, episodic_memory, semantic_memory, working_memory, template_injection, embedding_backlog`,
+  );
   const reader = new PoolTrailReader(deps.pool);
   const memory = new PoolMemoryRepository(deps.pool);
   const writer = new OccEventWriter(deps.pool);
