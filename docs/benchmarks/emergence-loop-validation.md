@@ -440,12 +440,28 @@ lesson (did the scope that recalled it converge and succeed, observed by the sys
 with reality rather than the model's self-assessment as the judge), reinforced by the user's
 natural behaviour (accept, correct, re-ask) and overridable by an explicit user edit as the
 highest authority. The crystallizing model is barred from scoring its own lesson, the exact
-discipline whose absence (the unfalsifiable D1 metric) this benchmark already caught. The
-open research is to de-confound that outcome signal: production has no controlled A/B per
+discipline whose absence (the unfalsifiable D1 metric) this benchmark already caught.
+
+The open research is to de-confound that outcome signal: production has no controlled A/B per
 task, so a lesson recalled mostly for easy scopes would otherwise look accurate spuriously.
-This direction supersedes the narrower "quality-gated canonical updates" framing: the loop
-does not have to stabilise itself in isolation, it has to make its drift cheap for a human
-to see and correct.
+The confound has a precise source. A scope's outcome is a joint function of the *crystallization's
+freshness* (what the system owns) and the *composition* the model assembles from several
+crystallizations into a workflow — and that composition is deliberately out of the system's
+scope, an uncontrolled, model-dependent variable. The system grades ingredients, not meals;
+a bad meal may be a good recipe over a stale ingredient, or a fresh ingredient cooked wrong.
+The proposed (not yet validated) de-confounder is therefore a **conformance check**: the system
+already holds both the prescribed ordering rules of an injected template (`template_graph`,
+`getInjectedTemplateIds`) and the actual execution DAG, so it can compare them. A run that
+*conformed* to a template's rules and still failed attributes the failure to that template
+(soften it); a run that *violated* them and failed attributes to composition (out of scope —
+leave the template's freshness alone); a run that conformed and succeeded freshens it slowly,
+graded by tokens-to-converge. This makes the update asymmetric on purpose — a single good
+outcome is confounded and so hardens only slowly, while a clean attribution (conformance, or
+an explicit human correction) is allowed to soften quickly — which is what gives the loop a
+restoring force without overruling the model's freedom to cook. This direction supersedes the
+narrower "quality-gated canonical updates" framing: the loop does not have to stabilise itself
+in isolation, it has to keep the ingredients it supplies fresh and make their drift cheap for a
+human to see and correct.
 
 ## 6. Threats to validity
 

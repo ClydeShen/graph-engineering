@@ -1703,3 +1703,113 @@ per-task A/B; a lesson recalled mostly for easy scopes looks accurate spuriously
 external sources (Anthropic long-running-harness, mindstudio + Osmani loop-engineering)
 independently converge on human-in-the-loop + "don't let the model grade its own homework".
 Captured in paper §5.7 + memory `next-direction-lesson-trust-substrate`.
+
+---
+
+## Freshness-substrate design discuss (2026-06-17, fuller + zoom-out) — NOT YET BUILT
+
+Two fuller sessions + a schema-grounded discuss locked the design of the loop's restoring
+force. **No code written; this is the spec for the build arc.** Calibration constants are
+deliberately deferred to the clean re-run (see list at the end) — per the benchmark's own
+lesson, a non-deterministic loop's thresholds must be fit from data, not guessed.
+
+### Frame (the load-bearing analogy + boundary)
+- **Ingredient = crystallization; freshness = per-crystallization trust.** The system (graph
+  + crystallizations + algorithms) **owns ingredient freshness, and only that.**
+- **Cooking = the LLM composing crystallizations into a workflow. OUT OF SCOPE** — model
+  judgment, uncontrollable, acceptably model-dependent. We do not standardize the recipe.
+- ⟹ a scope's outcome = freshness × cooking is a **joint function with an unobserved,
+  out-of-scope confounder (cooking)**. The system grades **ingredients, not meals.** This
+  dissolves the §5 "loop can't self-stabilise" problem: it was never responsible for the meal.
+- **Teleology / KPI**: correct cooking + this system ⟹ good food; stronger, even the
+  **simplest (token-efficient) cooking** succeeds. A great ingredient lets minimal cooking
+  win. KPI = minimize tokens-to-good-outcome by raising ingredient quality (clean, not
+  cooking-confounded).
+- **Human spans both timescales** = monitor (witnesses growth) + verifier (checks key steps)
+  + teacher (corrects drift → feeds the trust signal). Human input is **natural behaviour
+  (accept/correct/approve/deny), never a typed number.**
+
+### Schema reality (the rails are laid; the wiring is blind)
+The freshness number recall actually reads = `quality_score = (success_count+1)/
+(success_count+failure_count+1)` (Laplace), weight 0.3 in the procedural three-signal rerank
+(`reflect.function.ts:240`). Both write paths already exist but are **blind**, and the
+`confidence` column (Ebbinghaus, monotonic-up, lesson-fingerprint path) is a parallel
+representation recall does NOT read — leave it alone (retire later).
+
+| Mechanism | Today | Decision |
+|---|---|---|
+| harden | `reinforceTemplate` success_count+1, blind (all injected) | → conformance-gated/per-template + token-efficiency-graded |
+| soften | `penalizeInjectedTemplates` failure_count+1, **OOM-only + blind** | **§P1: conformance-gated/per-template, trigger generalized** |
+| metabolism | `markSupersededByEbbinghaus` time-only (90d unused) | **§P2: keep time-decay (atrophy) + ADD evidence-floor (apoptosis)** |
+| mid-flight | (essentially absent) | **§P3: escalation gate beside `memReflect` in `process-agent-turn`** |
+
+### Resolved parameters (the three decisions)
+
+**P1 — soften path = conformance-gated / per-template.** Generalize
+`penalizeInjectedTemplates` from "OOM-only, all-injected" to: for each injected template,
+compare its prescribed ordering rules (`template_graph` / readable "X before Y") against the
+actual scope event DAG. **Conformed + failed → `failure_count+1` (ingredient's fault).
+Violated + failed → no change (cooking's fault, out of scope).** Token-efficiency grading
+attaches to the symmetric harden side (conformed + token-efficient success → stronger credit).
+This is the **automatic de-confounder** — the real advance on the paper's stated open problem;
+the judge is a **deterministic DAG-vs-rules comparator, NOT a second LLM** (stronger than the
+"second nice model" the loop-engineering sources propose; aligns with Anthropic "external
+verification").
+
+**P2 — metabolism floor = evidence-gated, THREE bands (C′).** Stays on the cron sweep
+(`MemorySynthesizerWorker`), via logical-delete (`superseded_by=id`, reversible by human
+override). Two distinct causes coexist: **atrophy** (existing 90d-unused time-decay) and
+**apoptosis** (new, failure-evidence-driven). The apoptosis rule is three-band, not binary
+(Osmani triage-inbox forced this):
+- strong evidence bad → metabolize;
+- strong evidence good → keep/harden;
+- **ambiguous middle (thin/conflicting evidence) → surface to the human (triage), with the
+  crystallization's success-rate shown — never silently decide.** The grey zone IS the human
+  teaching surface; the human's accept/correct flows back as clean (human-localized)
+  attribution. Metabolism must be **observable** (success rates exposed), not a silent cron.
+
+**P3 — mid-flight escalation = same evidence signal, second read-time (no new threshold).**
+Beside `memReflect` in `process-agent-turn`. **Proceed silently only when the plan rests on
+confidently-good ingredients (high quality_score + sufficient evidence); otherwise (shaky OR
+unproven) report the key steps for verification.** "Key step" = the prescribed "X before Y"
+rules of the non-confident injected template (exactly the future conformance-check points) —
+**sparse, only the learned-but-shaky constraints**, each shown with its success-rate. The
+human's approve/correct at the checkpoint writes back to that template's success/failure
+(clean attribution). `memReflect` must additionally return per-injected-template quality_score
++ evidence volume (today it returns only `proceduralIds`).
+
+### The whole collapses to ONE substrate
+`quality_score` + evidence volume (one signal) · `template_injection` (one provenance table) ·
+one adaptive evidence boundary **read at two times** (before-act = P3 gate; after-close = P1
+attribution feeding P2 metabolism). No scattered magic numbers.
+
+### Research grounding (honest, with the dis-confirmation)
+Three sources fetched (Anthropic harness; Osmani + mindstudio loop-engineering). **All three
+are SILENT on statistical reliability scoring** — the only industry retirement analog is a
+FIXED count ("after 10 iterations with no progress, escalate"). So **(C′)'s statistical shape
+is NOT backed by these sources**; it rests on *our* benchmark's lesson (non-deterministic loop
+→ statistical gate). What they DO converge on, and what was absorbed: reality/external as
+judge not self-grading (Anthropic); split writer from checker (Osmani); unresolved → human
+triage inbox (Osmani — this added the third band); "a loop running unattended is a loop
+making mistakes unattended" (Osmani — backs observable metabolism + mid-flight gate).
+
+### Calibration constants — fit from the clean re-run, do NOT hardcode now
+1. **P2 apoptosis bands**: the `n_min` evidence volume (success+failure) below which evidence
+   is "thin" → triage not retire; the quality_score lower/upper bounds delimiting bad / good /
+   ambiguous. (Laplace already gives volume-sensitivity for free.)
+2. **P1 grading**: the magnitude of `success_count`/`failure_count` increments — esp. the
+   token-efficiency grading of conformant success (fractional vs +1), and whether a clean
+   conformant-failure increments by >1 to realize "slow harden / fast soften."
+3. **P3 gate**: the "confidently-good" boundary (reuses P2's good-band; confirm one boundary
+   serves both read-times or they must differ).
+4. **Conformance tolerance**: how strictly the actual DAG must match a prescribed "X before Y"
+   to count as "conformed" (exact vs partial order).
+
+### Build surface (from the zoom-out map) — for the eventual plan
+`template-injection.ts` (P1 penalize rewrite + conformance check) · `template-proposal.worker.ts`
+(harden grading) · `memory-repository.ts` (P2 metabolism query, P3 quality_score read) ·
+`synthesizer.worker.ts` (P2 cron + triage emit) · `reflect.function.ts` (return quality_score
++ evidence) · `process-agent-turn.ts` (P3 gate + human-attribution writeback) · a human
+triage/edit surface (today `/memory` is read-only). **Loop-regression-gate (`npm run
+eval:loop`) before any change here, per CLAUDE.md.** Sequence: build → clean DB → re-run the
+18-step curve as the **falsification test** that also fits the calibration constants.
