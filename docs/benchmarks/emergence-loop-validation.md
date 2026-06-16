@@ -19,16 +19,19 @@ loop (crystallize → recall → reinforce) runs across repeated cold-start runs
 **Findings.** (A) Injection works: a recalled runbook deterministically eliminates
 the non-obvious-quirk failures an uninjected agent hits ~75% of the time (ON 24.0±0.0
 events / 0 gate failures vs OFF 25.5±0.9 / 0.8; Δ6%, magnitude bounded by how much of
-the DAG a capable model already infers). (B) But the autonomous learning curve is
-**flat** (25.3 → 26.0 over 10 runs): the loop converges, crystallizes, and recalls —
-yet the agent is no faster on run 10 than run 1. The broken link is **crystallization
-fidelity**: the produced template captures a generic "what happened" summary plus an
-anonymized topology skeleton, not the actionable ordering lesson, so the recalled
-artifact is inert. **越用越聪明 does not hold end-to-end today — because of *what*
-crystallization distills, not because the loop fails to run.** The work also surfaced
-and fixed two latent defects (an unfalsifiable success metric and a missing
-convergence terminalizer) that had silently prevented the loop's success path from
-ever firing — the prerequisite that made this measurement possible at all.
+the DAG a capable model already infers). (B) The autonomous learning curve was
+initially **flat** — and the diagnosis is the contribution: the loop converges,
+crystallizes, and recalls, but crystallization **replayed the executed path including
+the cold run's mistake** (it distilled *"run_tests → containerize → run_tests
+(retry)"* — the error verbatim), so the agent reproduced its first flawed trajectory
+forever. A targeted fix — crystallize the **corrected** optimal order that avoids the
+observed mistakes, not the path taken — makes the curve **decline**: the agent makes
+the non-obvious mistake exactly once (run 1: 26 events), then is optimal on every run
+thereafter (runs 2–10: 24 events, zero gate failures). **越用越聪明 holds end-to-end,
+once crystallization distills corrected structure rather than the trajectory.** The
+work also surfaced and fixed two latent defects (an unfalsifiable success metric and a
+missing convergence terminalizer) that had silently prevented the loop's success path
+from firing at all — the prerequisite that made this measurement possible.
 
 ## 1. Introduction
 
@@ -151,45 +154,62 @@ Cold start (`procedural_memory` wiped). The task runs N=10 times with the **full
 loop**: injection ON, and after each converged run the `TemplateProposalWorker`
 crystallizes the run into a template the next run can recall. We measure whether
 events-to-convergence trends **down** across runs. Model `openai/gpt-oss-120b`,
-temperature 0, **functional embedding** (hybrid recall).
+temperature 0, functional embedding (hybrid recall).
+
+### 5.1 Baseline (loop as shipped): the curve is flat
 
 | run | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | events | 26 | 24 | 26 | 26 | 26 | 26 | 26 | 26 | 26 | 26 |
 | gate failures | 1 | 0 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-| templates after | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 
-first-third mean **25.3** → last-third mean **26.0** — **no learning** (−3%, i.e.
-flat-to-slightly-worse; run 2's 24 is the same ~25% lucky-ordering hit seen in the
-A/B OFF arm, not a learned gain). The curve does **not** decline.
+first-third **25.3** → last-third **26.0** — **no learning** (run 2's 24 is the same
+~25% lucky-ordering hit as the A/B OFF arm, not a learned gain). The agent trips the
+same quirk on run 10 as on run 1.
 
-### Why it is flat — the broken link is crystallization fidelity (L2), not plumbing
+### 5.2 Diagnosis: the loop runs, but crystallization records the wrong thing
 
-The loop *runs*: every run converges (post-#29), a template is crystallized
-(count grows 1→10), and recall fires — a direct probe confirms `mem::reflect`
-recalls **2** templates for the goal query. So L3 (convergence) and recall both
-work. The defect is in **what crystallization produces**:
+Every run converges (post-#29), a template is crystallized (count grows 1→10), and
+recall fires — a probe confirms `mem::reflect` returns templates for the goal query.
+L3 and recall work. The defect is in **what crystallization produces**, in two layers:
 
-- crystallized **intent** is a generic "what happened" summary —
-  *"Create a faithful-ab microservice with full scaffolding, dependencies, database,
-  API, migrations, tests, containerization, and deployment."* It records the steps
-  taken, **not the hard-won ordering lesson** (`containerize` before `run_tests`).
-- crystallized **template_graph** is the WL-canonicalized skeleton with **anonymized
-  node IDs** (`{"from":"n0","to":"n13"}`): an opaque topology the agent cannot map
-  back to step names or dependencies.
+1. **Generic content.** The crystallized intent was a "what happened" summary
+   (*"Create a microservice with scaffolding, dependencies, … containerization,
+   deployment"*) over an anonymized topology skeleton (`{"from":"n0","to":"n13"}`) —
+   neither states nor encodes the actionable constraint. We added a `lesson` field to
+   the crystallization prompt asking for the ordering/dependency. Recall now carried
+   quirk-relevant text — **but the curve stayed flat.** Which exposed the deeper layer:
+2. **It replays the executed path, including the mistake.** The cold run *made* the
+   quirk error (run_tests before containerize, failed, retried). The lesson the LLM
+   then distilled encoded that very sequence — verbatim from a crystallized template:
+   *"…run_tests (initial) → containerize → run_tests (retry)…"*. Following that lesson
+   **reproduces the mistake.** The loop was faithfully reinforcing its first flawed
+   trajectory, not the optimal one. This is the precise reason 越用越聪明 did not emerge:
+   **the system learned the path it took, not the path it should have taken.**
 
-So the recalled artifact is **inert for the task**: it neither states nor structurally
-encodes the constraint that caused the failure, so the agent trips the same quirk on
-run 10 as on run 1. Contrast the A/B's hand-written runbook, which says the order
-explicitly and *does* eliminate the failure (§4). **A good template helps (L1); the
-loop's autonomous crystallization does not produce a good template (L2).**
+### 5.3 The fix (commit `08c2af7f`)
 
-This is the central, falsifiable finding: **"越用越聪明" does not hold end-to-end in
-the current implementation — not because the loop fails to run (it does, post-#29),
-but because crystallization distills a run into an artifact too generic and too
-anonymized to transfer the actionable lesson.** The remedy is specific: crystallization
-must capture *actionable structure* — the ordering/dependency constraints, with
-readable step labels — rather than a prose summary plus an anonymized skeleton.
+Crystallization now distills the **corrected, optimal order that AVOIDS the observed
+mistakes** — each non-obvious dependency phrased as a rule ("X must be done before Y"),
+each step listed once, the failed-then-retried detour dropped. (The anonymized
+template_graph still serves topological recall; the readable lesson is what the agent
+reads.) Two lines of prompt + a content-enrichment; `lesson` is optional, so any scope
+without a reusable order is unchanged.
+
+### 5.4 After the fix: the curve declines — 越用越聪明 holds
+
+| run | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| events | **26** | 24 | 24 | 24 | 24 | 24 | 24 | 24 | 24 | 24 |
+| gate failures | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The agent makes the non-obvious mistake **exactly once** (run 1, cold), crystallizes
+the corrected order, and is **optimal on every run thereafter** (24 events, zero gate
+failures, runs 2–10). A clean step-function learning curve at temperature 0:
+first-third **24.7** → last-third **24.0**. The system measurably got smarter with use
+— and, by construction, it did so on the one constraint it could not have known a
+priori. **越用越聪明 holds end-to-end, once crystallization distills the corrected
+structure rather than replaying the executed trajectory.**
 
 ## 6. Threats to validity
 
@@ -238,22 +258,26 @@ Three results, in increasing importance:
    convergence terminalizer) meant the loop's success path never fired in normal
    operation. Both are fixed (`11ef17e5`, `9ebd175a`/ADR-58). The runtime now
    converges, crystallizes, recalls, and reinforces end-to-end.
-3. **L2 is the gap, and the thesis does not yet hold.** With the plumbing fixed,
-   the autonomous learning curve is still flat: crystallization distills a run into
-   a generic summary plus an anonymized topology, which recall faithfully returns
-   and which is then *inert* — it does not transfer the ordering knowledge that
-   distinguishes a fast run from a slow one. **越用越聪明 is currently false
-   end-to-end, for a precise and fixable reason.**
+3. **L2 was the gap — diagnosed, fixed, and the thesis now holds.** With the
+   plumbing fixed, the learning curve was *still* flat, which exposed the real
+   defect: crystallization distilled the **executed trajectory including the cold
+   run's mistake**, so the agent reproduced its first flawed path forever. The fix —
+   crystallize the **corrected** optimal order, not the path taken — makes the curve
+   decline: the non-obvious mistake is made exactly once and never again
+   (26 → 24 across runs 1→2, flat-optimal thereafter). **越用越聪明 holds end-to-end.**
 
-The value of this benchmark is that it converts a slogan into a measurement and
-localizes the failure: not "the loop doesn't work" but "crystallization must encode
-actionable structure (ordering/dependency constraints with readable labels), not a
-prose summary over an anonymized skeleton." That is the next experiment's hypothesis
-and the next implementation's target. Re-running this harness after a crystallization
-change is the regression test for the core product claim.
+The value of this benchmark is that it converted a slogan into a measurement,
+falsified the naive version, localized the failure to a precise mechanism
+("crystallization replays the trajectory instead of distilling the corrected
+structure"), and verified the fix on the same instrument. The general lesson is
+sharper than the bug: **a learning system must distill what *should* have happened,
+not faithfully record what *did*** — otherwise it reinforces its own first mistakes.
+Re-running this harness is the standing regression test for the core product claim.
 
 ### Provenance
 - A/B: `.harness/analysis/faithful-ab/ab-1781565457508.json` (8 reps/arm)
-- curve: `.harness/analysis/faithful-ab/curve-1781565760663.json` (10 runs)
-- code at commit of record; model `openai/gpt-oss-120b`, temperature 0.
-- Defect fixes: D1 `11ef17e5`, D2 `9ebd175a` (ADR-58 `docs/adr/0067-...`).
+- curve, baseline (flat): `.harness/analysis/faithful-ab/curve-1781565760663.json`
+- curve, after L2 fix (declining): `.harness/analysis/faithful-ab/curve-1781567981220.json`
+- model `openai/gpt-oss-120b`, temperature 0.
+- Fixes: D1 (failure_count) `11ef17e5`; D2 (convergence terminalizer) `9ebd175a`,
+  ADR-58 `docs/adr/0067-…`; L2 (corrected-order crystallization) `08c2af7f`.
