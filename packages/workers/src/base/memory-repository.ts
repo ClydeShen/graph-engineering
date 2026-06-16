@@ -66,6 +66,22 @@ interface BacklogRepository {
 interface ProceduralRepository {
   /** Returns the inserted row id (embedding backlog targeting, ADR 55). */
   insertProceduralTemplate(params: ProceduralTemplateParams): Promise<{ id: string }>;
+  /**
+   * Find the current canonical positive template with a near-identical TOPOLOGY
+   * (WL cosine > 0.95) to this scope's converged graph, so a repeated run
+   * consolidates INTO one canonical runbook instead of accumulating partial
+   * duplicates (B1 consolidation, docs/benchmarks/emergence-loop-validation.md §5.5).
+   *
+   * Topology, not intent-prose embedding, is the merge key: it is computed
+   * deterministically from the event DAG, so it does not drift run-to-run the way
+   * an LLM-written intent summary does (the first consolidation attempt matched only
+   * ~1/3 of repeats and the mixture re-formed). A run that STUMBLED has extra rework
+   * events → a different graph → it structurally cannot match (and so cannot poison)
+   * the clean canonical. Non-superseded, positive, a different source scope.
+   */
+  findMergeableTemplate(topologyEmbeddingLiteral: string, excludeScopeId: string): Promise<{ id: string; content: string } | null>;
+  /** Logically supersede a positive template by a newer canonical one (append-only: old row kept). */
+  supersedeTemplate(oldId: string, newId: string): Promise<void>;
   reinforceTemplate(templateId: string): Promise<void>;
   /** Template ids injected into this scope by mem::reflect (migration 013). */
   getInjectedTemplateIds(scopeId: string): Promise<string[]>;
@@ -226,6 +242,32 @@ export class PoolMemoryRepository implements MemoryRepository {
     );
   }
 
+  async findMergeableTemplate(
+    topologyEmbeddingLiteral: string,
+    excludeScopeId: string,
+  ): Promise<{ id: string; content: string } | null> {
+    const { rows } = await this.pool.query<{ id: string; content: string }>(
+      `SELECT id, content
+       FROM procedural_memory
+       WHERE is_anti_pattern = FALSE
+         AND superseded_by IS NULL
+         AND topology_embedding IS NOT NULL
+         AND source_scope_id IS DISTINCT FROM $2
+         AND 1.0 - (topology_embedding <=> $1::vector) > 0.95
+       ORDER BY topology_embedding <=> $1::vector ASC
+       LIMIT 1`,
+      [topologyEmbeddingLiteral, excludeScopeId],
+    );
+    return rows.length > 0 ? { id: rows[0]!.id, content: rows[0]!.content } : null;
+  }
+
+  async supersedeTemplate(oldId: string, newId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE procedural_memory SET superseded_by = $2 WHERE id = $1`,
+      [oldId, newId],
+    );
+  }
+
   async reinforceTemplate(templateId: string): Promise<void> {
     await this.pool.query(
       `UPDATE procedural_memory
@@ -321,6 +363,8 @@ export class StubMemoryRepository implements MemoryRepository {
     supersede: [] as Array<{ oldId: string; newId: string }>,
     findContradictionCandidate: [] as string[],
     insertProceduralTemplate: [] as ProceduralTemplateParams[],
+    findMergeableTemplate: [] as Array<{ topologyEmbeddingLiteral: string; excludeScopeId: string }>,
+    supersedeTemplate: [] as Array<{ oldId: string; newId: string }>,
     reinforceTemplate: [] as string[],
     getInjectedTemplateIds: [] as string[],
     lookupLesson: [] as string[],
@@ -409,6 +453,25 @@ export class StubMemoryRepository implements MemoryRepository {
   async insertProceduralTemplate(params: ProceduralTemplateParams): Promise<{ id: string }> {
     this.calls.insertProceduralTemplate.push(params);
     return { id: 'stub-procedural-id' };
+  }
+
+  private _mergeableTemplate: { id: string; content: string } | null = null;
+
+  setMergeableTemplate(result: { id: string; content: string } | null): void {
+    this._mergeableTemplate = result;
+  }
+
+  async findMergeableTemplate(
+    topologyEmbeddingLiteral: string,
+    excludeScopeId: string,
+  ): Promise<{ id: string; content: string } | null> {
+    this.maybeThrow('findMergeableTemplate');
+    this.calls.findMergeableTemplate.push({ topologyEmbeddingLiteral, excludeScopeId });
+    return this._mergeableTemplate;
+  }
+
+  async supersedeTemplate(oldId: string, newId: string): Promise<void> {
+    this.calls.supersedeTemplate.push({ oldId, newId });
   }
 
   async reinforceTemplate(templateId: string): Promise<void> {

@@ -224,6 +224,58 @@ describe('TemplateProposalWorker', () => {
     expect(positive).toBeUndefined();
   });
 
+  // ── B1: template consolidation (crystallization-time merge + supersede) ─────
+
+  it('B1: folds this run into the prior canonical template and supersedes it', async () => {
+    mockChat
+      .mockResolvedValueOnce('{"intent_summary":"set up service","outcome_summary":"done","lesson":"A before B"}')
+      .mockResolvedValueOnce('A must be done before B. C must be done before D.');
+    memory.setMergeableTemplate({ id: 'prior-tpl', content: 'C before D' });
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    // looked up by deterministic WL topology, excluding this scope's own rows
+    expect(memory.calls.findMergeableTemplate).toHaveLength(1);
+    expect(memory.calls.findMergeableTemplate[0]!.excludeScopeId).toBe('scope-1');
+    expect(memory.calls.findMergeableTemplate[0]!.topologyEmbeddingLiteral).toMatch(/^\[/);
+    // the canonical (positive) template carries the MERGED superset runbook
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive!.content).toContain('A must be done before B. C must be done before D.');
+    // and the prior row is superseded by the freshly written canonical row
+    expect(memory.calls.supersedeTemplate).toEqual([{ oldId: 'prior-tpl', newId: 'stub-procedural-id' }]);
+  });
+
+  it('B1: no prior canonical template → appends this run unchanged, no supersede', async () => {
+    mockChat.mockResolvedValue(
+      '{"intent_summary":"set up service","outcome_summary":"done","lesson":"A before B"}',
+    );
+    // setMergeableTemplate not called → stub returns null
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    expect(memory.calls.findMergeableTemplate).toHaveLength(1); // topology lookup always runs
+    expect(memory.calls.supersedeTemplate).toHaveLength(0);
+    const positive = memory.calls.insertProceduralTemplate.find((p) => p.isAntiPattern === false);
+    expect(positive!.content).toContain('A before B'); // this run's own lesson, not a merge
+  });
+
+  it('B1: consolidation works without an embedding provider (topology is deterministic)', async () => {
+    mockChat
+      .mockResolvedValueOnce('{"intent_summary":"x","outcome_summary":"y","lesson":"A before B"}')
+      .mockResolvedValueOnce('A must be done before B. C must be done before D.');
+    memory.setMergeableTemplate({ id: 'prior-tpl', content: 'C before D' });
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, null);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+
+    // topology embedding needs no LLM/embed call → merge + supersede still happen
+    expect(memory.calls.findMergeableTemplate).toHaveLength(1);
+    expect(memory.calls.findMergeableTemplate[0]!.topologyEmbeddingLiteral).toMatch(/^\[/);
+    expect(memory.calls.supersedeTemplate).toEqual([{ oldId: 'prior-tpl', newId: 'stub-procedural-id' }]);
+  });
+
   // ── Phase 10: reinforcement closure (P1-D call path) ───────────────────────
 
   it('reinforces every template injected into the scope (adoption = converged closure)', async () => {

@@ -60,6 +60,37 @@ export class TemplateProposalWorker {
     return orphans;
   }
 
+  /**
+   * Fold a new run's corrected runbook INTO the prior canonical one (B1
+   * consolidation, docs/benchmarks/emergence-loop-validation.md §5.5). One LLM
+   * call — union/dedup of prose ordering rules is not deterministic (ADR-22).
+   * The result is the SUPERSET: every distinct "X before Y" rule from either
+   * runbook, deduplicated, contradictions resolved toward the more complete
+   * ordering. This is what lets recall inject ONE runbook carrying ALL the
+   * hidden rules, instead of a different partial each run. Merge failure must
+   * not break scope close — fall back to this run's lesson.
+   */
+  private async mergeRunbooks(prior: string, fresh: string): Promise<string> {
+    try {
+      const merged = await this.llm.chat([
+        {
+          role: 'system',
+          content:
+            'You merge two runbooks for the SAME task into one canonical runbook. ' +
+            'Output prose only (no JSON). Keep EVERY distinct ordering rule from both ' +
+            'inputs, phrase each as "X must be done before Y", list each step ONCE, ' +
+            'remove duplicates, and if the two disagree prefer the more complete and ' +
+            'internally consistent ordering. Do not invent steps that appear in neither input.',
+        },
+        { role: 'user', content: writeGuard(`PRIOR canonical runbook:\n${prior}\n\nNEW run lesson:\n${fresh}`) },
+      ]);
+      const trimmed = merged.trim();
+      return trimmed.length > 0 ? trimmed : fresh;
+    } catch {
+      return fresh;
+    }
+  }
+
   async onScopeClosed(
     scopeId: string,
     entityId: string,
@@ -148,16 +179,37 @@ export class TemplateProposalWorker {
     const conflictCount = events.filter((e) => e.event_type === 'conflict_detected').length;
     if (conflictCount <= events.length * LOW_CONFLICT_RATIO) {
       try {
+        // B1 consolidation (a): match the prior canonical by DETERMINISTIC topology,
+        // not LLM-prose intent embedding. The intent summary drifts run-to-run, so the
+        // first attempt matched only ~1/3 of repeats and the partial-runbook mixture
+        // re-formed. The canonical graph is computed from the event DAG and is
+        // identical for the same converged trajectory → reliable consolidation. A run
+        // that STUMBLED has extra rework events → a different graph → it cannot match
+        // (and so cannot poison) the clean canonical. When a prior is found, fold this
+        // run's lesson into it as ONE superset runbook and supersede it.
         const skeleton = canonicalizeTemplateGraph(buildTemplateGraphFromEvents(events));
+        const topologyLiteral = wlLiteral(skeleton);
+        let supersedePriorId: string | null = null;
+        let canonicalContent = actionableContent;
+        const prior = await this.memory.findMergeableTemplate(topologyLiteral, scopeId);
+        if (prior) {
+          canonicalContent = await this.mergeRunbooks(prior.content, actionableContent);
+          supersedePriorId = prior.id;
+        }
         const { id: templateId } = await this.memory.insertProceduralTemplate({
           scopeId,
-          content: writeGuard(actionableContent),
-          intentDescription: writeGuard(actionableContent),
+          content: writeGuard(canonicalContent),
+          intentDescription: writeGuard(canonicalContent),
           templateGraph: skeleton,
-          embeddingLiteral: wlLiteral(skeleton),
+          embeddingLiteral: topologyLiteral,
           intentEmbeddingLiteral,
           isAntiPattern: false,
         });
+        // Supersede AFTER the new canonical row exists, so recall never sees a gap
+        // (append-only: the old row is kept, just marked superseded_by the new id).
+        if (supersedePriorId !== null) {
+          await this.memory.supersedeTemplate(supersedePriorId, templateId);
+        }
         if (intentEmbeddingLiteral === null) {
           await this.memory.enqueueEmbeddingBackfill('procedural_memory', templateId, 'intent_embedding', embedText);
         }

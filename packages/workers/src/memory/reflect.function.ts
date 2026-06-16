@@ -209,14 +209,14 @@ async function hybridSearchProcedural(
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY intent_embedding <=> $1::vector) AS vector_rank
          FROM procedural_memory
-         WHERE is_anti_pattern = FALSE AND ${visibilityFilter(4)}
+         WHERE is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
          ORDER BY intent_embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM procedural_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND ${visibilityFilter(4)}
+         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -310,7 +310,7 @@ async function bm25SearchProcedural(
               p.success_count, p.failure_count, p.last_used_at,
               0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(p.ts_doc, query) DESC))) AS rrf_score
        FROM procedural_memory p, plainto_tsquery('english', $1) AS query
-       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND ${visibilityFilter(3)}
+       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND p.superseded_by IS NULL AND ${visibilityFilter(3)}
        LIMIT 20
      ),
      scored AS (

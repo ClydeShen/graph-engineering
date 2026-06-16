@@ -33,8 +33,11 @@ the corrected order that avoids the observed mistakes rather than the path taken
 curve then declines: the agent makes the non-obvious mistake once (run 1, 26 events)
 and is optimal thereafter (runs 2-10, 24 events, zero gate failures). Scaled to 18
 steps with six counter-intuitive quirks the effect grows to 12% and learning still
-emerges, though it becomes gradual and plateaus one quirk short of optimal. A
-methodological corollary: effect size tracks genuinely hidden structure, not task
+emerges, though it first becomes gradual and plateaus one quirk short of optimal.
+Consolidating the accumulating partial templates into one canonical runbook, keyed on
+the deterministic graph topology rather than a drifting LLM summary, removes that
+plateau: the 18-step curve descends to the optimum and holds it. A methodological
+corollary: effect size tracks genuinely hidden structure, not task
 size. Quirks that match a strong model's training priors produce no effect and
 nothing to learn. The work also fixed two latent defects, an unfalsifiable success
 metric and a missing convergence terminalizer, that had prevented the loop's success
@@ -312,12 +315,57 @@ partial, not the clean step function of Section 5.4.
   recall mixing an accumulating set of partial templates, is a harder distillation
   than the single-quirk case.
 
-This is the honest scaled result. The loop scales and the magnitude grows with hidden
-structure (13%, above the small-DAG effect), but at higher complexity the autonomous
-loop captures most of the hidden structure, not all. Learning is real, measurable, and
-incremental rather than perfect. The next L2 target follows directly: consolidate the
-accumulating partial templates so recall delivers one clean corrected runbook rather
-than a mixture.
+This is the honest scaled result at this stage. The loop scales and the magnitude grows
+with hidden structure (13%, above the small-DAG effect), but at higher complexity the
+autonomous loop captures most of the hidden structure, not all. The plateau has a
+specific cause, the accumulating partial templates, and Section 5.6 removes it.
+
+### 5.6 Consolidation: removing the plateau
+
+Section 5.5 plateaus because recall injects a mixture of partial runbooks. Each
+converged run crystallizes a template that captures most, not all, of the six reversed
+rules, and the templates accumulate. The fix is to consolidate them into one canonical
+runbook at crystallization time. When a scope closes, the worker looks up the prior
+canonical template for the same task, folds the new run's corrected lesson into it as a
+superset of the ordering rules, writes the merged canonical, and supersedes the prior.
+Recall filters superseded rows, so injection draws on exactly one runbook.
+
+The merge key is the decision that matters. The first implementation matched the prior
+template by the cosine similarity of its intent embedding, the vector of an LLM-written
+summary of the scope. It failed: the summary wording drifts from run to run, so the
+embedding fell below the match threshold about two thirds of the time, the lookup
+missed, and a fresh canonical was written instead of superseding the old one. The
+learning curve reached the optimum for runs 2 to 5 (38 events, 0 gate failures, which
+the mixture never achieved) and then regressed to 44 and 46 as the unmatched templates
+re-formed the mixture. A direct database count confirmed the cause: seven live canonical
+rows against three superseded, out of nine possible consolidations.
+
+The fix is to key the merge on the converged graph topology rather than the prose
+summary. The Weisfeiler-Lehman topology embedding is computed deterministically from the
+event DAG, so two runs of the same task that converge on the same dependency structure
+produce the identical vector and match reliably, while a run with extra rework events
+produces a different graph and cannot silently overwrite the clean canonical. The
+canonicalization abstracts the executed rework away, so every converged run of the task,
+regardless of how many gate failures it incurred, consolidates into the same canonical.
+
+Re-running the 18-step curve with topology-keyed consolidation:
+
+| run | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| events | 42 | 42 | 46 | 40 | 40 | 40 | 38 | 38 | 38 | 38 |
+| gate failures | 2 | 2 | 4 | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+
+The curve descends to the injected optimum and holds it: the final four runs are 38
+events with zero gate failures, matching the injected optimum for this task identified
+in Section 5.5. A database count after the run shows one live canonical against nine
+superseded, the consolidation firing on all nine repeats. The plateau is removed.
+Learning at 18 steps is no longer partial; it converges to the optimum and stays there.
+
+One implementation detail generalizes the Section 5.4 lesson. Recall had never filtered
+superseded procedural templates, so superseding a row did not withhold it from injection
+until that filter was added; the same gap had been silently disabling Ebbinghaus decay
+for positive templates. Consolidation only works once supersession actually removes the
+old runbook from recall.
 
 ## 6. Threats to validity
 
@@ -378,13 +426,15 @@ Four results, in increasing importance.
    corrected order rather than the path taken makes the curve decline; the non-obvious
    mistake is made once and never again (26 to 24 across runs 1 and 2, flat-optimal
    thereafter).
-4. It scales, with an honest ceiling. On an 18-step DAG with six counter-intuitive
-   quirks (Section 5.5) the curve declines 13% (46.7 to 40.7), a larger effect than
-   the small DAG, which confirms the gain grows with genuinely hidden structure.
-   Learning is gradual and partial: it plateaus one quirk short of optimal, because
-   crystallizing and recalling a clean corrected order over six reversed rules, with
-   templates accumulating, is harder. The loop learns most of the hidden structure,
-   not all; the next L2 target is template consolidation.
+4. It scales to the optimum once templates are consolidated. On an 18-step DAG with six
+   counter-intuitive quirks (Section 5.5) the autonomous curve first declined 13% (46.7
+   to 40.7) but plateaued one quirk short of optimal, because recall injected a mixture
+   of accumulating partial runbooks. Consolidating them into one canonical runbook at
+   crystallization time, keyed on the deterministic graph topology rather than a drifting
+   LLM summary (Section 5.6), removes the plateau: the curve descends to 38 events with
+   zero gate failures and holds it for the final four runs. The diagnosis that the merge
+   key must be deterministic, found by a database count after an intent-keyed version
+   regressed, is part of the contribution.
 
 The benchmark converts a slogan into a measurement, falsifies the naive version,
 localizes the failure to a precise mechanism (crystallization replays the trajectory
@@ -402,8 +452,12 @@ is its standing regression test.
   - curve, after L2 fix (declining): `curve-1781567981220.json`
 - 18-step DAG, 6 counter-intuitive quirks (Section 5.5, scaled validation):
   - A/B: `ab-1781570646578.json` (8 reps per arm, 12%)
-  - curve, after L2 fix (declining 13%): `curve-1781569692836.json`
+  - curve, after L2 fix (declining 13%, plateau at 40): `curve-1781569692836.json`
+- 18-step DAG, consolidation (Section 5.6):
+  - curve, intent-keyed (regressed, mixture re-formed): `curve-1781579091655.json`
+  - curve, topology-keyed (descends to 38/0 and holds): `curve-1781580434975.json`
 - Model `openai/gpt-oss-120b`, temperature 0.
 - Fixes: D1 (failure_count) `11ef17e5`; D2 (convergence terminalizer) `9ebd175a`,
-  ADR-58 `docs/adr/0067-...`; L2 (corrected-order crystallization) `08c2af7f`.
+  ADR-58 `docs/adr/0067-...`; L2 (corrected-order crystallization) `08c2af7f`;
+  consolidation (topology-keyed merge-and-supersede) this commit.
 - Apparatus at the 18-step DAG: commit `2584fd7e` (`scripts/eval/faithful-ab/dag.ts`).

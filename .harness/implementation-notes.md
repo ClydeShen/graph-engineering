@@ -1600,3 +1600,53 @@ zero drift across all three.
   superseded in context by later entries and reflect what was true when written;
   wholesale rewriting is high-judgement / low-value churn that loses cross-session
   context. Surfaced rather than destroyed.
+
+---
+
+## B1 — L2 template consolidation (GH #24, 2026-06-16)
+
+**Goal:** lift the 18-step learning curve off its plateau (40, one quirk short of
+the 38 optimum). Root cause per paper §5.5: templates accumulate 1→10 and
+`mem::reflect` injects a MIXTURE of partial corrected runbooks. Chosen design
+(user-approved): option (a) crystallization-time merge-and-supersede into ONE
+canonical runbook.
+
+**Mechanism (final):**
+- `template-proposal.worker.ts` onScopeClosed: on a low-conflict converged scope,
+  look up the prior canonical template; if found, one extra LLM call (`mergeRunbooks`)
+  folds this run's lesson into it as a superset of "X before Y" rules, the new
+  canonical row is written, and the prior is superseded (append-only — old row kept,
+  `superseded_by` set).
+- `reflect.function.ts`: positive procedural recall (hybrid + BM25) now filters
+  `superseded_by IS NULL` — without this, supersede was inert for recall (it was a
+  latent gap: Ebbinghaus-decayed positives were also still being recalled). This is
+  what makes consolidation actually remove old templates from injection.
+- `memory-repository.ts`: `findMergeableTemplate` + `supersedeTemplate` added.
+
+**Key iteration (intent-embedding → topology):** the first cut matched the prior by
+INTENT embedding (cosine > 0.89, reusing the semantic-merge threshold). The first
+18-step re-run exposed it: runs 2–5 reached 38/0 (the optimum the mixture never hit),
+but 6–10 regressed (44/40/46/40/42) and never recovered. DB forensics: 7 canonical /
+3 superseded — supersede fired only 3/9. Diagnosis: the LLM-written intent_summary
+DRIFTS run-to-run, so embeddings fell below 0.89 and the merge missed ~2/3 of
+repeats; the mixture re-formed (dominant cause) and merge-every-run also let a
+stumbling run poison the canonical (secondary). Fix: match on the DETERMINISTIC WL
+`topology_embedding` (cosine > 0.95). Same converged trajectory → identical canonical
+graph → reliable consolidation; a stumbling run has extra rework events → different
+graph → it structurally CANNOT match (or poison) the clean canonical. This subsumes
+an explicit "clean-run gate" — note that orphan events are NOT a stumble signal here
+(failed task attempts stay in the predecessor chain; only the terminal event is an
+orphan).
+
+**Tests:** 3 new in template-proposal.worker.test.ts (merge+supersede on topology
+hit; no-prior no-op; works without an embedding provider since topology is
+deterministic). All workers/memory tests green; full-workspace tsc clean.
+
+**Validation (passed):** 18-step `curve 10`, topology-keyed:
+events 42,42,46,40,40,40,38,38,38,38 / gateFails 2,2,4,1,1,1,0,0,0,0. The curve
+descends to 38/0 and HOLDS it for the final four runs (the intent-keyed version hit 38
+then regressed to 44/46). DB after the run: 1 canonical / 9 superseded = consolidation
+fired on all 9 repeats (intent-keyed was 7/3). The 40 plateau is removed.
+Raw: `.harness/analysis/faithful-ab/curve-1781580434975.json` (topology),
+`curve-1781579091655.json` (intent, regressed — kept as the diagnostic record).
+Paper updated: §5.6 + abstract + conclusion + provenance.
