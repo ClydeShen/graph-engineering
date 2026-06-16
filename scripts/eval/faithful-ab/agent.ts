@@ -18,7 +18,7 @@ import { checkConvergence, writeScopeClosed } from '@graph/gateway/watchdog-sql'
 import { STEPS, GOAL_TEXT, isReady, missingDeps, type Step } from './dag.js';
 
 const W_MAX = 4096;
-const TURN_CAP = 40;
+const TURN_CAP = 60;
 
 export interface RunRecord {
   label: string;
