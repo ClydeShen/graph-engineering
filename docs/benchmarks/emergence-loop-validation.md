@@ -430,9 +430,22 @@ Two methodological results follow, and they are the durable output of this secti
    after-the-fact causal stories on polluted data. Every curve now truncates all memory
    tiers before it starts.
 
-The next lever for consolidation robustness, left as deliberate future work, is
-quality-gated canonical updates: only a run at least as good as the current canonical may
-update it, which breaks the closed loop a bad run otherwise uses to lock itself in.
+The right framing for that robustness is not full autonomy. This is a human-in-the-loop
+system, a cognitive prosthesis rather than an unattended controller: it should be as
+autonomous as possible while keeping human correction transparent and cheap, approaching a
+good result rather than guaranteeing one. The restoring force is therefore a per-lesson
+trust signal, written automatically and entirely within the two-actor loop of user and
+system, with no third-party verifier. Its ground is the objective outcome of acting on the
+lesson (did the scope that recalled it converge and succeed, observed by the system itself,
+with reality rather than the model's self-assessment as the judge), reinforced by the user's
+natural behaviour (accept, correct, re-ask) and overridable by an explicit user edit as the
+highest authority. The crystallizing model is barred from scoring its own lesson, the exact
+discipline whose absence (the unfalsifiable D1 metric) this benchmark already caught. The
+open research is to de-confound that outcome signal: production has no controlled A/B per
+task, so a lesson recalled mostly for easy scopes would otherwise look accurate spuriously.
+This direction supersedes the narrower "quality-gated canonical updates" framing: the loop
+does not have to stabilise itself in isolation, it has to make its drift cheap for a human
+to see and correct.
 
 ## 6. Threats to validity
 
@@ -499,8 +512,11 @@ Four results, in increasing importance.
    injected a mixture of partial runbooks. Consolidating them into one canonical runbook
    reached 38/0 in one run (Section 5.6) but did not reproduce: consolidation is a closed
    feedback loop, and on a non-deterministic model it is variance-fragile (LLM prose-merge
-   drifts and compounds; no-merge collapses on incompleteness). This is documented as an
-   open problem (Section 5.7), with quality-gated canonical updates named as the next lever.
+   drifts and compounds; no-merge collapses on incompleteness). The right response is not to
+   chase full autonomy: this is a human-in-the-loop system that should approach a good result,
+   not guarantee one. The named next lever (Section 5.7) is a per-lesson trust signal grounded
+   in objective execution outcome (reality as judge, not the model grading itself) plus the
+   user's own correction, kept entirely within the user-and-system loop.
 5. The same instrument that found this is the lasting contribution. A loop on a
    non-deterministic model cannot be validated by unit tests (109 stayed green through a
    collapse) or by a single number; it needs a statistical regression gate over hermetic

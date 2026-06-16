@@ -1689,6 +1689,17 @@ to 121 (turn cap, no convergence). Investigation:
 - Paper §5.6 corrected (38/0 was a draw), §5.7 added (variance-fragility, B2, methodology),
   abstract/conclusion/README/provenance corrected.
 
-**Named future work (not attempted):** quality-gated canonical updates — only a run at least
-as good as the current canonical may update it, breaking the closed loop a bad run uses to
-lock itself in. Deserves its own gated pass, not a reactive hotfix.
+**Named future work (not attempted) — superseded framing.** The earlier "quality-gated
+canonical updates" idea assumed the loop must stabilise itself autonomously. A fuller design
+pass reframed it: this is a **human-in-the-loop cognitive prosthesis, approaching not
+guaranteeing** a result. The restoring force is a **per-lesson trust signal**, written
+automatically **within the two-actor (user + system) loop, no third-party verifier**:
+ground = the **objective execution outcome** of acting on the lesson (did the scope that
+recalled it converge/succeed — reality is the judge, NOT the model self-grading), reinforced
+by the user's natural behaviour, overridable by an explicit user edit (highest authority).
+The crystallizing LLM is barred from scoring its own lesson (the D1 Proxy-Signal discipline).
+Open research = de-confound the correlational outcome→lesson attribution (production has no
+per-task A/B; a lesson recalled mostly for easy scopes looks accurate spuriously). Three
+external sources (Anthropic long-running-harness, mindstudio + Osmani loop-engineering)
+independently converge on human-in-the-loop + "don't let the model grade its own homework".
+Captured in paper §5.7 + memory `next-direction-lesson-trust-substrate`.
