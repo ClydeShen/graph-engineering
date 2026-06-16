@@ -1,36 +1,35 @@
 {
   "version": "1.0",
-  "phase": "03-execute",
+  "phase": "01-discuss",
   "task": 1,
   "total_tasks": 1,
-  "status": "paused",
-  "last_updated": "2026-06-15T11:40:00.000Z",
-  "current_state": "MemexTerminal (Pi-embed) 本会话大幅打磨完成 + 真正修好 Gemini agentic;并产出 console trail-mesh 可视化方案(待用户拍板起 P1)。所有改动已提交本地 master(未推送),串行全套 793 测试绿,tsc 0。",
+  "status": "ready",
+  "last_updated": "2026-06-16T13:00:00.000Z",
+  "current_state": "Loop Engineering benchmark arc complete (GH #24). The emergence loop works end-to-end: a live agent makes a non-obvious mistake once, the loop crystallizes the corrected order, and later runs avoid it (learning curve declines 26->24 on the 11-step DAG, 46.7->40.7 on the 18-step DAG). Academic benchmark, re-runnable harness, 5 raw JSON, ADR-58, and a README link are all on master (6a12ba8e), tree clean. Next direction is chosen by the research itself and needs one design decision before coding.",
   "completed_work": [
-    "signature-shim 真正生效修复(bdc04f53):pi 的 configureHttpDispatcher→undici.install() 在 shim 后覆盖 globalThis.fetch,导致 shim 在真实 InteractiveMode 里从没运行(只 -m 生效,误导了之前所有验证)。改 getter/setter 抗重新赋值,活体确认 CALL/RESP 出现、Gemini 裸 400 消失",
-    "bare-4xx 规范化(96f4f00e):裸 400/413 retry 一次+塞描述 body,防 pi 把'(no body)'误判 context overflow 死循环",
-    "thought_signature 往返(27cee228,本会话前)——现在真生效了(靠 bdc04f53)",
-    "TUI 去重清爽(d0f92159):删 makeChromeFactory,widget 成唯一 chrome,clean execute_bash 输出(bash-output.ts)",
-    "PI_OFFLINE 默认关 pi 更新横幅/包检查/工具下载/遥测(32d5ea49)",
-    "widget 人话标签(0884c36e):session/exchanges/in memory/learned + 命令带说明词",
-    "TUI 降噪(1abc5c33):hideThinkingBlock 默认隐藏思维链 + execute_bash 折叠(6行预览, ctrl+o 展开, 模型仍得全文)",
-    "renderCall 显示 $ 命令(3e11ebfb):exit 3 不再神秘",
-    "console trail-mesh 方案(docs/CONSOLE-TRAIL-MESH-PLAN.md):事件级关联图设计,P1-P3 分期"
+    "Permanent artifacts: procedural injection toggle + failure_count write path (merged 11ef17e5)",
+    "D2 fix ADR-58: convergence terminalizer; scopes now converge via the real path (merged 9ebd175a), 394 tests green",
+    "L2 fix: crystallization distills the corrected optimal order, not the executed path incl. the cold mistake (08c2af7f)",
+    "Faithful A/B + learning curve harness (scripts/eval/faithful-ab) on 11-step and 18-step DAGs",
+    "Benchmark paper docs/benchmarks/emergence-loop-validation.md (English, Loop Engineering framing, runtime background, 5 committed JSON)",
+    "README: new 'Does it actually learn?' section + Documentation link",
+    "Session memory mirrored to .harness/memory/ (61 files)"
   ],
   "remaining_work": [
-    "[待用户拍板] console trail-mesh P1:把已存在但孤儿的 GET /v1/scopes/:id/topology 端点接进新 TrailCanvas(L2 事件 mesh,因果边+payload.kind 上色)。最大收益最小工作量。用户已选'B 治本,先出方案',方案已出,等他确认方向+§6.2(2D)/§6.3(默认mesh+开关)后起 P1",
-    "[方案内 P2] /topology 加 kind+label、entity 复访虚线边、hover 卡、新节点脉冲(接 Now SSE)",
-    "[方案内 P3] /associations 跨 scope 关联(lesson↔来源scope 用 procedural_memory.scope_id、entity 跨会话复用)",
-    "[未推送] 本会话 10 个 commit 在本地 master,未 push(用户未要求)",
-    "[模型提醒] gpt-oss-120b agentic 弱(生成畸形 curl exit 3 + 死循环);curl/网络已验证正常;agentic 任务建议 gemini/qwen"
+    "PRIMARY: L2 template consolidation so the 18-step curve reaches the optimum (it plateaus at 40, one quirk short of 38, because templates accumulate 1->10 and recall injects a mixture of partial runbooks)",
+    "Decide design: (a) crystallization-time merge/supersede into one canonical corrected runbook, vs (b) recall-time fuse/select of top-k into one injected runbook",
+    "Validate: implement consolidation, re-run scripts/eval/faithful-ab/run.ts curve 10 on the 18-step DAG, success = curve reaches ~38 with steady 0 gate failures",
+    "SECONDARY: cross-task recall experiment (template from task A helping a related task B) to test generalization, not memorization",
+    "SECONDARY: longer-horizon reinforcement/decay dynamics (success_count accumulation, supersede on decay)",
+    "Two infra issues to file: F-INFRA-1 (memex doctor 'reachable' only GETs baseUrl, never a real chat/embed call) and F-INFRA-2 (LLM key only in repo .env, not ~/.memex/config.json, so standalone processes 500)"
   ],
   "decisions_made": [
-    "monkeypatch globalThis.fetch 必须抗重新赋值(getter/setter),否则被 undici.install 覆盖——本会话最大教训",
-    "TUI 默认隐藏思维链(用户:只保留直接需要的信息),可 thinking 键切换",
-    "execute_bash 默认折叠 6 行 + ctrl+o 展开,模型始终得全文",
-    "/now 治本=事件级 trail mesh(非替换星系);topology 端点复用,P1 先接线"
+    "Loop Engineering is the framing: build, measure, repair the self-improvement loop",
+    "A learning system must distill what SHOULD have happened, not record what DID (else it reinforces its first mistakes) -- the core L2 principle",
+    "Effect size tracks genuinely hidden structure, not task size; quirks matching model training priors produce no effect (a null result is not proof the loop fails)",
+    "Memory mirrored into repo .harness/memory/ is a snapshot, not a live sync; source of truth stays ~/.claude"
   ],
   "blockers": [],
-  "context": "权威设计=docs/CONSOLE-TRAIL-MESH-PLAN.md(trail-mesh)+ docs/CONSOLE-REDESIGN.md(Now 宇宙)。代码=packages/terminal-pi/src/{signature-shim,terminal,graph-widget,bash-output,render-kit,graph-snapshot,graph-overlay,outcome}.ts。console=packages/console/src/{app/now,app/topology,components/{UniverseCanvas,ForestCanvas},lib/api}.ts + 端点 packages/gateway/src/routes/{topology,forest,emergence,scope-read}.ts。memory: project_memexterminal_tui_arc + project_terminal_identity_and_provider_bridge + reference_gsd2_tui_patterns。引擎栈/DB 需在跑。串行 npm test(--no-file-parallelism)避并行 DDL 死锁 flake。",
-  "next_action": "[用户指令] 下个 session 先整理代码(整理 packages/terminal-pi 本会话新增的 8 文件:render-kit/graph-snapshot/graph-widget/graph-overlay/outcome/bash-output/signature-shim/terminal/index/provider-bridge —— 查死代码/一致性/职责清晰/可选 A-plan rename terminal-pi→@graph/terminal),移除残留诊断。trail-mesh 方案(docs/CONSOLE-TRAIL-MESH-PLAN.md)先 PARK,不起 P1,等代码整理完再回头确认方向。"
+  "context": "Authority: docs/benchmarks/emergence-loop-validation.md (Section 5.5 + Conclusion name the consolidation target). Harness: scripts/eval/faithful-ab/{dag,seed,agent,run}.ts. Crystallization code to change for option (a): packages/workers/src/memory/template-proposal.worker.ts (the lesson field + supersede via procedural_memory.superseded_by). Recall code for option (b): packages/workers/src/memory/reflect.function.ts (formatProcedural / proceduralIds). Run requires graph_test migrated + LLM keys exported from .env (see F-INFRA-2). Memory: project_next_direction_l2_consolidation, project_emergence_benchmark_paper, project_emergence_loop_validation.",
+  "next_action": "Discuss and choose the consolidation design (crystallization-time merge vs recall-time fuse/select), then implement it and re-run the 18-step learning curve to test whether it reaches the optimum."
 }
