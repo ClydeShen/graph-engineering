@@ -1850,3 +1850,24 @@ the constants — deferred (live HITL), defaults set provisionally in `freshness
   conformance-gated (conformed+failed → `failure_count += softenIncrement`; violated /
   not-applicable / unparseable → untouched = fail-closed), trigger-generalized (works at any
   non-convergent terminal; production's only one today is OOM, caller unchanged). 5 tests.
+
+### #31 token-efficiency-graded conformant harden — DONE (unit-tested, tsc clean)
+- Repo: added `getInjectedTemplates(scopeId)` (id+content join) and a graded
+  `reinforceTemplate(id, credit?)` (success_count += round(credit), default 1).
+- Crystallizer step 6 rewritten: credits ONLY conformant injected templates
+  (reuses the comparator), graded by events-to-converge via
+  `gradeHardenCredit` (config; disabled by default → +1 until #35 fits the band).
+  Violated / not-applicable → no credit (fail-closed, symmetric to soften).
+- success_count is INT; fractional grading deferred to #35 (would need a column
+  type change — a calibration decision, noted, not pre-empted).
+
+### #32 evidence-gated three-band metabolism — DONE (unit-tested, tsc clean)
+- Repo: `metabolizeByEvidence({nMin,qualityBad})` apoptosis (strong-bad →
+  superseded_by=id, RETURNING evidence so it's observable); `getMetabolismTriage`
+  (the ambiguous middle: live, used, neither proven-good nor -bad, with
+  success-rate, for #34); `reinstateTemplate` (human override — only un-supersedes
+  SELF-superseded rows, so consolidation merges are never resurrected).
+- Synthesizer `runDecay` now runs atrophy (90d) AND apoptosis on the same cron
+  sweep, logging each retirement (LOG_EVENTS.MEMORY_METABOLIZED). Ambiguous band
+  is never auto-decided — surfaced to triage instead.
+- Bands are config (n_min=5, bad≤0.3, good≥0.7 provisional); #35 fits them.

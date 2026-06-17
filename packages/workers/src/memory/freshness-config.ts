@@ -87,3 +87,21 @@ export const FRESHNESS = {
 } as const;
 
 export type FreshnessConfig = typeof FRESHNESS;
+
+/**
+ * Token-efficiency grading (GH #31): map a converged scope's events-to-converge
+ * to a harden credit in [hardenCreditMin, hardenCreditBase]. The fewer events it
+ * took (the simpler the cooking that still won), the stronger the ingredient
+ * credit — rewarding ingredients that let minimal cooking succeed.
+ *
+ * Disabled by default (floor==ceil → always hardenCreditBase) until #35 fits the
+ * band from the clean re-run. `success_count` is INT, so the caller rounds.
+ */
+export function gradeHardenCredit(eventsToConverge: number): number {
+  const { hardenCreditBase, hardenCreditMin, hardenEfficiencyFloor, hardenEfficiencyCeil } = FRESHNESS;
+  if (hardenEfficiencyCeil <= hardenEfficiencyFloor) return hardenCreditBase; // grading off
+  if (eventsToConverge <= hardenEfficiencyFloor) return hardenCreditBase;
+  if (eventsToConverge >= hardenEfficiencyCeil) return hardenCreditMin;
+  const t = (eventsToConverge - hardenEfficiencyFloor) / (hardenEfficiencyCeil - hardenEfficiencyFloor);
+  return hardenCreditBase - t * (hardenCreditBase - hardenCreditMin);
+}

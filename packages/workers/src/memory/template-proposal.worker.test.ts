@@ -278,19 +278,44 @@ describe('TemplateProposalWorker', () => {
 
   // ── Phase 10: reinforcement closure (P1-D call path) ───────────────────────
 
-  it('reinforces every template injected into the scope (adoption = converged closure)', async () => {
-    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
-    memory.setInjectedTemplateIds(['tpl-a', 'tpl-b']);
+  /** Scope events whose task_spawned payloads carry steps in the given order. */
+  function makeStepEvents(steps: string[]): EventLogNode[] {
+    const base = makeScopeEvents()[0]!;
+    return steps.map((step, i) => ({
+      ...base,
+      id: `step-${i}`,
+      entity_id: `e-${i}`,
+      event_type: 'task_spawned' as const,
+      version_hash: `vh-${i}`,
+      payload: JSON.stringify({ step }),
+    }));
+  }
+
+  it('credits only the templates whose prescribed order the converged scope FOLLOWED (GH #31)', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeStepEvents(['write_api', 'db_schema']));
+    memory.setInjectedTemplates([
+      { id: 'tpl-conform', content: 'write_api before db_schema.' },
+      { id: 'tpl-violate', content: 'db_schema before write_api.' },
+    ]);
     const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
     await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
 
-    expect(memory.calls.getInjectedTemplateIds).toEqual(['scope-1']);
-    expect(memory.calls.reinforceTemplate).toEqual(['tpl-a', 'tpl-b']);
+    expect(memory.calls.getInjectedTemplates).toEqual(['scope-1']);
+    expect(memory.calls.reinforceTemplate).toEqual(['tpl-conform']); // violating ingredient gets no credit
+    expect(memory.calls.reinforceTemplateGraded[0]!.credit).toBeGreaterThanOrEqual(1);
+  });
+
+  it('credits nothing when conformance cannot be judged against the scope (fail-closed)', async () => {
+    vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeStepEvents(['scaffold', 'add_deps']));
+    memory.setInjectedTemplates([{ id: 'tpl-na', content: 'write_api before db_schema.' }]);
+    const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
+    await worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64));
+    expect(memory.calls.reinforceTemplate).toEqual([]);
   });
 
   it('reinforcement failure does not break the scope_closed pass', async () => {
     vi.spyOn(reader, 'getScopeEvents').mockResolvedValue(makeScopeEvents());
-    memory.throwOn('getInjectedTemplateIds');
+    memory.throwOn('getInjectedTemplates');
     const worker = new TemplateProposalWorker(reader, memory, writer, llm, embed);
     await expect(
       worker.onScopeClosed('scope-1', 'entity-1', '0'.repeat(64)),

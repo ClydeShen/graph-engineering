@@ -1,7 +1,8 @@
-import { writeGuard } from '@graph/shared';
+import { writeGuard, logger, LOG_EVENTS } from '@graph/shared';
 import type { LLMProvider } from '@graph/shared';
 import type { TrailReader } from '../base/trail-reader.js';
 import type { MemoryRepository } from '../base/memory-repository.js';
+import { FRESHNESS } from './freshness-config.js';
 
 export const SYNTHESIZER_CRON_TRIGGER = {
   type: 'cron' as const,
@@ -80,8 +81,25 @@ export class MemorySynthesizerWorker {
   }
 
   async runDecay(): Promise<void> {
-    // Ebbinghaus decay — pure SQL, NO LLM call (ADR 20 Task 3)
+    // The cron metabolism sweep — pure SQL, NO LLM call. Two distinct causes
+    // coexist (GH #32): atrophy (90d-unused time-decay, ADR 20 Task 3) and
+    // apoptosis (failure-evidence-driven). Both are reversible logical deletes.
     await this.memory.markSupersededByEbbinghaus();
+
+    // Apoptosis: retire crystallizations with STRONG evidence of being bad. The
+    // ambiguous middle is deliberately NOT touched here — it is surfaced to human
+    // triage (getMetabolismTriage) instead of silently decided. Metabolism must
+    // be observable, so each retirement is logged with the condemning evidence.
+    const retired = await this.memory.metabolizeByEvidence({
+      nMin: FRESHNESS.metabolismNMin,
+      qualityBad: FRESHNESS.metabolismQualityBad,
+    });
+    for (const r of retired) {
+      logger.child({ component: 'memory-metabolism', template_id: r.id }).info(
+        { success_count: r.success_count, failure_count: r.failure_count, quality_score: r.quality_score },
+        LOG_EVENTS.MEMORY_METABOLIZED,
+      );
+    }
   }
 
   async runTtlPurge(): Promise<void> {

@@ -82,13 +82,64 @@ interface ProceduralRepository {
   findMergeableTemplate(topologyEmbeddingLiteral: string, excludeScopeId: string): Promise<{ id: string; content: string } | null>;
   /** Logically supersede a positive template by a newer canonical one (append-only: old row kept). */
   supersedeTemplate(oldId: string, newId: string): Promise<void>;
-  reinforceTemplate(templateId: string): Promise<void>;
+  /**
+   * Credit a positive template's `success_count` on converged adoption. `credit`
+   * (default 1) is the token-efficiency-graded harden amount (GH #31): a template
+   * whose prescribed order let the SIMPLEST cooking win earns more.
+   */
+  reinforceTemplate(templateId: string, credit?: number): Promise<void>;
   /** Template ids injected into this scope by mem::reflect (migration 013). */
   getInjectedTemplateIds(scopeId: string): Promise<string[]>;
+  /**
+   * Templates injected into this scope, WITH their readable lesson content, so the
+   * crystallizer can conformance-gate the harden (GH #31 — credit only ingredients
+   * the scope actually followed). Join of template_injection × procedural_memory.
+   */
+  getInjectedTemplates(scopeId: string): Promise<{ id: string; content: string | null }[]>;
   lookupLesson(fingerprintId: string): Promise<LessonRecord | null>;
   reinforceLessonConfidence(fingerprintId: string): Promise<void>;
   insertLesson(fingerprintId: string, content: string): Promise<void>;
   markSupersededByEbbinghaus(): Promise<void>;
+  /**
+   * Apoptosis (GH #32) — retire crystallizations with STRONG evidence of being
+   * bad (Laplace quality_score ≤ qualityBad with evidence volume ≥ nMin), via
+   * logical delete (`superseded_by=id`, reversible). Distinct from atrophy
+   * (90d-unused time-decay): apoptosis is failure-evidence-driven. Returns the
+   * retired rows so the sweep can log them — metabolism must be observable.
+   */
+  metabolizeByEvidence(bands: { nMin: number; qualityBad: number }): Promise<MetabolismRow[]>;
+  /**
+   * The ambiguous middle (GH #32) — non-superseded positive templates that are
+   * NEITHER proven-good NOR proven-bad (thin evidence, or quality between the
+   * bands). Surfaced to human triage with success-rate; never silently decided.
+   */
+  getMetabolismTriage(bands: { nMin: number; qualityBad: number; qualityGood: number }): Promise<TriageRow[]>;
+  /**
+   * Human override (GH #32/#34, highest authority) — reinstate a SELF-superseded
+   * template (apoptosis/atrophy, `superseded_by=id`). Merge-supersedes
+   * (`superseded_by=<other id>`) are left intact so a consolidated duplicate is
+   * never resurrected. Returns true if a row was reinstated.
+   */
+  reinstateTemplate(id: string): Promise<boolean>;
+}
+
+/** A crystallization retired by apoptosis, with the evidence that condemned it. */
+export interface MetabolismRow {
+  id: string;
+  success_count: number;
+  failure_count: number;
+  quality_score: number;
+}
+
+/** An ambiguous crystallization surfaced for human triage (GH #32/#34). */
+export interface TriageRow {
+  id: string;
+  content: string | null;
+  intent_description: string | null;
+  success_count: number;
+  failure_count: number;
+  quality_score: number;
+  injection_count: number;
 }
 
 /** Working memory tier — short-lived TTL entries. */
@@ -268,13 +319,13 @@ export class PoolMemoryRepository implements MemoryRepository {
     );
   }
 
-  async reinforceTemplate(templateId: string): Promise<void> {
+  async reinforceTemplate(templateId: string, credit = 1): Promise<void> {
     await this.pool.query(
       `UPDATE procedural_memory
-       SET success_count = success_count + 1,
+       SET success_count = success_count + $2,
            last_used_at = NOW()
        WHERE id = $1`,
-      [templateId],
+      [templateId, Math.max(1, Math.round(credit))],
     );
   }
 
@@ -284,6 +335,17 @@ export class PoolMemoryRepository implements MemoryRepository {
       [scopeId],
     );
     return rows.map((r) => r.template_id);
+  }
+
+  async getInjectedTemplates(scopeId: string): Promise<{ id: string; content: string | null }[]> {
+    const { rows } = await this.pool.query<{ id: string; content: string | null }>(
+      `SELECT pm.id, pm.content
+       FROM template_injection ti
+       JOIN procedural_memory pm ON pm.id = ti.template_id
+       WHERE ti.scope_id = $1`,
+      [scopeId],
+    );
+    return rows;
   }
 
   async lookupLesson(fingerprintId: string): Promise<LessonRecord | null> {
@@ -335,6 +397,64 @@ export class PoolMemoryRepository implements MemoryRepository {
     `);
   }
 
+  async metabolizeByEvidence(bands: { nMin: number; qualityBad: number }): Promise<MetabolismRow[]> {
+    // Laplace quality_score = (success+1)/(success+failure+1); evidence volume =
+    // success+failure ≥ nMin. Logical delete (superseded_by=id) → reversible.
+    const { rows } = await this.pool.query<MetabolismRow>(
+      `UPDATE procedural_memory
+       SET superseded_by = id
+       WHERE is_anti_pattern = FALSE
+         AND superseded_by IS NULL
+         AND (success_count + failure_count) >= $1
+         AND ((success_count + 1.0) / (success_count + failure_count + 1.0)) <= $2
+       RETURNING id, success_count, failure_count,
+                 ((success_count + 1.0) / (success_count + failure_count + 1.0)) AS quality_score`,
+      [bands.nMin, bands.qualityBad],
+    );
+    return rows;
+  }
+
+  async getMetabolismTriage(bands: {
+    nMin: number;
+    qualityBad: number;
+    qualityGood: number;
+  }): Promise<TriageRow[]> {
+    // Ambiguous = live positive template that is NOT proven-good and NOT
+    // proven-bad: thin evidence (volume < nMin) OR quality strictly between the
+    // bands. Only templates that were actually used (injection_count > 0) carry a
+    // meaningful success-rate, so they alone warrant a human decision.
+    const { rows } = await this.pool.query<TriageRow>(
+      `SELECT id, content, intent_description, success_count, failure_count,
+              ((success_count + 1.0) / (success_count + failure_count + 1.0)) AS quality_score,
+              injection_count
+       FROM procedural_memory
+       WHERE is_anti_pattern = FALSE
+         AND superseded_by IS NULL
+         AND injection_count > 0
+         AND NOT (
+           (success_count + failure_count) >= $1
+           AND ((success_count + 1.0) / (success_count + failure_count + 1.0)) <= $2
+         )
+         AND NOT (
+           (success_count + failure_count) >= $1
+           AND ((success_count + 1.0) / (success_count + failure_count + 1.0)) >= $3
+         )
+       ORDER BY ((success_count + 1.0) / (success_count + failure_count + 1.0)) ASC, injection_count DESC`,
+      [bands.nMin, bands.qualityBad, bands.qualityGood],
+    );
+    return rows;
+  }
+
+  async reinstateTemplate(id: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      `UPDATE procedural_memory
+       SET superseded_by = NULL, last_used_at = NOW()
+       WHERE id = $1 AND superseded_by = id`,
+      [id],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
   async purgeTTLWorkingMemory(): Promise<void> {
     await this.pool.query(
       `DELETE FROM working_memory WHERE created_at < NOW() - INTERVAL '24 hours'`,
@@ -366,11 +486,16 @@ export class StubMemoryRepository implements MemoryRepository {
     findMergeableTemplate: [] as Array<{ topologyEmbeddingLiteral: string; excludeScopeId: string }>,
     supersedeTemplate: [] as Array<{ oldId: string; newId: string }>,
     reinforceTemplate: [] as string[],
+    reinforceTemplateGraded: [] as Array<{ templateId: string; credit: number }>,
     getInjectedTemplateIds: [] as string[],
+    getInjectedTemplates: [] as string[],
     lookupLesson: [] as string[],
     reinforceLessonConfidence: [] as string[],
     insertLesson: [] as Array<{ fingerprintId: string; content: string }>,
     markSupersededByEbbinghaus: 0,
+    metabolizeByEvidence: [] as Array<{ nMin: number; qualityBad: number }>,
+    getMetabolismTriage: [] as Array<{ nMin: number; qualityBad: number; qualityGood: number }>,
+    reinstateTemplate: [] as string[],
     purgeTTLWorkingMemory: 0,
   };
 
@@ -474,20 +599,33 @@ export class StubMemoryRepository implements MemoryRepository {
     this.calls.supersedeTemplate.push({ oldId, newId });
   }
 
-  async reinforceTemplate(templateId: string): Promise<void> {
+  async reinforceTemplate(templateId: string, credit = 1): Promise<void> {
     this.calls.reinforceTemplate.push(templateId);
+    this.calls.reinforceTemplateGraded.push({ templateId, credit });
   }
 
   private _injectedTemplateIds: string[] = [];
+  private _injectedTemplates: { id: string; content: string | null }[] = [];
 
   setInjectedTemplateIds(ids: string[]): void {
     this._injectedTemplateIds = ids;
+  }
+
+  /** Set the content-bearing injection set the conformance-gated harden reads (GH #31). */
+  setInjectedTemplates(rows: { id: string; content: string | null }[]): void {
+    this._injectedTemplates = rows;
   }
 
   async getInjectedTemplateIds(scopeId: string): Promise<string[]> {
     this.maybeThrow('getInjectedTemplateIds');
     this.calls.getInjectedTemplateIds.push(scopeId);
     return this._injectedTemplateIds;
+  }
+
+  async getInjectedTemplates(scopeId: string): Promise<{ id: string; content: string | null }[]> {
+    this.maybeThrow('getInjectedTemplates');
+    this.calls.getInjectedTemplates.push(scopeId);
+    return this._injectedTemplates;
   }
 
   async lookupLesson(fingerprintId: string): Promise<LessonRecord | null> {
@@ -506,6 +644,36 @@ export class StubMemoryRepository implements MemoryRepository {
   async markSupersededByEbbinghaus(): Promise<void> {
     this.maybeThrow('markSupersededByEbbinghaus');
     this.calls.markSupersededByEbbinghaus++;
+  }
+
+  private _metabolismRows: MetabolismRow[] = [];
+  private _triageRows: TriageRow[] = [];
+
+  setMetabolismRows(rows: MetabolismRow[]): void {
+    this._metabolismRows = rows;
+  }
+  setTriageRows(rows: TriageRow[]): void {
+    this._triageRows = rows;
+  }
+
+  async metabolizeByEvidence(bands: { nMin: number; qualityBad: number }): Promise<MetabolismRow[]> {
+    this.maybeThrow('metabolizeByEvidence');
+    this.calls.metabolizeByEvidence.push(bands);
+    return this._metabolismRows;
+  }
+
+  async getMetabolismTriage(bands: {
+    nMin: number;
+    qualityBad: number;
+    qualityGood: number;
+  }): Promise<TriageRow[]> {
+    this.calls.getMetabolismTriage.push(bands);
+    return this._triageRows;
+  }
+
+  async reinstateTemplate(id: string): Promise<boolean> {
+    this.calls.reinstateTemplate.push(id);
+    return true;
   }
 
   async purgeTTLWorkingMemory(): Promise<void> {

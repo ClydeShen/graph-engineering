@@ -9,6 +9,8 @@ import {
   canonicalizeTemplateGraph,
   type TemplateGraph,
 } from './template-graph.js';
+import { extractStepOrder, parseOrderingRules, checkConformance } from './conformance.js';
+import { FRESHNESS, gradeHardenCredit } from './freshness-config.js';
 
 export const TEMPLATE_PROPOSAL_TRIGGER_CONFIG = {
   type: 'durable:subscriber' as const,
@@ -229,12 +231,25 @@ export class TemplateProposalWorker {
       }
     }
 
-    // Step 6 (Phase 10): reinforcement closure — templates injected into this scope
-    // are adopted (the scope converged and closed). P1-D SQL call path.
+    // Step 6 (Phase 10 → GH #31): conformance-gated, token-efficiency-graded
+    // reinforcement closure. The scope converged, so injected templates are
+    // candidates for credit — but we credit INGREDIENTS, not meals: only a
+    // template whose prescribed "X before Y" rules the scope actually FOLLOWED
+    // earns success_count, graded by how few events it took (the simplest cooking
+    // that still won → the strongest ingredient credit). A template whose rules
+    // were violated, or can't be judged against this scope, earns nothing
+    // (fail-closed, symmetric to the soften side).
     try {
-      const injectedIds = await this.memory.getInjectedTemplateIds(scopeId);
-      for (const templateId of injectedIds) {
-        await this.memory.reinforceTemplate(templateId);
+      const injected = await this.memory.getInjectedTemplates(scopeId);
+      if (injected.length > 0) {
+        const actualOrder = extractStepOrder(events);
+        const vocab = [...new Set(actualOrder)];
+        const credit = Math.max(1, Math.round(gradeHardenCredit(events.length)));
+        for (const t of injected) {
+          const rules = parseOrderingRules(t.content ?? '', vocab);
+          const verdict = checkConformance(rules, actualOrder, FRESHNESS.conformanceMaxViolationRatio);
+          if (verdict === 'conformed') await this.memory.reinforceTemplate(t.id, credit);
+        }
       }
     } catch {
       /* reinforcement failure must not break the scope_closed pass */

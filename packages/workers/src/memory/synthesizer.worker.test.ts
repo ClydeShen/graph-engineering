@@ -5,6 +5,8 @@ import { StubMemoryRepository } from '../base/memory-repository.js';
 vi.mock('@graph/shared', () => ({
   writeGuard: vi.fn((s: string) => `[guarded]:${s}`),
   contentFingerprint: vi.fn((s: string) => `fp:${s}`),
+  logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
+  LOG_EVENTS: { MEMORY_METABOLIZED: 'memory.metabolized' },
 }));
 
 import {
@@ -28,11 +30,16 @@ describe('MemorySynthesizerWorker', () => {
       .mockResolvedValue('{"intent_description":"test workflow","steps":["a","b"]}');
   });
 
-  it('runDecay() calls memory.markSupersededByEbbinghaus once', async () => {
+  it('runDecay() runs atrophy AND evidence-gated apoptosis on the same sweep (GH #32)', async () => {
+    memory.setMetabolismRows([
+      { id: 'bad-tpl', success_count: 0, failure_count: 9, quality_score: 0.1 },
+    ]);
     const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
     await worker.runDecay();
 
-    expect(memory.calls.markSupersededByEbbinghaus).toBe(1);
+    expect(memory.calls.markSupersededByEbbinghaus).toBe(1); // atrophy
+    expect(memory.calls.metabolizeByEvidence).toHaveLength(1); // apoptosis
+    expect(memory.calls.metabolizeByEvidence[0]).toEqual({ nMin: 5, qualityBad: 0.3 });
   });
 
   it('runDecay() — memory throws → error propagates', async () => {
