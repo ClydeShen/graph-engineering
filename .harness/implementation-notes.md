@@ -1983,3 +1983,12 @@ SINGLE-THREADED on proving the learning loop is falsifiably stable; the product 
 **Mid-term (gated on loop proof):** M1 MemexTerminal X-beam (the #33 verificationReport +
  #34 /review ARE the approval surface — research line pre-builds product geometry), M2
 console trail-mesh, M3 Review graduation (flying + resting timescales in one HITL surface).
+
+### N2 RESULT — baseline collapse-rate ≈ 0.55 (measured from existing data, no new compute)
+Across 11 in-repo §5 curves on gpt-oss-120b: 5 held (24-43 band), 6 collapsed
+(last-3 mean > 80) → **baseline collapse-rate ≈ 0.55**. The validated "38/0 holds"
+runs were the lucky ~45%. So the loop is barely-better-than-coinflip at baseline on
+this model — this is the null the substrate (N3/N4) must beat. Gate bar set to 0.34
+(≈ halve baseline). A clean same-config N2 run would tighten the estimate but the
+direction is unambiguous. N1✓ N2✓(from data). NEXT: N3 (wire substrate into the eval
+closed loop — code only) then N4 (measure collapse-rate with substrate, target ≪ 0.55).

@@ -78,8 +78,11 @@ function run(script: string, args: string[], env: NodeJS.ProcessEnv): void {
  *   EVAL_LOOP_CURVES         K independent §5 curves (default 1 = legacy quick check)
  *   EVAL_LOOP_RUNS           runs per curve (default 10)
  *   EVAL_LOOP_COLLAPSE_EVENTS  a curve "collapsed" if last-3 mean > this (default 80)
- *   EVAL_LOOP_MAX_COLLAPSE_RATE  pass if collapse-rate ≤ this (default 0.34; CALIBRATE
- *                            against the master baseline rate before trusting — N2)
+ *   EVAL_LOOP_MAX_COLLAPSE_RATE  pass if collapse-rate ≤ this. N2 measured the BASELINE
+ *                            collapse-rate at ~0.55 (6/11 in-repo curves on gpt-oss-120b
+ *                            collapse) — the loop is barely-better-than-coinflip at
+ *                            baseline. Default 0.34 ≈ "must roughly halve the baseline
+ *                            collapse rate" (a real improvement, not a lucky draw).
  *   EVAL_LOOP_MODEL_PIN      if set, every curve's meta.model must equal it, else FAIL
  *                            (effect size is model-dependent — never compare across models)
  */
