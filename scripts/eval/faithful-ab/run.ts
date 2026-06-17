@@ -28,6 +28,8 @@ import {
 import { PoolTrailReader } from '@graph/workers/base/trail-reader';
 import { PoolMemoryRepository } from '@graph/workers/base/memory-repository';
 import { TemplateProposalWorker } from '@graph/workers/memory/template-proposal.worker';
+import { penalizeInjectedTemplates } from '@graph/workers/memory/template-injection';
+import { FRESHNESS } from '@graph/workers/memory/freshness-config';
 import { runOnce, cleanupScope, registerSkill, type RunRecord, type AgentDeps } from './agent.js';
 import { seedGoldenTemplate, GOLDEN_SENTINEL } from './seed.js';
 
@@ -106,17 +108,34 @@ async function runCurve(deps: AgentDeps, runs: number, model: string): Promise<v
   const writer = new OccEventWriter(deps.pool);
   const crystallizer = new TemplateProposalWorker(reader, memory, writer, deps.llm, deps.embed);
 
+  // N3/N4: EVAL_LOOP_SUBSTRATE=1 closes the freshness loop — record injections, soften
+  // conformed-but-failed templates on non-convergent terminals, and run the metabolism
+  // sweep (apoptosis) BETWEEN runs so a proven-bad runbook gets retired and the loop can
+  // escape the bimodal collapse attractor instead of recalling the bad runbook forever.
+  // OFF = the pre-substrate baseline (crystallize+consolidate only).
+  const substrate = process.env.EVAL_LOOP_SUBSTRATE === '1';
   const records: RunRecord[] = [];
   for (let i = 0; i < runs; i++) {
-    const { rec, scopeId, head } = await runOnce(deps, `run#${i + 1}`, true); // full loop: injection ON
+    const { rec, scopeId, head } = await runOnce(deps, `run#${i + 1}`, true, substrate); // full loop: injection ON
     records.push(rec);
     if (rec.converged) {
       // crystallize this converged run into a template the next run can recall
       try { await crystallizer.onScopeClosed(scopeId, randomUUID(), head); } catch (e) { console.warn('crystallize failed:', (e as Error).message); }
+    } else if (substrate) {
+      // non-convergent terminal: conformance-gated soften (before cleanup drops the partition)
+      try { await penalizeInjectedTemplates(deps.pool, scopeId); } catch (e) { console.warn('soften failed:', (e as Error).message); }
     }
-    const tpls = (await deps.pool.query<{ n: string }>(`SELECT count(*)::int n FROM procedural_memory WHERE is_anti_pattern = FALSE`)).rows[0]?.n;
+    let metabolized = 0;
+    if (substrate) {
+      // metabolism sweep (the cron, simulated between runs): retire proven-bad runbooks
+      try {
+        const retired = await memory.metabolizeByEvidence({ nMin: FRESHNESS.metabolismNMin, qualityBad: FRESHNESS.metabolismQualityBad });
+        metabolized = retired.length;
+      } catch (e) { console.warn('metabolize failed:', (e as Error).message); }
+    }
+    const tpls = (await deps.pool.query<{ n: string }>(`SELECT count(*)::int n FROM procedural_memory WHERE is_anti_pattern = FALSE AND superseded_by IS NULL`)).rows[0]?.n;
     await cleanupScope(deps.pool, scopeId);
-    console.log(`  run #${i + 1}: events=${rec.events} converged=${rec.converged} gateFails=${rec.gateFailures} recall=${rec.recallHit} templates=${tpls}`);
+    console.log(`  run #${i + 1}: events=${rec.events} converged=${rec.converged} gateFails=${rec.gateFailures} recall=${rec.recallHit} live_templates=${tpls}${substrate ? ` metabolized=${metabolized}` : ''}`);
   }
   const first = stats(records.slice(0, Math.max(1, Math.floor(runs / 3))).map((r) => r.events));
   const last = stats(records.slice(-Math.max(1, Math.floor(runs / 3))).map((r) => r.events));

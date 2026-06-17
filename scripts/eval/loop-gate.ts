@@ -127,14 +127,17 @@ function main(): void {
   }
 
   // B2 — CLI precondition: the loop must learn "install before use" and stop the discovery failure.
-  run('scripts/eval/cli-precondition/run.ts', [String(RUNS)], env);
-  const b2 = newestCurve('.harness/analysis/cli-precondition').summary;
-  const b2fails = lastN(b2.discoveryFailures_by_run, 3);
-  checks.push({
-    name: 'B2 learns the precondition (last-3 discovery failures = 0)',
-    pass: b2fails.every((x) => x === 0),
-    detail: `last-3 discovery failures ${b2fails.join(',')}`,
-  });
+  // EVAL_LOOP_SKIP_B2=1 focuses a measurement campaign on the §5 collapse-rate (N4).
+  if (process.env.EVAL_LOOP_SKIP_B2 !== '1') {
+    run('scripts/eval/cli-precondition/run.ts', [String(RUNS)], env);
+    const b2 = newestCurve('.harness/analysis/cli-precondition').summary;
+    const b2fails = lastN(b2.discoveryFailures_by_run, 3);
+    checks.push({
+      name: 'B2 learns the precondition (last-3 discovery failures = 0)',
+      pass: b2fails.every((x) => x === 0),
+      detail: `last-3 discovery failures ${b2fails.join(',')}`,
+    });
+  }
 
   console.log('\n── loop regression gate (statistical) ──');
   for (const c of checks) console.log(`  ${c.pass ? 'PASS' : 'FAIL'}  ${c.name} — ${c.detail}`);

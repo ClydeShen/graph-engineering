@@ -14,6 +14,7 @@ import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
 import type { EmbeddingProvider, LLMProvider } from '@graph/shared';
 import { memReflect } from '@graph/workers/memory/reflect.function';
+import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
 import { checkConvergence, writeScopeClosed } from '@graph/gateway/watchdog-sql';
 import { STEPS, GOAL_TEXT, isReady, missingDeps, type Step } from './dag.js';
 
@@ -103,8 +104,16 @@ async function countEvents(pool: Pool, scopeId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
-/** Run the task once to (attempted) convergence. Returns a detailed record. */
-export async function runOnce(deps: AgentDeps, label: string, inject: boolean): Promise<{ rec: RunRecord; scopeId: string; head: string }> {
+/**
+ * Run the task once to (attempted) convergence. Returns a detailed record.
+ *
+ * `substrate` (GH #30-#35 → N3) closes the freshness loop the harness used to skip:
+ * it records template_injection for the recalled templates, so converged closure can
+ * conformance-grade the harden AND non-convergent closure can conformance-soften
+ * (both in run.ts). Without it the harness only crystallizes+consolidates (the
+ * pre-substrate baseline).
+ */
+export async function runOnce(deps: AgentDeps, label: string, inject: boolean, substrate = false): Promise<{ rec: RunRecord; scopeId: string; head: string }> {
   const { pool, embed, llm, app, skill } = deps;
   const t0 = Date.now();
   const { scopeId, planHash } = await createScope(app, pool);
@@ -114,6 +123,12 @@ export async function runOnce(deps: AgentDeps, label: string, inject: boolean): 
   });
   const injected = reflection.content;
   const recallHit = inject && /containerize/i.test(injected) && /run_tests/i.test(injected);
+
+  // N3: record which templates were injected (production does this in processAgentTurn;
+  // the harness used to skip it, leaving soften/graded-harden inert on the curve).
+  if (substrate && inject && reflection.proceduralIds.length > 0) {
+    await recordTemplateInjection(pool, scopeId, reflection.proceduralIds, 'cold_start');
+  }
 
   const completed = new Set<Step>();
   const order: string[] = [];
