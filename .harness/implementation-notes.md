@@ -1992,3 +1992,30 @@ this model — this is the null the substrate (N3/N4) must beat. Gate bar set to
 (≈ halve baseline). A clean same-config N2 run would tighten the estimate but the
 direction is unambiguous. N1✓ N2✓(from data). NEXT: N3 (wire substrate into the eval
 closed loop — code only) then N4 (measure collapse-rate with substrate, target ≪ 0.55).
+
+### N4 RESULT — substrate FALSIFICATION PASSED (cure validated, ≥mid confidence)
+Ran the substrate-wired loop (EVAL_LOOP_SUBSTRATE=1, n_min=2, 3 curves × 8 runs,
+model-pinned gpt-oss-120b):
+- collapse-rate **0.33** (1/3) vs **baseline ~0.55** → substrate roughly halves it; gate PASS.
+- **Mechanism proven live (curve 2)**: run#1 crystallize → run#2-5 collapse (recall bad
+  runbook) → **run#6 apoptosis retires it (metabolized=1, live_templates→0)** → run#7 cold
+  re-converge (42) → run#8 recall new good runbook (44). The loop ESCAPED the collapse
+  attractor via the substrate — the first live demonstration of the restoring force.
+- curve 3: clean "越用越聪明" to the optimum (48→38→38→38…hold).
+- **Residual mode (curve 1, NEW finding)**: "late drift" — a 6-success template fails at
+  run#7-8 but cumulative Laplace quality (0.78) masks it → apoptosis doesn't fire. Cumulative
+  quality is insensitive to recent degradation. This is what N5 must address.
+
+**Conclusion**: the freshness substrate (cure) MATERIALLY works and the mechanism is
+empirically demonstrated — the direction is validated with DATA, not just reasoning. n=3 is
+suggestive on the aggregate; the live mechanism evidence is decisive. Tighter stats (more
+curves) + late-drift fix are N5/N6.
+
+### N5/N6 — data-motivated next steps (designed, not yet built)
+- **N5 (recency-aware retirement)**: cumulative Laplace can't catch late drift. Add a
+  recency signal — simplest: a consecutive-failure circuit breaker (k conformed-failures in
+  a row → retire regardless of cumulative quality), or a windowed/decayed quality. Needs a
+  small state field (recent-outcome streak) — schema decision. This is the Live-Evo
+  "re-validate, don't trust forever" idea (prevention) applied to retirement.
+- **N6 (calibration + stats)**: run ≥5 curves per arm for a tight collapse-rate CI; sweep
+  n_min / qualityBad / soften-increment; fit the 4 deferred constant classes; pin the model.

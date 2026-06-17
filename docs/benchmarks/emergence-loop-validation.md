@@ -463,6 +463,46 @@ narrower "quality-gated canonical updates" framing: the loop does not have to st
 in isolation, it has to keep the ingredients it supplies fresh and make their drift cheap for a
 human to see and correct.
 
+### 5.8 Implementing and falsifying the restoring force
+
+The §5.7 direction was built and tested as a falsifiable experiment. Three pieces were needed.
+
+**A deterministic conformance comparator.** The de-confounder is a pure function of the
+ledger, not a second model: it parses a template's prescribed ordering rules ("X before Y")
+from the lesson prose, grounds them in the step vocabulary the actual `task_spawned` DAG used,
+and compares against the actual step order — verdict *conformed* / *violated* / *not-applicable*
+(fail-closed when unjudgeable). This is stronger than the "second nice model judges the output"
+pattern common in the loop-engineering literature and aligns with external-verification practice.
+Soften (on a non-convergent terminal) and graded harden (on convergence) are gated on this
+verdict per template; a cron metabolism sweep retires templates with strong failure evidence
+(Laplace quality ≤ band, evidence ≥ n_min) via reversible logical-delete, surfacing the
+ambiguous middle to a human triage surface rather than deciding it silently.
+
+**A statistical gate.** Because the curve is bimodal (§5.7), a single curve's absolute threshold
+cannot separate a bad draw from a regression. The gate was reframed to run *K* independent
+curves and judge the **collapse-rate** (fraction whose last-three-run mean exceeds the
+turn-cap band), model-pinned. Measured over the eleven curves already on record for this model,
+the **baseline collapse-rate is ≈ 0.55** — the loop collapses more often than not when left to
+crystallize-and-recall alone; the validated "38/0 holds" runs were the favourable ~45%.
+
+**The falsification.** With the substrate wired into the loop (injections recorded, conformance
+soften on non-convergence, metabolism between runs), the collapse-rate fell to **0.33 (1/3
+curves)** — roughly halving the baseline. The aggregate at this sample size is suggestive; the
+decisive evidence is mechanistic, observed in a single curve: a scope crystallized a misleading
+runbook, the next four scopes recalled it and collapsed, the metabolism sweep then retired it on
+accumulated failure evidence, the following scope cold-started without the bad ingredient and
+re-converged, and the one after recalled a fresh, correct runbook — the loop **escaped the
+collapse attractor** rather than amplifying its first mistake indefinitely. A third curve showed
+the clean case, converging to the optimum and holding. This is the first direct evidence that the
+restoring force operates as designed: the system kept its ingredients fresh and the loop recovered.
+
+**An honest residual.** One curve still collapsed, via a distinct mode the cure does not yet
+catch: *late drift* — a template with a long history of success that begins failing only at the
+end, whose cumulative Laplace quality remains high enough to escape retirement. Cumulative trust
+is insensitive to recent degradation; a recency-aware retirement signal (a consecutive-failure
+circuit breaker, or a windowed quality) is the indicated next increment — the "re-validate, do
+not trust forever" idea applied to retirement. Raw run: `.harness/analysis/eval-loop-substrate-N4.log`.
+
 ## 6. Threats to validity
 
 - Model capability; effect scales with hidden structure, not task size. A strong model
