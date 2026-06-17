@@ -10,6 +10,4 @@
     "phase": "01-discuss",
     "active": "Loop Engineering benchmark arc COMPLETE (GH #24). L1/L2/L3 all green: injection works; two latent defects fixed (D1 failure_count 11ef17e5, D2 convergence terminalizer ADR-58 9ebd175a); L2 corrected-order crystallization (08c2af7f) makes the learning curve decline. Academic benchmark + re-runnable harness + 5 raw JSON on master; README links it. Next direction = L2 template consolidation (research-mandated).",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "Branch feat/freshness-substrate (UNMERGED, ~10 commits). PHASE 1 — freshness arc #30-#34 built+tested (full suite 832/832, console build green, live triage journey 7/7); #35 gate fail PROVEN not a regression (master collapses identically, code-path inert). PHASE 2 — 'prove the loop' research sprint started (fuller+research): autonomous decision = research-first single-threaded, cure-first then prevention. N1 DONE (loop-gate.ts → statistical multi-curve collapse-rate + model pin). N2 DONE from existing data (baseline collapse-rate ~0.55 on gpt-oss-120b — loop collapses >half the time at baseline; that's the null the substrate must beat). Research validates direction (error-avalanche/self-reinforcing-error named; Live-Evo evidence-gated acquisition backs prevention; reproducibility lit backs statistical gate). NEXT: N3 wire substrate into eval closed loop (code only), then N4 measure collapse-rate with substrate (target <<0.55, ~40min compute). N3-N6 + mid-term M1-M3 in implementation-notes."
-  }
-}
+    "stopped_at": 
