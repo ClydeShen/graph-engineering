@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { Pool } from 'pg';
 import type { EmbeddingProvider } from '@graph/shared';
+import { PoolMemoryRepository } from '@graph/workers/base/memory-repository';
+import { FRESHNESS } from '@graph/workers/memory/freshness-config';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -103,6 +105,81 @@ export function buildMemoryRoute(pool: Pool, embedding: EmbeddingProvider | null
         [body.template_id],
       );
       return c.json({ reinforced: true });
+    } catch {
+      return c.json({ error: 'internal server error' }, 500);
+    }
+  });
+
+  // ── Write-half of /memory (GH #34) — the human triage/edit surface ──────────
+  // The grey zone of metabolism (#32) is the human teaching surface: ambiguous
+  // crystallizations are NEVER silently decided, they surface here with their
+  // success-rate. The human corrects drift via natural actions (keep / retire /
+  // approve-step / reinstate), never a typed number; the action flows back as
+  // clean, human-localized attribution. No-action degrades to the automatic
+  // signal (the cron handles the proven cases on its own).
+  const memory = new PoolMemoryRepository(pool);
+
+  app.get('/memory/triage', async (c) => {
+    try {
+      const rows = await memory.getMetabolismTriage({
+        nMin: FRESHNESS.metabolismNMin,
+        qualityBad: FRESHNESS.metabolismQualityBad,
+        qualityGood: FRESHNESS.metabolismQualityGood,
+      });
+      return c.json({ triage: rows });
+    } catch {
+      return c.json({ error: 'internal server error' }, 500);
+    }
+  });
+
+  /**
+   * Verification-checkpoint writeback (#33/#34): the human approves or corrects a
+   * recalled procedure on a key step. 'success' credits the ingredient, 'failure'
+   * softens it — natural accept/deny, no numeric entry.
+   */
+  app.post('/memory/templates/:id/feedback', async (c) => {
+    const id = c.req.param('id');
+    if (!UUID_V4_RE.test(id)) return c.json({ error: 'id must be a valid UUID v4' }, 400);
+    const body = await c.req.json<{ outcome?: string }>().catch(() => ({}) as { outcome?: string });
+    if (body.outcome !== 'success' && body.outcome !== 'failure') {
+      return c.json({ error: "outcome must be 'success' or 'failure'" }, 400);
+    }
+    const column = body.outcome === 'success' ? 'success_count' : 'failure_count';
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE procedural_memory SET ${column} = ${column} + 1, last_used_at = NOW()
+         WHERE id = $1 AND is_anti_pattern = FALSE`,
+        [id],
+      );
+      return (rowCount ?? 0) > 0 ? c.json({ ok: true, outcome: body.outcome }) : c.json({ error: 'not found' }, 404);
+    } catch {
+      return c.json({ error: 'internal server error' }, 500);
+    }
+  });
+
+  /** Human retires an ambiguous crystallization (reversible logical-delete). */
+  app.post('/memory/templates/:id/retire', async (c) => {
+    const id = c.req.param('id');
+    if (!UUID_V4_RE.test(id)) return c.json({ error: 'id must be a valid UUID v4' }, 400);
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE procedural_memory SET superseded_by = id
+         WHERE id = $1 AND is_anti_pattern = FALSE AND superseded_by IS NULL`,
+        [id],
+      );
+      return (rowCount ?? 0) > 0 ? c.json({ retired: true }) : c.json({ error: 'not found or already retired' }, 404);
+    } catch {
+      return c.json({ error: 'internal server error' }, 500);
+    }
+  });
+
+  /** Human override (highest authority): reinstate a metabolized/atrophied template. */
+  app.post('/memory/templates/:id/reinstate', async (c) => {
+    const id = c.req.param('id');
+    if (!UUID_V4_RE.test(id)) return c.json({ error: 'id must be a valid UUID v4' }, 400);
+    try {
+      const reinstated = await memory.reinstateTemplate(id);
+      return reinstated ? c.json({ reinstated: true }) : c.json({ error: 'not found or not self-superseded' }, 404);
     } catch {
       return c.json({ error: 'internal server error' }, 500);
     }

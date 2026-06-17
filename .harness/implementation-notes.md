@@ -1889,3 +1889,21 @@ the constants — deferred (live HITL), defaults set provisionally in `freshness
   pgvector/pgvector:pg16 via `docker compose --env-file /dev/null up -d` (the .env
   has a malformed Slack-token line that breaks compose's env parser) + migrated
   graph + graph_test. Full workers+gateway suite: 415/415 green.
+
+### #34 human triage/edit surface (write-half of /memory) — DONE (tsc clean, route + console tests green)
+- Gateway `memory.ts` route gains the write-half: `GET /memory/triage` (ambiguous
+  candidates + success-rate, bands from FRESHNESS), `POST /memory/templates/:id/feedback`
+  {outcome:success|failure} (accept/correct → clean attribution, no numeric entry),
+  `POST .../retire` (reversible logical-delete), `POST .../reinstate` (human override,
+  self-superseded only). 6 new route tests (13 total in file).
+- Console: NEW `/review` page (ui-ux-pro-max guidance applied — success-rate leads
+  each card as tabular figure + bar; one primary CTA Keep; Needs work secondary;
+  Retire danger-toned + spatially separated + inline confirm since the delete is
+  reversible; optimistic removal with restore-on-error; empty/loading/error states
+  mirror Emergence; aria-labels on every action; text left-aligned). Nav + crumb
+  entry added in Shell.tsx. api.ts gains triage/triageFeedback/triageRetire/
+  triageReinstate + postJson helper + TriageCandidate type.
+- The skill's Quick Reference (loaded in-context) supplied the rules; its CLI
+  symlink doesn't resolve on Windows, so the design intelligence came from the
+  loaded guidance, not a fresh search.
+- Console tsc clean; gateway 228/228 green.
