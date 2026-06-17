@@ -408,7 +408,7 @@ export class PoolMemoryRepository implements MemoryRepository {
          AND (success_count + failure_count) >= $1
          AND ((success_count + 1.0) / (success_count + failure_count + 1.0)) <= $2
        RETURNING id, success_count, failure_count,
-                 ((success_count + 1.0) / (success_count + failure_count + 1.0)) AS quality_score`,
+                 (((success_count + 1.0) / (success_count + failure_count + 1.0)))::float8 AS quality_score`,
       [bands.nMin, bands.qualityBad],
     );
     return rows;
@@ -425,7 +425,7 @@ export class PoolMemoryRepository implements MemoryRepository {
     // meaningful success-rate, so they alone warrant a human decision.
     const { rows } = await this.pool.query<TriageRow>(
       `SELECT id, content, intent_description, success_count, failure_count,
-              ((success_count + 1.0) / (success_count + failure_count + 1.0)) AS quality_score,
+              (((success_count + 1.0) / (success_count + failure_count + 1.0)))::float8 AS quality_score,
               injection_count
        FROM procedural_memory
        WHERE is_anti_pattern = FALSE
