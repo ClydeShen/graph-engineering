@@ -12,6 +12,13 @@
  */
 
 import type { Pool } from 'pg';
+import { FRESHNESS } from './freshness-config.js';
+import {
+  extractStepOrder,
+  parseOrderingRules,
+  checkConformance,
+  type ConformanceEvent,
+} from './conformance.js';
 
 export async function recordTemplateInjection(
   pool: Pool,
@@ -42,34 +49,67 @@ export async function recordTemplateInjection(
 }
 
 /**
- * Penalize the templates injected into a scope that terminated WITHOUT
- * converging (GH #24). Symmetric to TemplateProposalWorker's converged-closure
- * reinforcement (`success_count + 1`): when a scope is suspended (ADR-39
- * context-OOM lockout — it failed to reach convergence within budget), the
- * templates that were injected into it get `failure_count + 1`.
+ * Soften the templates injected into a scope that terminated WITHOUT converging
+ * (GH #24 → #30). The automatic de-confounder: a scope's outcome is
+ * `freshness × cooking`, and only the INGREDIENT (crystallization) is in scope.
+ * So instead of the pre-#30 blind "all injected templates get failure_count+1 on
+ * context-OOM", this softens PER TEMPLATE, gated on conformance:
  *
- * This closes the unfalsifiable hitRate: `eval-metrics.ts →
- * trailDiscoveryHitRate = Σsuccess_count / Σinjection_count` could only ever
- * rise because nothing wrote failure_count (CLAUDE.md §5 Proxy Signal). With a
- * negative outcome path the metric becomes non-monotonic and Popper-falsifiable.
+ *   - the template's prescribed "X before Y" rules were FOLLOWED, yet the scope
+ *     failed → the ingredient is implicated → `failure_count += softenIncrement`;
+ *   - the rules were VIOLATED (a cooking mistake, out of scope) → freshness
+ *     untouched;
+ *   - rules can't be judged (no applicable rule / unparseable lesson / no events)
+ *     → fail closed → untouched. Cooking and ingredient cannot be told apart, so
+ *     we never penalize on a guess.
  *
- * Standalone pool function (like recordTemplateInjection) so the Gateway can
- * call it from the suspension branch without a MemoryRepository.
+ * Trigger-generalized (#30): this is no longer OOM-specific — it grades any
+ * non-convergent terminal given the scope id. Production's sole non-convergent
+ * terminal today is the ADR-39 context-OOM suspension (caller: processAgentTurn);
+ * the eval harness calls it on a TURN_CAP non-convergence too.
  *
- * Near-idempotent by construction: once a scope is suspended, processAgentTurn's
- * checkSuspended short-circuits every later turn, so the suspension branch — and
- * thus this call — fires at most once per scope.
+ * Standalone pool function (like recordTemplateInjection) so callers need no
+ * MemoryRepository. Best-effort and self-contained: per-template parse/compare
+ * errors are swallowed (never break scope close); the OOM caller also wraps it.
  */
 export async function penalizeInjectedTemplates(
   pool: Pool,
   scopeId: string,
 ): Promise<{ penalized: number }> {
-  const { rowCount } = await pool.query(
-    `UPDATE procedural_memory
-     SET failure_count = failure_count + 1,
-         last_used_at = NOW()
-     WHERE id IN (SELECT template_id FROM template_injection WHERE scope_id = $1)`,
+  const { rows: injected } = await pool.query<{ id: string; content: string | null }>(
+    `SELECT pm.id, pm.content
+     FROM template_injection ti
+     JOIN procedural_memory pm ON pm.id = ti.template_id
+     WHERE ti.scope_id = $1`,
     [scopeId],
   );
-  return { penalized: rowCount ?? 0 };
+  if (injected.length === 0) return { penalized: 0 };
+
+  const { rows: events } = await pool.query<ConformanceEvent>(
+    `SELECT event_type, payload FROM execution_event_log WHERE scope_id = $1 ORDER BY id ASC`,
+    [scopeId],
+  );
+  const actualOrder = extractStepOrder(events);
+  const vocab = [...new Set(actualOrder)];
+
+  const conformedIds: string[] = [];
+  for (const t of injected) {
+    try {
+      const rules = parseOrderingRules(t.content ?? '', vocab);
+      const verdict = checkConformance(rules, actualOrder, FRESHNESS.conformanceMaxViolationRatio);
+      if (verdict === 'conformed') conformedIds.push(t.id); // ingredient followed but failed
+    } catch {
+      /* fail closed — an unjudgeable template is never softened */
+    }
+  }
+  if (conformedIds.length === 0) return { penalized: 0 };
+
+  await pool.query(
+    `UPDATE procedural_memory
+     SET failure_count = failure_count + $2,
+         last_used_at = NOW()
+     WHERE id = ANY($1::uuid[])`,
+    [conformedIds, FRESHNESS.softenIncrement],
+  );
+  return { penalized: conformedIds.length };
 }

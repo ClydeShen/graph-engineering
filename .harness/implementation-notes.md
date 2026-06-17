@@ -1813,3 +1813,40 @@ making mistakes unattended" (Osmani — backs observable metabolism + mid-flight
 triage/edit surface (today `/memory` is read-only). **Loop-regression-gate (`npm run
 eval:loop`) before any change here, per CLAUDE.md.** Sequence: build → clean DB → re-run the
 18-step curve as the **falsification test** that also fits the calibration constants.
+
+## Freshness-substrate BUILD ARC execution (2026-06-17, autonomous /goal) — IN PROGRESS
+
+Executing the spec above (#30–#35). Decision frame (chosen for project-as-whole, ≥mid
+confidence, grounded in the benchmark's own §5.7 lesson): build every mechanism with
+**config-externalized constants** (`freshness-config.ts`, env-overridable) defaulted to
+**safe / behaviour-preserving** values; gate loop-asset changes with `npm run eval:loop`;
+defer exact-constant CALIBRATION to the clean re-run (#35), which the spec itself marks HITL.
+
+**Key schema finding driving the design.** The stored `template_graph` labels nodes by
+event_type only (every procedural run is a uniform `task_spawned` chain), so topology cannot
+judge step order. The step-order knowledge lives in the readable lesson prose ("X before Y",
+emitted verbatim by the crystallization/golden prompts), and the actual step order lives in
+`task_spawned` payload `.step`. So the conformance judge parses prose rules with a strict
+deterministic scan grounded in the vocabulary the ACTUAL DAG provides — fully deterministic,
+NOT a second LLM (stronger than the sources' "second nice model"; aligns with Anthropic
+external-verification).
+
+**Inertness boundary (important).** The eval harness (`scripts/eval/faithful-ab/agent.ts`)
+calls `memReflect` directly and NEVER writes `template_injection` rows, so its curve learns
+purely via crystallization + consolidation (`findMergeableTemplate` merge). Therefore the
+soften (#30) and graded-harden (#31) paths — both keyed on `template_injection` — are inert
+in the current curve and LIVE in production (`processAgentTurn` records injections + penalizes
+on OOM; `onScopeClosed` step 6 hardens). This is why the freshness changes are additive /
+behaviour-preserving for `eval:loop` (no regression) while being real in production. The #35
+falsification will wire injection-recording into the harness to exercise the substrate and fit
+the constants — deferred (live HITL), defaults set provisionally in `freshness-config.ts`.
+
+### #30 conformance comparator + per-template soften — DONE (unit-tested, typecheck clean)
+- NEW `conformance.ts`: `extractStepOrder` (task_spawned payload `.step`), `parseOrderingRules`
+  ("X before Y" + "a -> b -> c" chains, vocab-grounded), `checkConformance`
+  (conformed/violated/not-applicable; first-occurrence index; tolerance ratio). 11 tests.
+- NEW `freshness-config.ts`: all calibration dials, env-overridable, safe defaults documented.
+- `template-injection.ts` `penalizeInjectedTemplates` rewritten: per-template,
+  conformance-gated (conformed+failed → `failure_count += softenIncrement`; violated /
+  not-applicable / unparseable → untouched = fail-closed), trigger-generalized (works at any
+  non-convergent terminal; production's only one today is OOM, caller unchanged). 5 tests.
