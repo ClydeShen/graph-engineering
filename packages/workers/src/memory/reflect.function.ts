@@ -14,6 +14,7 @@ import type { EmbeddingProvider } from '@graph/shared';
 import { classifyProviderError } from '@graph/shared';
 import { countTokens } from '@shared/tokenizer';
 import { logger, LOG_EVENTS } from '@shared/logger';
+import type { TemplateStat } from './escalation.js';
 
 export interface MemReflectInput {
   query_text: string;
@@ -56,6 +57,14 @@ export interface MemReflectOutput {
    * so converged scope closure can reinforce them (Phase 10 reinforcement loop).
    */
   proceduralIds: string[];
+  /**
+   * Per-injected-template freshness, for the mid-flight escalation gate (GH #33):
+   * the Laplace quality_score and the evidence volume (success+failure) of each
+   * template that made it into the output. The gate reads the SAME evidence
+   * signal as the P2 metabolism, at a second read-time (before-act) — a plan that
+   * rests on shaky ingredients surfaces a sparse verification report.
+   */
+  proceduralStats: TemplateStat[];
   /**
    * True when retrieval ran lexical-only (BM25) because the embedding provider
    * was absent or unreachable (ADR 55 D-3). Trail deviation signal — the
@@ -100,6 +109,8 @@ interface ProceduralRow {
   intent_description: string | null;
   template_graph: unknown;
   rrf_score: number;
+  success_count: number;
+  failure_count: number;
 }
 
 async function hybridSearchEpisodic(
@@ -236,6 +247,7 @@ async function hybridSearchProcedural(
        scored AS (
          SELECT
            p.id, p.intent_description, p.template_graph, r.rrf_score,
+           p.success_count, p.failure_count,
            r.rrf_score / NULLIF(MAX(r.rrf_score) OVER (), 0)              AS rrf_norm,
            ((p.success_count::FLOAT + 1.0) /
             (p.success_count + p.failure_count + 1.0))                    AS quality_score,
@@ -245,7 +257,7 @@ async function hybridSearchProcedural(
          FROM rrf_scored r
          JOIN procedural_memory p ON r.id = p.id
        )
-     SELECT id, intent_description, template_graph, rrf_score,
+     SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count,
             (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) AS final_score
      FROM scored
      ORDER BY final_score DESC
@@ -314,7 +326,7 @@ async function bm25SearchProcedural(
        LIMIT 20
      ),
      scored AS (
-       SELECT id, intent_description, template_graph, rrf_score,
+       SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count,
               rrf_score / NULLIF(MAX(rrf_score) OVER (), 0)         AS rrf_norm,
               ((success_count::FLOAT + 1.0) /
                (success_count + failure_count + 1.0))               AS quality_score,
@@ -323,7 +335,7 @@ async function bm25SearchProcedural(
               ))                                                    AS recency_score
        FROM bm25_scored
      )
-     SELECT id, intent_description, template_graph, rrf_score
+     SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count
      FROM scored
      ORDER BY (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) DESC
      LIMIT $2`,
@@ -477,11 +489,25 @@ export async function memReflect(
   // Step 1 — Procedural (positive templates, three-signal rerank)
   let procText = '';
   let proceduralIds: string[] = [];
+  let proceduralStats: TemplateStat[] = [];
   if (injectProcedural) {
     const procRows = degraded
       ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
       : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
     ({ text: procText, ids: proceduralIds } = formatProcedural(procRows, budget));
+    // Per-template freshness for the mid-flight gate (GH #33): only the templates
+    // that actually made it into the output (proceduralIds), in that order.
+    const byId = new Map(procRows.map((r) => [r.id, r]));
+    proceduralStats = proceduralIds.map((id) => {
+      const r = byId.get(id)!;
+      const evidence = r.success_count + r.failure_count;
+      return {
+        id,
+        quality_score: (r.success_count + 1) / (evidence + 1), // Laplace
+        evidence,
+        intent_description: r.intent_description,
+      };
+    });
   }
   const pTokens = countTokens(procText);
 
@@ -521,6 +547,7 @@ export async function memReflect(
     tokens: pTokens + aTokens + eTokens + sTokens,
     sections: { procedural: procText, antiPatterns: antiText, episodic: epiText, semantic: semText },
     proceduralIds,
+    proceduralStats,
     degraded,
   };
 }

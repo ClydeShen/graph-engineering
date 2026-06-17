@@ -1871,3 +1871,21 @@ the constants — deferred (live HITL), defaults set provisionally in `freshness
   sweep, logging each retirement (LOG_EVENTS.MEMORY_METABOLIZED). Ambiguous band
   is never auto-decided — surfaced to triage instead.
 - Bands are config (n_min=5, bad≤0.3, good≥0.7 provisional); #35 fits them.
+
+### #33 mid-flight escalation gate + memReflect quality return — DONE (unit-tested, tsc clean)
+- memReflect now returns `proceduralStats: TemplateStat[]` (per-injected-template
+  Laplace quality_score + evidence volume, for the templates that made the output).
+  Both procedural SQL paths (hybrid + bm25-degraded) now SELECT success/failure_count.
+- NEW `escalation.ts`: `selectShakyTemplates` (well-evidenced ≥ gateEvidenceFloor
+  yet quality < gateQualityFloor) + `formatVerificationReport` (sparse — only the
+  shaky template's "before"/"->" constraint lines + success-rate). 7 tests.
+- `AssembledContext.verificationReport?` added; `processAgentTurn` sets it after
+  reflection when the plan rests on shaky ingredients. Defensive `?? []` at the
+  call site — an absent stat list never crashes a turn.
+- DEFAULT POLICY (calibration-deferred): unproven (thin-evidence) templates stay
+  silent so a freshly seeded cold start never escalates spuriously (satisfies the
+  AC). #35 may lower the evidence floor.
+- DB was down at suite time (only github-mcp-server container ran); brought up
+  pgvector/pgvector:pg16 via `docker compose --env-file /dev/null up -d` (the .env
+  has a malformed Slack-token line that breaks compose's env parser) + migrated
+  graph + graph_test. Full workers+gateway suite: 415/415 green.
