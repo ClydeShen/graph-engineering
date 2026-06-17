@@ -10,6 +10,6 @@
     "phase": "01-discuss",
     "active": "Loop Engineering benchmark arc COMPLETE (GH #24). L1/L2/L3 all green: injection works; two latent defects fixed (D1 failure_count 11ef17e5, D2 convergence terminalizer ADR-58 9ebd175a); L2 corrected-order crystallization (08c2af7f) makes the learning curve decline. Academic benchmark + re-runnable harness + 5 raw JSON on master; README links it. Next direction = L2 template consolidation (research-mandated).",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "Mirrored Claude session memory into .harness/memory/ and pushed (6a12ba8e). Wrote next-direction plan to memory (project_next_direction_l2_consolidation.md). Benchmark, README, and paper all on master; tree clean."
+    "stopped_at": "Freshness-substrate arc (#30-#35) build-complete on branch feat/freshness-substrate (6 commits, UNMERGED). #30-#34 built+tested: full suite 832/832, console build green, live triage journey 7/7. eval:loop gate FAILED in absolute terms but PROVEN not a regression — same-session master baseline collapses identically (48,121,...), in-repo curves bimodal on gpt-oss-120b, and the changes are code-path-inert on the curve harness. #35 constant calibration remains HITL/deferred (dials externalized in freshness-config.ts). Human decisions pending: merge (gate red on model-bimodality basis) + calibration. Did NOT push/merge (not asked; gate red)."
   }
 }
