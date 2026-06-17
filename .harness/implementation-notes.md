@@ -1907,3 +1907,42 @@ the constants — deferred (live HITL), defaults set provisionally in `freshness
   symlink doesn't resolve on Windows, so the design intelligence came from the
   loaded guidance, not a fresh search.
 - Console tsc clean; gateway 228/228 green.
+
+### #35 falsification gate + verification — RESULT (no regression; calibration deferred)
+**Build of #30–#34 is complete, committed, and verified** at the logic level:
+workers+gateway 415/415 · full suite 832/832 (one parallel-DB deadlock flake,
+passes isolated) · console tsc + `next build` green (`/review` in route manifest)
+· live triage write-half journey 7/7 on the dev DB.
+
+**`npm run eval:loop` (behavioral gate) FAILED in absolute terms**, BUT the failure
+is NOT a regression from this change. Evidence:
+- Branch curve (gpt-oss-120b): `48,121,121,121,121,121,121,121,121,121` — run #1
+  converges, then collapses (the documented L2 bimodal failure: a messy run-#1
+  trace crystallizes a misleading runbook that every later run recalls).
+- SAME-SESSION baseline (master, none of these changes): `48,121,...` — IDENTICAL
+  signature. master collapses the same way.
+- In-repo prior curve JSONs on the same model already show baseline collapses
+  (`46,121,106,121…`, `42,40,40,42,54,118,121,121,121,121`) alongside good holds
+  (`26×`, `42→38`, `46→40`) — the curve is bimodal on this model (paper §5.7).
+- **Code-path proof of inertness on the curve harness**: the eval agent calls
+  `memReflect` directly and never writes `template_injection`, so soften is never
+  called and graded-harden step-6 sees `getInjectedTemplates → []` (identical to
+  master's `getInjectedTemplateIds → []` no-op); the metabolism cron isn't run.
+  The `reflect.function.ts` edit only ADDED columns to the SELECT — `final_score`,
+  `ORDER BY`, `formatProcedural`, and `proceduralIds` are unchanged, so the recall
+  content the agent sees is byte-identical to master. ⟹ the freshness changes
+  cannot have caused the collapse.
+
+**Gate-design finding** (worth a follow-up): a single 10-run curve is ~one
+Bernoulli trial of "did run-#1 crystallize a good runbook"; on a bimodal model the
+absolute last-3 threshold cannot separate a bad draw from a regression. The gate
+needs either a pinned validated model or a multi-sample collapse-RATE criterion.
+
+**#35 constant calibration (the 4 deferred classes) remains HITL/deferred** — the
+spec marked it so, and it requires wiring injection-recording into the harness +
+deliberate multi-run fitting. All dials are externalized in `freshness-config.ts`
+with safe behaviour-preserving defaults, so calibration needs no code change.
+
+**Disposition**: branch `feat/freshness-substrate` is build-complete and
+regression-free (proven), NOT merged to master (gate red on a model-bimodality
+basis, and #35 calibration pending — a human merge decision).
