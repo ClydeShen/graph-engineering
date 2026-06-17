@@ -1946,3 +1946,40 @@ with safe behaviour-preserving defaults, so calibration needs no code change.
 **Disposition**: branch `feat/freshness-substrate` is build-complete and
 regression-free (proven), NOT merged to master (gate red on a model-bimodality
 basis, and #35 calibration pending — a human merge decision).
+
+## Post-arc direction — "prove the loop" research sprint (2026-06-17, fuller + research)
+Autonomous decision (/goal authority supplies the priority dimension): near-term is
+SINGLE-THREADED on proving the learning loop is falsifiably stable; the product arc
+(MemexTerminal X-beam #25, console trail-mesh) waits until the loop is proven.
+
+**Research grounding (validates the direction):**
+- The bimodal collapse we hit is the literature's "error avalanche" / model collapse /
+  "curse of recursion"; reflective memory's central risk is "self-reinforcing error"
+  (arXiv 2601.05280; 2603.07670). Our run#1-bad-runbook→recalled→amplified IS this.
+- The field's emerging cure = evidence-gated ACQUISITION: Live-Evo commits an experience
+  only if it yields statistically significant improvement (arXiv 2602.02369). = our N5
+  evidence-gated canonical promotion → promoted from "conditional" to "expected-needed".
+- Quality gates (confidence/contradiction/expiry) are "necessary but underdeveloped";
+  SSGM governance framework (arXiv 2603.11768). Our 3-band metabolism + Review fit here.
+  Our deterministic conformance de-confounder (DAG-vs-rules, NOT a 2nd LLM) appears NOVEL
+  vs the literature's success/fail signals + LLM-judge — a potential contribution.
+- Statistical eval: single-seed is "highly unstable"; need multi-sample/variance
+  (arXiv 2504.07086; ICLR-2026 non-determinism blog). Backs N1/N2.
+
+**Plan (dependency order):**
+- N1 DONE — loop-gate.ts → statistical multi-curve COLLAPSE-RATE + model pin
+  (EVAL_LOOP_CURVES/RUNS/COLLAPSE_EVENTS/MAX_COLLAPSE_RATE/MODEL_PIN). Backward-compat
+  at CURVES=1.
+- N2 — measure baseline collapse-rate (current loop is inert-on-curve = baseline) to
+  calibrate MAX_COLLAPSE_RATE (the null to beat).
+- N3 — wire substrate into the eval closed loop (harness records template_injection +
+  softens on non-convergent terminal) so soften/harden/metabolism actually fire.
+- N4 — falsify substrate: branch vs baseline collapse-rate. cure-first (substrate built +
+  conformance de-confounder is our novel angle); if insufficient → N5.
+- N5 — prevention: evidence-gated canonical promotion (≥k consistent before full-weight
+  recall) — directly attacks run#1 single point; research says likely needed.
+- N6 — calibrate the 4 deferred constant classes (original #35) now that the gate is statistical.
+
+**Mid-term (gated on loop proof):** M1 MemexTerminal X-beam (the #33 verificationReport +
+ #34 /review ARE the approval surface — research line pre-builds product geometry), M2
+console trail-mesh, M3 Review graduation (flying + resting timescales in one HITL surface).
