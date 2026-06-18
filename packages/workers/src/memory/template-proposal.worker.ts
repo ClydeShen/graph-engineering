@@ -248,7 +248,7 @@ export class TemplateProposalWorker {
         for (const t of injected) {
           const rules = parseOrderingRules(t.content ?? '', vocab);
           const verdict = checkConformance(rules, actualOrder, FRESHNESS.conformanceMaxViolationRatio);
-          if (verdict === 'conformed') await this.memory.reinforceTemplate(t.id, credit);
+          if (verdict === 'conformed') await this.memory.reinforceTemplate(t.id, credit, FRESHNESS.recencyAlpha);
         }
       }
     } catch {

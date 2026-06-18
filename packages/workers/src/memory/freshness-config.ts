@@ -84,6 +84,17 @@ export const FRESHNESS = {
    */
   gateQualityFloor: num('FRESHNESS_GATE_QUALITY_FLOOR', 0.7),
   gateEvidenceFloor: num('FRESHNESS_GATE_EVIDENCE_FLOOR', 5),
+
+  /**
+   * N5 — recency-weighted trust (late-drift fix). EWMA discount on each
+   * harden/soften: recent_quality = (1-α)·recent_quality + α·outcome (1=converged,
+   * 0=conformed-failure). Higher α = faster reaction to recent change. Apoptosis
+   * reads recent_quality (not cumulative Laplace) for its bad-band test, so a
+   * once-good template that drifts bad is retired. Research: discounted/sliding-
+   * window UCB is near-optimal for non-stationary reward (Garivier & Moulines).
+   * α is calibration-deferred (N6).
+   */
+  recencyAlpha: num('FRESHNESS_RECENCY_ALPHA', 0.4),
 } as const;
 
 export type FreshnessConfig = typeof FRESHNESS;

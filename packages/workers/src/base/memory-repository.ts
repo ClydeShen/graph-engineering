@@ -85,9 +85,11 @@ interface ProceduralRepository {
   /**
    * Credit a positive template's `success_count` on converged adoption. `credit`
    * (default 1) is the token-efficiency-graded harden amount (GH #31): a template
-   * whose prescribed order let the SIMPLEST cooking win earns more.
+   * whose prescribed order let the SIMPLEST cooking win earns more. `recencyAlpha`
+   * (N5) discounts recent_quality toward 1 (EWMA, outcome=1) for the late-drift
+   * signal; 0 leaves recent_quality untouched (legacy callers).
    */
-  reinforceTemplate(templateId: string, credit?: number): Promise<void>;
+  reinforceTemplate(templateId: string, credit?: number, recencyAlpha?: number): Promise<void>;
   /** Template ids injected into this scope by mem::reflect (migration 013). */
   getInjectedTemplateIds(scopeId: string): Promise<string[]>;
   /**
@@ -129,6 +131,8 @@ export interface MetabolismRow {
   success_count: number;
   failure_count: number;
   quality_score: number;
+  /** N5 recency-weighted trust (EWMA) — the signal that actually condemned it. */
+  recent_quality: number;
 }
 
 /** An ambiguous crystallization surfaced for human triage (GH #32/#34). */
@@ -319,13 +323,16 @@ export class PoolMemoryRepository implements MemoryRepository {
     );
   }
 
-  async reinforceTemplate(templateId: string, credit = 1): Promise<void> {
+  async reinforceTemplate(templateId: string, credit = 1, recencyAlpha = 0): Promise<void> {
+    // N5: discount recent_quality toward 1 (EWMA, outcome=1). recencyAlpha=0 is a
+    // no-op on recent_quality, preserving legacy callers that don't pass it.
     await this.pool.query(
       `UPDATE procedural_memory
        SET success_count = success_count + $2,
+           recent_quality = (1.0 - $3) * recent_quality + $3 * 1.0,
            last_used_at = NOW()
        WHERE id = $1`,
-      [templateId, Math.max(1, Math.round(credit))],
+      [templateId, Math.max(1, Math.round(credit)), recencyAlpha],
     );
   }
 
@@ -398,16 +405,20 @@ export class PoolMemoryRepository implements MemoryRepository {
   }
 
   async metabolizeByEvidence(bands: { nMin: number; qualityBad: number }): Promise<MetabolismRow[]> {
-    // Laplace quality_score = (success+1)/(success+failure+1); evidence volume =
-    // success+failure ≥ nMin. Logical delete (superseded_by=id) → reversible.
+    // N5: the bad-band test is on recent_quality (EWMA), NOT cumulative Laplace, so a
+    // once-good template that DRIFTS bad is retired even though its lifetime quality is
+    // still high (the late-drift mode N4 exposed). The evidence floor stays on
+    // cumulative volume (success+failure ≥ nMin) so a brand-new neutral template
+    // (recent_quality=0.5) is never retired before it has a track record. Logical
+    // delete (superseded_by=id) → reversible.
     const { rows } = await this.pool.query<MetabolismRow>(
       `UPDATE procedural_memory
        SET superseded_by = id
        WHERE is_anti_pattern = FALSE
          AND superseded_by IS NULL
          AND (success_count + failure_count) >= $1
-         AND ((success_count + 1.0) / (success_count + failure_count + 1.0)) <= $2
-       RETURNING id, success_count, failure_count,
+         AND recent_quality <= $2
+       RETURNING id, success_count, failure_count, recent_quality,
                  (((success_count + 1.0) / (success_count + failure_count + 1.0)))::float8 AS quality_score`,
       [bands.nMin, bands.qualityBad],
     );
@@ -486,7 +497,7 @@ export class StubMemoryRepository implements MemoryRepository {
     findMergeableTemplate: [] as Array<{ topologyEmbeddingLiteral: string; excludeScopeId: string }>,
     supersedeTemplate: [] as Array<{ oldId: string; newId: string }>,
     reinforceTemplate: [] as string[],
-    reinforceTemplateGraded: [] as Array<{ templateId: string; credit: number }>,
+    reinforceTemplateGraded: [] as Array<{ templateId: string; credit: number; recencyAlpha: number }>,
     getInjectedTemplateIds: [] as string[],
     getInjectedTemplates: [] as string[],
     lookupLesson: [] as string[],
@@ -599,9 +610,9 @@ export class StubMemoryRepository implements MemoryRepository {
     this.calls.supersedeTemplate.push({ oldId, newId });
   }
 
-  async reinforceTemplate(templateId: string, credit = 1): Promise<void> {
+  async reinforceTemplate(templateId: string, credit = 1, recencyAlpha = 0): Promise<void> {
     this.calls.reinforceTemplate.push(templateId);
-    this.calls.reinforceTemplateGraded.push({ templateId, credit });
+    this.calls.reinforceTemplateGraded.push({ templateId, credit, recencyAlpha });
   }
 
   private _injectedTemplateIds: string[] = [];

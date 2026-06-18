@@ -105,11 +105,14 @@ export async function penalizeInjectedTemplates(
   if (conformedIds.length === 0) return { penalized: 0 };
 
   await pool.query(
+    // N5: also discount recent_quality toward 0 (EWMA, outcome=0) so a once-good
+    // template that starts failing loses recency-weighted trust fast (late-drift).
     `UPDATE procedural_memory
      SET failure_count = failure_count + $2,
+         recent_quality = (1.0 - $3) * recent_quality,
          last_used_at = NOW()
      WHERE id = ANY($1::uuid[])`,
-    [conformedIds, FRESHNESS.softenIncrement],
+    [conformedIds, FRESHNESS.softenIncrement, FRESHNESS.recencyAlpha],
   );
   return { penalized: conformedIds.length };
 }

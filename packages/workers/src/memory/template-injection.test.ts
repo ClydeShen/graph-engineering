@@ -33,7 +33,8 @@ describe('penalizeInjectedTemplates (GH #30 conformance-gated soften)', () => {
     );
     const result = await penalizeInjectedTemplates(pool, 'scope-1');
     expect(result.penalized).toBe(1);
-    expect(getUpdateParams()).toEqual([['t-conform'], 1]); // failure_count += softenIncrement(1)
+    // [ids, softenIncrement(1), recencyAlpha(0.4)] — failure_count++ and recent_quality EWMA↓
+    expect(getUpdateParams()).toEqual([['t-conform'], 1, 0.4]);
   });
 
   it('does NOT soften a template whose order was VIOLATED (cooking mistake, out of scope)', async () => {
@@ -65,7 +66,7 @@ describe('penalizeInjectedTemplates (GH #30 conformance-gated soften)', () => {
     );
     const result = await penalizeInjectedTemplates(pool, 'scope-4');
     expect(result.penalized).toBe(1);
-    expect(getUpdateParams()).toEqual([['t-conform'], 1]);
+    expect(getUpdateParams()).toEqual([['t-conform'], 1, 0.4]);
   });
 
   it('returns 0 when the scope had no injected templates', async () => {

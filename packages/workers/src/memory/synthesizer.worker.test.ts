@@ -32,7 +32,7 @@ describe('MemorySynthesizerWorker', () => {
 
   it('runDecay() runs atrophy AND evidence-gated apoptosis on the same sweep (GH #32)', async () => {
     memory.setMetabolismRows([
-      { id: 'bad-tpl', success_count: 0, failure_count: 9, quality_score: 0.1 },
+      { id: 'bad-tpl', success_count: 0, failure_count: 9, quality_score: 0.1, recent_quality: 0.08 },
     ]);
     const worker = new MemorySynthesizerWorker(reader, memory, { chat: mockChat });
     await worker.runDecay();
