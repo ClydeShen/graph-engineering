@@ -2169,3 +2169,32 @@ N8 powered A/B running: prevention-only (threshold=1, NO retirement levers — i
 if prevention's collapse-rate is clearly < 0.55 it's the first lever to beat baseline (loads
 the lottery, as predicted); if not, the honest null stands and collapse is task-intrinsic on
 this model. NO claim until N8 + the gate line.
+
+### N8b RESULT — prevention is WORSE (0.75); the arc's settled conclusion
+N8b (prevention-only, recall gate threshold=1, no retirement, 8 curves, model-pinned) →
+collapse-rate **0.75 (6/8)**, gate FAIL — WORSE than the 0.55 baseline. Curves 4-8 stayed
+collapsed (121 sustained): prevention-only has no retirement escape, and the design's core
+assumption is FALSIFIED — **corroboration measures CONSISTENCY, not CORRECTNESS.** At temp=0
+the model deterministically re-derives its own consistent MISTAKES, so a stumbled topology
+gets corroborated (re-derived ≥2×) → promoted → locked in → permanent collapse.
+
+**Complete ladder (gpt-oss-120b):** baseline 0.55 (11) · substrate/conformance 0.71 (7) ·
+substrate+streak-breaker 0.50 (6) · prevention/corroboration 0.75 (8). **No trust-layer lever
+beats baseline.** The reason is now clear and general: every trust signal (conformance,
+recency, corroboration) is DOWNSTREAM of the same crystallization coin-flip; you cannot beat a
+coin-flip by re-weighting its outputs. The ~0.5 collapse-rate is INTRINSIC to crystallization
+quality on this task/model. To beat it you must improve the CRYSTALLIZATION itself (the LLM
+distillation step — better prompt/model/structured extraction) or use a stronger model — not
+manage trust over its outputs.
+
+**What the trust layer IS good for (re-scoped, honest):** not raising the aggregate convergence
+rate, but (a) ROBUSTNESS — the streak breaker provably converts permanent lock-in to
+recoverable (a real production win the collapse-rate metric misses); (b) CLEANLINESS — the
+conformance de-confounder keeps trust honest (don't blame the ingredient for cooking). Both are
+worth keeping, config-gated OFF by default. Prevention (corroboration) is built but should stay
+OFF — it can lock in consistent-wrong runbooks; keep the code as a studied negative result.
+
+**Arc closed.** No further retirement/admission variants — the conclusion is robust across
+baseline + 3 retirement variants + prevention. Next real lever (out of this arc's scope) =
+crystallization quality, not trust management. Branch UNMERGED; no effect claimed. Raw:
+eval-loop-N8b-prevention.log.

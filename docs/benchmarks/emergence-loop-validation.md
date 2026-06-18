@@ -526,14 +526,28 @@ structurally incapable of **exceeding** it. To beat baseline the loop must raise
 what gets crystallized and recalled (prevention / admission control — promote a runbook to
 full-weight recall only after it re-validates), not retire the bad after the fact.
 
-Two values must not be conflated. For the *aggregate* convergence rate, retirement is a dead end
-and prevention is the open lever. For *robustness*, the brake is a genuine win the collapse-rate
-metric does not capture: in production the catastrophic state is permanently recalling a bad
-runbook, and the brake provably converts that to recoverable — worth keeping (config-gated) as a
-safety net on its own terms. The late-drift fix (`recent_quality`, migration 023) and the brake
-(`recall_fail_streak`, migration 024) are built and unit/live-validated; their curve-level benefit
-is bounded by the ceiling above. Raw runs: `.harness/analysis/eval-loop-substrate-N4.log`,
-`.../eval-loop-N6-substrate-n5.log`, `.../eval-loop-N7-streak.log`.
+**Prevention, too, fails — and shows why the whole class fails.** The "open lever" was then
+built and tested: topology-corroboration admission control, recalling a runbook at full weight
+only once its WL topology has been independently re-derived (the consolidation merge is the
+corroboration signal). Powered (8 curves) it scored **0.75 — worse than baseline.** The reason is
+decisive: at temperature 0 the model deterministically re-derives its own *consistent mistakes*,
+so a stumbled topology gets corroborated and promoted exactly as a good one would. **Corroboration
+measures consistency, not correctness.** With no retirement escape, a promoted-but-wrong runbook
+locks the loop into sustained collapse.
+
+**The settled conclusion.** Complete ladder on this model: baseline 0.55 · conformance retirement
+0.71 · retirement + streak-brake 0.50 · corroboration admission 0.75. *No trust-layer lever beats
+the baseline*, and the reason is general: every trust signal — conformance, recency, corroboration
+— is **downstream of the same crystallization coin-flip**, and you cannot beat a coin-flip by
+re-weighting its outputs. The ~0.5 collapse-rate is intrinsic to *crystallization quality* on this
+task and model; beating it requires improving the distillation step itself (prompt, structured
+extraction, or a stronger model), not managing trust over its outputs. What the trust layer is
+genuinely for is therefore re-scoped, and on firmer ground: **robustness** (the streak-brake
+provably converts permanent lock-in into recoverable — a production win the collapse-rate metric
+cannot see) and **cleanliness** (the conformance de-confounder keeps trust honest). All mechanisms
+ship config-gated OFF; prevention stays off as a documented negative result. Raw runs:
+`.harness/analysis/eval-loop-substrate-N4.log`, `.../eval-loop-N6-substrate-n5.log`,
+`.../eval-loop-N7-streak.log`, `.../eval-loop-N8b-prevention.log`.
 
 ## 6. Threats to validity
 
