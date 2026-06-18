@@ -76,6 +76,34 @@ function parseAction(raw: string): Action {
   return { kind: 'invalid' };
 }
 
+/**
+ * Bounded retry around an LLM chat call so a transient endpoint hiccup (504 / timeout /
+ * connection reset) does not abort a multi-hour curve campaign. Production already
+ * degrades on transient faults (ADR-55); the eval harness must be at least as robust,
+ * else one upstream 5xx throws away hours of runs (it killed an 8-curve campaign after 2).
+ * Non-transient errors rethrow immediately; transient ones retry with linear backoff.
+ */
+async function chatWithRetry(
+  llm: LLMProvider,
+  messages: Parameters<LLMProvider['chat']>[0],
+  opts: Parameters<LLMProvider['chat']>[1],
+  tries = 4,
+): Promise<string> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await llm.chat(messages, opts);
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const transient = /\b(429|5\d\d|timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|fetch failed|socket hang up)\b/i.test(msg);
+      if (!transient || i === tries - 1) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function decideStep(
   llm: LLMProvider,
   ctx: { injected: string; completed: ReadonlySet<Step>; lastFailure: string | null },
@@ -91,7 +119,8 @@ async function decideStep(
   ];
   if (ctx.lastFailure) parts.push(`Last attempt: ${ctx.lastFailure}`);
   if (ctx.injected) parts.push(`Relevant runbook from past experience:\n${ctx.injected}`);
-  const text = await llm.chat(
+  const text = await chatWithRetry(
+    llm,
     [{ role: 'system', content: system }, { role: 'user', content: parts.join('\n\n') }],
     { temperature: 0 },
   );
