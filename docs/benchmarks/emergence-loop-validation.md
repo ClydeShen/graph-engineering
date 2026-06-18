@@ -512,14 +512,28 @@ retire the ingredient — so it cannot fix that collapse (the logs show `metabol
 collapsed runs). The substrate addresses ingredient-caused collapse; the residual is composition,
 which the system deliberately does not own.
 
-**Open, honestly.** Whether the restoring force can robustly cut the collapse-rate is unresolved.
-Candidate levers, each of which must be validated under power (≥10 curves/arm) before any effect
-is asserted: faster retirement (lower n_min / higher recency α / retire on the first clean
-conformed-failure) so recovery beats the last-three window; and a recall-side brake (stop
-recalling a template that failed the last *k* scopes, regardless of conformance) to also damp
-cooking-driven collapse. The late-drift fix (recency-weighted `recent_quality`, migration 023) is
-built and unit/live-validated, but its curve-level benefit is part of this same open question.
-Raw runs: `.harness/analysis/eval-loop-substrate-N4.log`, `.../eval-loop-N6-substrate-n5.log`.
+**The structural ceiling of retirement (settled).** The recall-side brake was then built and
+tested: a template recalled into *k* consecutive non-convergent scopes is retired regardless of
+conformance, so the loop cold-starts. It demonstrably works — recovery immediately after a
+break was observed repeatedly (a curve that recalled a bad runbook, broke it, cold-started, and
+re-converged, twice, and held). It pulled the substrate's collapse-rate back from 0.71 (substrate
+alone, 7 curves) to 0.50 (with the brake, 6 curves) — but **did not beat the ~0.55 baseline**, and
+there is a structural reason it never could: *retirement → cold-start → re-crystallize re-rolls the
+same crystallization lottery, and re-rolling a coin-flip is still a coin-flip.* Every
+retirement-based mechanism (evidence apoptosis, recency, the streak brake) can **restore** the base
+convergence rate — turning "stuck recalling a bad runbook forever" into "recoverable" — but is
+structurally incapable of **exceeding** it. To beat baseline the loop must raise the *quality* of
+what gets crystallized and recalled (prevention / admission control — promote a runbook to
+full-weight recall only after it re-validates), not retire the bad after the fact.
+
+Two values must not be conflated. For the *aggregate* convergence rate, retirement is a dead end
+and prevention is the open lever. For *robustness*, the brake is a genuine win the collapse-rate
+metric does not capture: in production the catastrophic state is permanently recalling a bad
+runbook, and the brake provably converts that to recoverable — worth keeping (config-gated) as a
+safety net on its own terms. The late-drift fix (`recent_quality`, migration 023) and the brake
+(`recall_fail_streak`, migration 024) are built and unit/live-validated; their curve-level benefit
+is bounded by the ceiling above. Raw runs: `.harness/analysis/eval-loop-substrate-N4.log`,
+`.../eval-loop-N6-substrate-n5.log`, `.../eval-loop-N7-streak.log`.
 
 ## 6. Threats to validity
 

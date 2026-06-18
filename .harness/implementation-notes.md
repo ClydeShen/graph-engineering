@@ -2096,3 +2096,32 @@ n_min=2, α=0.4, model-pinned — tests whether the breaker lets the loop escape
 robustly (retire at run#3 → cold-start escape). Verdict deferred to N7; if it helps,
 this is the first variant to beat baseline; if not, the open question stands and the
 honest negative holds. NO claim until N7 (and ideally ≥10 curves) is in.
+
+### N7 RESULT — the structural ceiling of retirement (the sprint's key finding)
+N7 (substrate + N5 + streak-breaker k=2, 6 curves) → collapse-rate **0.50 (3/6)**, gate FAIL.
+Clean comparison on gpt-oss-120b: baseline 0.55 (11 curves) · substrate-alone 0.71 (7) ·
+substrate+breaker 0.50 (6). The breaker DEMONSTRABLY works (recovery-after-`broken`
+observed repeatedly; curve 2 recovered twice and held) and pulled the substrate back from
+0.71 to ~baseline — but **no variant beats baseline**, for a STRUCTURAL reason:
+
+**Retirement → cold-start → re-crystallize just RE-ROLLS the same ~50/50 crystallization
+lottery. Re-rolling a coin-flip is still a coin-flip.** Retirement (apoptosis, recency,
+streak-breaker — all three) can RESTORE the base convergence rate (turn "stuck collapsed
+forever" into "recoverable"), but it is structurally INCAPABLE of beating it. To beat
+baseline you must raise the QUALITY of what gets crystallized/recalled — i.e. PREVENTION /
+admission control (don't promote a runbook to full-weight recall until it has re-validated;
+the Live-Evo "commit only if it helps" idea), not post-hoc retirement.
+
+**Two distinct values, don't conflate them:**
+- *Aggregate convergence rate* (越用越聪明): retirement can't move it. Open lever = prevention.
+- *Robustness / no permanent lock-in*: the breaker is a REAL win the collapse-rate metric
+  doesn't capture — in production, "permanently recalling a bad runbook" is the catastrophic
+  unrecoverable state, and the breaker provably converts it to recoverable. Worth keeping
+  (config-gated) as a safety net independent of the aggregate metric.
+
+**Strategic redirect (data-earned)**: stop adding retirement variants; the next real lever is
+PREVENTION — improve crystallization quality and/or evidence-gated promotion so the lottery
+itself is loaded, not just re-rolled. Also: the collapse appears dominated by task-intrinsic
+difficulty on this model (run#1 crystallization quality + cooking), which a trust layer
+mitigates but cannot eliminate; the substrate's aggregate value may only show on tasks where
+collapse is genuinely INGREDIENT-driven. Branch stays UNMERGED; no effect claimed.
