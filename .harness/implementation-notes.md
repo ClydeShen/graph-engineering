@@ -2157,3 +2157,15 @@ thing retirement structurally can't do. (= Live-Evo "commit only if it recurs", 
 **Honest expectation**: prevention is the candidate that COULD beat baseline (loads the lottery);
 but the collapse also has a task-intrinsic floor on this model (run#1 crystallization quality +
 cooking), so even prevention may only narrow, not eliminate, the gap. Powered A/B will tell.
+
+### Prevention lever BUILT (clean focused round) + N8 powered A/B running
+Built + committed: migration 025 corroboration_count; crystallizer increments it on
+topology merge (independent re-derivation); reflect.function recall gates on
+corroboration_count >= FRESHNESS.recallPromoteThreshold (default 0 = no-op byte-identical
+baseline — recall asset frozen by default). Live-validated (journey-prevention): at
+threshold=1 recall returns the promoted template, excludes the unproven. tsc clean; 421/421.
+N8 powered A/B running: prevention-only (threshold=1, NO retirement levers — isolated),
+8 curves × 8 runs, model-pinned, vs the 0.55 baseline (11 curves). Verdict deferred to N8;
+if prevention's collapse-rate is clearly < 0.55 it's the first lever to beat baseline (loads
+the lottery, as predicted); if not, the honest null stands and collapse is task-intrinsic on
+this model. NO claim until N8 + the gate line.
