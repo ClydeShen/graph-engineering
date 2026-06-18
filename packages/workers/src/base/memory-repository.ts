@@ -123,6 +123,15 @@ interface ProceduralRepository {
    * never resurrected. Returns true if a row was reinstated.
    */
   reinstateTemplate(id: string): Promise<boolean>;
+  /**
+   * Outcome-streak circuit-breaker (lever 2, GH #30-#35). For the templates a scope
+   * recalled: on a CONVERGENT scope reset recall_fail_streak to 0; on a
+   * non-convergent scope increment it, and when it reaches `retireAt` (>0) retire
+   * the template (superseded_by=id, reversible) so the loop cold-starts. Conformance-
+   * INDEPENDENT (covers cooking-caused collapse). retireAt=0 disables retirement
+   * (streak still tracked). Returns the ids retired this call.
+   */
+  registerRecallOutcome(scopeId: string, converged: boolean, retireAt: number): Promise<string[]>;
 }
 
 /** A crystallization retired by apoptosis, with the evidence that condemned it. */
@@ -466,6 +475,35 @@ export class PoolMemoryRepository implements MemoryRepository {
     return (rowCount ?? 0) > 0;
   }
 
+  async registerRecallOutcome(scopeId: string, converged: boolean, retireAt: number): Promise<string[]> {
+    if (converged) {
+      // a convergent recall clears the streak — the ingredient is working
+      await this.pool.query(
+        `UPDATE procedural_memory SET recall_fail_streak = 0
+         WHERE id IN (SELECT template_id FROM template_injection WHERE scope_id = $1)`,
+        [scopeId],
+      );
+      return [];
+    }
+    // non-convergent: bump the streak for the recalled templates
+    await this.pool.query(
+      `UPDATE procedural_memory SET recall_fail_streak = recall_fail_streak + 1
+       WHERE id IN (SELECT template_id FROM template_injection WHERE scope_id = $1)`,
+      [scopeId],
+    );
+    if (retireAt <= 0) return [];
+    // retire (reversible) any whose streak reached the threshold — cold-start escape
+    const { rows } = await this.pool.query<{ id: string }>(
+      `UPDATE procedural_memory SET superseded_by = id
+       WHERE id IN (SELECT template_id FROM template_injection WHERE scope_id = $1)
+         AND is_anti_pattern = FALSE AND superseded_by IS NULL
+         AND recall_fail_streak >= $2
+       RETURNING id`,
+      [scopeId, retireAt],
+    );
+    return rows.map((r) => r.id);
+  }
+
   async purgeTTLWorkingMemory(): Promise<void> {
     await this.pool.query(
       `DELETE FROM working_memory WHERE created_at < NOW() - INTERVAL '24 hours'`,
@@ -507,6 +545,7 @@ export class StubMemoryRepository implements MemoryRepository {
     metabolizeByEvidence: [] as Array<{ nMin: number; qualityBad: number }>,
     getMetabolismTriage: [] as Array<{ nMin: number; qualityBad: number; qualityGood: number }>,
     reinstateTemplate: [] as string[],
+    registerRecallOutcome: [] as Array<{ scopeId: string; converged: boolean; retireAt: number }>,
     purgeTTLWorkingMemory: 0,
   };
 
@@ -685,6 +724,16 @@ export class StubMemoryRepository implements MemoryRepository {
   async reinstateTemplate(id: string): Promise<boolean> {
     this.calls.reinstateTemplate.push(id);
     return true;
+  }
+
+  private _recallRetireIds: string[] = [];
+  setRecallRetireIds(ids: string[]): void {
+    this._recallRetireIds = ids;
+  }
+
+  async registerRecallOutcome(scopeId: string, converged: boolean, retireAt: number): Promise<string[]> {
+    this.calls.registerRecallOutcome.push({ scopeId, converged, retireAt });
+    return converged ? [] : this._recallRetireIds;
   }
 
   async purgeTTLWorkingMemory(): Promise<void> {

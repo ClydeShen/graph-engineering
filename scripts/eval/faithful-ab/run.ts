@@ -126,7 +126,15 @@ async function runCurve(deps: AgentDeps, runs: number, model: string): Promise<v
       try { await penalizeInjectedTemplates(deps.pool, scopeId); } catch (e) { console.warn('soften failed:', (e as Error).message); }
     }
     let metabolized = 0;
+    let broken = 0;
     if (substrate) {
+      // lever 2: outcome-streak circuit-breaker (conformance-independent). Reset the
+      // streak on a convergent recall; on a non-convergent one bump it and retire at
+      // the threshold so the loop cold-starts (covers cooking-caused collapse too).
+      try {
+        const b = await memory.registerRecallOutcome(scopeId, rec.converged, FRESHNESS.recallFailStreakRetire);
+        broken = b.length;
+      } catch (e) { console.warn('streak breaker failed:', (e as Error).message); }
       // metabolism sweep (the cron, simulated between runs): retire proven-bad runbooks
       try {
         const retired = await memory.metabolizeByEvidence({ nMin: FRESHNESS.metabolismNMin, qualityBad: FRESHNESS.metabolismQualityBad });
@@ -135,7 +143,7 @@ async function runCurve(deps: AgentDeps, runs: number, model: string): Promise<v
     }
     const tpls = (await deps.pool.query<{ n: string }>(`SELECT count(*)::int n FROM procedural_memory WHERE is_anti_pattern = FALSE AND superseded_by IS NULL`)).rows[0]?.n;
     await cleanupScope(deps.pool, scopeId);
-    console.log(`  run #${i + 1}: events=${rec.events} converged=${rec.converged} gateFails=${rec.gateFailures} recall=${rec.recallHit} live_templates=${tpls}${substrate ? ` metabolized=${metabolized}` : ''}`);
+    console.log(`  run #${i + 1}: events=${rec.events} converged=${rec.converged} gateFails=${rec.gateFailures} recall=${rec.recallHit} live_templates=${tpls}${substrate ? ` metabolized=${metabolized} broken=${broken}` : ''}`);
   }
   const first = stats(records.slice(0, Math.max(1, Math.floor(runs / 3))).map((r) => r.events));
   const last = stats(records.slice(-Math.max(1, Math.floor(runs / 3))).map((r) => r.events));

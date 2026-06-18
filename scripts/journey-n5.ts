@@ -61,8 +61,25 @@ async function main(): Promise<void> {
     if (Math.abs((await rq(t)) - 0.42) > 1e-6) fail(`soften EWMA wrong: ${await rq(t)}`);
     console.log('  ✓ EWMA moves up on reinforce (0.5→0.7) and down on soften (0.7→0.42)');
 
-    void superseded;
-    console.log('\nN5 PASS — recency-weighted retirement fixes late drift on live DB');
+    // Lever 2: outcome-streak circuit-breaker (registerRecallOutcome).
+    const st = randomUUID();
+    const scope = randomUUID();
+    await seed(st, 5, 0, 0.9); // a healthy-looking template (high trust) ...
+    await pool.query(`INSERT INTO template_injection (scope_id, template_id, trigger_type) VALUES ($1,$2,'cold_start')`, [scope, st]);
+    let r = await memory.registerRecallOutcome(scope, false, 2); // streak 0→1, no retire
+    if (r.length !== 0) fail('streak retired too early (after 1 fail)');
+    r = await memory.registerRecallOutcome(scope, false, 2); // streak 1→2 ≥ 2 → retire
+    if (!r.includes(st)) fail('streak did not retire at threshold');
+    if (!(await superseded(st))) fail('streak-retired template not superseded');
+    console.log('  ✓ outcome-streak breaker retires on consecutive fails (conformance-independent, even high-trust)');
+    await memory.reinstateTemplate(st);
+    await memory.registerRecallOutcome(scope, true, 2); // convergent recall resets streak
+    const streak = Number((await pool.query<{ s: string }>(`SELECT recall_fail_streak::text s FROM procedural_memory WHERE id=$1`, [st])).rows[0]!.s);
+    if (streak !== 0) fail(`convergent recall did not reset streak: ${streak}`);
+    console.log('  ✓ convergent recall resets the streak (reversible circuit-breaker, not a trust verdict)');
+    await pool.query(`DELETE FROM template_injection WHERE scope_id=$1`, [scope]);
+
+    console.log('\nN5 PASS — recency-weighted retirement + outcome-streak breaker on live DB');
   } finally {
     await pool.query(`DELETE FROM procedural_memory WHERE source_scope_id=$1`, [SENT]).catch(() => {});
     await pool.end();

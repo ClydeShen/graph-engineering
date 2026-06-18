@@ -95,6 +95,17 @@ export const FRESHNESS = {
    * α is calibration-deferred (N6).
    */
   recencyAlpha: num('FRESHNESS_RECENCY_ALPHA', 0.4),
+
+  /**
+   * Lever 2 (from N6) — outcome-streak circuit-breaker. A template recalled into
+   * `recallFailStreakRetire` CONSECUTIVE non-convergent scopes is retired
+   * (reversible), regardless of conformance, so the loop cold-starts and escapes a
+   * deterministic collapse (covers cooking-caused collapse the trust signal can't).
+   * 0 = DISABLED (default — preserves validated production behaviour; the
+   * experiment turns it on). NOT a trust verdict; recent_quality stays
+   * conformance-honest. Calibration-deferred (must be power-validated, ≥10 curves).
+   */
+  recallFailStreakRetire: num('FRESHNESS_RECALL_FAIL_STREAK', 0),
 } as const;
 
 export type FreshnessConfig = typeof FRESHNESS;
