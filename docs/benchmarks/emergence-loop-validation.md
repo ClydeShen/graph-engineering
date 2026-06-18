@@ -485,23 +485,41 @@ turn-cap band), model-pinned. Measured over the eleven curves already on record 
 the **baseline collapse-rate is ≈ 0.55** — the loop collapses more often than not when left to
 crystallize-and-recall alone; the validated "38/0 holds" runs were the favourable ~45%.
 
-**The falsification.** With the substrate wired into the loop (injections recorded, conformance
-soften on non-convergence, metabolism between runs), the collapse-rate fell to **0.33 (1/3
-curves)** — roughly halving the baseline. The aggregate at this sample size is suggestive; the
-decisive evidence is mechanistic, observed in a single curve: a scope crystallized a misleading
-runbook, the next four scopes recalled it and collapsed, the metabolism sweep then retired it on
-accumulated failure evidence, the following scope cold-started without the bad ingredient and
-re-converged, and the one after recalled a fresh, correct runbook — the loop **escaped the
-collapse attractor** rather than amplifying its first mistake indefinitely. A third curve showed
-the clean case, converging to the optimum and holding. This is the first direct evidence that the
-restoring force operates as designed: the system kept its ingredients fresh and the loop recovered.
+**The result — mechanism yes, aggregate effect not shown under power.** With the substrate wired
+in (injections recorded, conformance soften on non-convergence, metabolism between runs), one
+3-curve run measured a collapse-rate of 0.33, *but a subsequent 4-curve run measured 1.00*.
+Combined (5 of 7 curves collapsed ≈ 0.71) this is **not** an improvement over the ~0.55 baseline,
+and the 3-curve 0.33 is best read as an underpowered favourable draw — exactly the single-sample
+trap this benchmark exists to catch (the reproducibility literature puts the requirement at
+~9–15 curves to detect a small effect; three is far short). **The statistical gate did its job:
+it flagged the over-claim that any single curve would have hidden.** No collapse-rate improvement
+is claimed.
 
-**An honest residual.** One curve still collapsed, via a distinct mode the cure does not yet
-catch: *late drift* — a template with a long history of success that begins failing only at the
-end, whose cumulative Laplace quality remains high enough to escape retirement. Cumulative trust
-is insensitive to recent degradation; a recency-aware retirement signal (a consecutive-failure
-circuit breaker, or a windowed quality) is the indicated next increment — the "re-validate, do
-not trust forever" idea applied to retirement. Raw run: `.harness/analysis/eval-loop-substrate-N4.log`.
+What *is* evidenced is **mechanistic**: the restoring force fires and can work. In two separate
+curves a scope crystallized a misleading runbook, later scopes recalled it and collapsed, the
+metabolism sweep then retired it on accumulated failure evidence, and a subsequent cold scope
+re-converged without the bad ingredient — the loop **escaped the collapse attractor** rather than
+amplifying its first mistake forever. The deterministic conformance comparator and the
+recency-weighted retirement behave exactly as specified in isolation (unit + live checks).
+
+**Why the mechanism does not (yet) move the aggregate.** Two reasons, both visible in the logs.
+(1) *Retirement is lagged*: by the time enough conformed-failures accumulate to retire a bad
+ingredient, the curve's last-three-run window has already collapsed — recovery arrives after the
+metric is decided. (2) *Cooking-caused collapse is out of scope by design and dominates some
+samples*: when a collapse comes from the model failing to follow an otherwise-correct runbook,
+the conformance check correctly reads *violated* and the substrate correctly does NOT soften or
+retire the ingredient — so it cannot fix that collapse (the logs show `metabolized=0` across such
+collapsed runs). The substrate addresses ingredient-caused collapse; the residual is composition,
+which the system deliberately does not own.
+
+**Open, honestly.** Whether the restoring force can robustly cut the collapse-rate is unresolved.
+Candidate levers, each of which must be validated under power (≥10 curves/arm) before any effect
+is asserted: faster retirement (lower n_min / higher recency α / retire on the first clean
+conformed-failure) so recovery beats the last-three window; and a recall-side brake (stop
+recalling a template that failed the last *k* scopes, regardless of conformance) to also damp
+cooking-driven collapse. The late-drift fix (recency-weighted `recent_quality`, migration 023) is
+built and unit/live-validated, but its curve-level benefit is part of this same open question.
+Raw runs: `.harness/analysis/eval-loop-substrate-N4.log`, `.../eval-loop-N6-substrate-n5.log`.
 
 ## 6. Threats to validity
 

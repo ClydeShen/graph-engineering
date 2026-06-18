@@ -12,7 +12,7 @@ versioning: semver from 1.0.0 (single version source: root `package.json`).
 - Recency-weighted retirement (`recent_quality` EWMA, migration 023) — fixes "late drift" of a once-good template; grounded in non-stationary-bandit theory (discounted UCB)
 - Human triage/edit surface: `/v1/memory/triage|feedback|retire|reinstate` + console **Review** page (built with ui-ux-pro-max)
 - All calibration constants externalized in `freshness-config.ts`; statistical multi-curve **collapse-rate** loop gate (single-curve absolute thresholds can't separate a bad draw from a regression on a bimodal loop)
-- Falsified end-to-end: substrate cut the §5 collapse-rate from a ~0.55 baseline to 0.33 and the metabolism was shown live escaping the collapse attractor (paper §5.8)
+- Honest result (paper §5.8): the mechanism provably fires (metabolism shown live escaping the collapse attractor), but it does NOT yet robustly lower the collapse-rate under power — retirement is lagged and cooking-caused collapse is out of scope by design. The statistical gate caught the underpowered over-claim. Branch unmerged; collapse-rate effect is an open, gate-gated question.
 
 ### Added — Phase 16 (memexos-one)
 - `memex skills search/install/inspect` — dual-registry (agentskills.io/ClawHub) install side with skills-guard injection scan (review aid; findings withhold install until confirmed)

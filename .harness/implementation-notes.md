@@ -2058,3 +2058,30 @@ test would have missed it; vindicates the live-journey discipline). 421/421 gree
 N6 validation (substrate+N5, 4 curves × 8 runs, n_min=2, α=0.4) running — measuring
 whether recency-aware retirement keeps/improves N4's 0.33 collapse-rate and rescues the
 late-drift curve.
+
+### N6 RESULT — CORRECTS N4: no robust collapse-rate improvement (the gate caught the over-claim)
+N6 (substrate + N5, 4 curves × 8 runs, n_min=2, α=0.4, model-pinned) → collapse-rate
+**1.00 (4/4)**, gate FAIL. This OVERTURNS N4's 0.33: N4 (n=3) was an underpowered lucky
+draw (the reproducibility lit said ~9-15 curves needed; we had 3). Combined N4+N6 = 5/7
+≈ 0.71 collapsed WITH the substrate — NOT better than the ~0.55 baseline. **The statistical
+gate (N1) did exactly its job: caught an over-claim a single curve hid.** This is §5.7's
+own lesson ("don't encode causal stories on noisy/small data") applied to our own result.
+
+What is and isn't true now:
+- TRUE (still): the mechanism EXISTS and fires — curve 1 retired the bad template at run#8
+  and N4 curve 2 escaped the attractor. The conformance de-confounder and recency
+  retirement work as specified (N5 live check 4/4).
+- FALSE (retracted): "substrate cuts collapse-rate 0.55→0.33". Not shown under power.
+- WHY it doesn't robustly help: (a) retirement fires TOO LATE — by the time enough
+  conformed-failures accumulate to retire, the curve's last-3 window is already collapsed;
+  (b) many collapses are COOKING failures (model fails to follow even a correct runbook →
+  conformance=violated → soften correctly does NOT fire → nothing to retire). The substrate
+  only addresses INGREDIENT-caused collapse; cooking-caused collapse is out of scope BY
+  DESIGN and dominates some samples (metabolized=0 across collapsed runs confirms this).
+
+Open (honest): whether the substrate can robustly cut collapse-rate is UNRESOLVED. Candidate
+levers (future, must be gate-validated under power): faster retirement (lower n_min / higher
+α / retire on first conformed-failure) so recovery beats the last-3 window; a RECALL-side
+brake (stop recalling a template that failed the last k scopes regardless of conformance) to
+also dampen cooking-collapse; and a properly powered run (≥10 curves/arm) before ANY
+collapse-rate claim. Do NOT re-assert an effect without that. Branch stays UNMERGED.
