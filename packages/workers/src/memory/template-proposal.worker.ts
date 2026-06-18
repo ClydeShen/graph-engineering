@@ -193,10 +193,15 @@ export class TemplateProposalWorker {
         const topologyLiteral = wlLiteral(skeleton);
         let supersedePriorId: string | null = null;
         let canonicalContent = actionableContent;
+        // Prevention lever: a fresh runbook is unproven (corroboration 0); each
+        // independent re-derivation of the same topology (a merge) increments it, so
+        // recall can promote only runbooks that have recurred (loads the lottery).
+        let corroborationCount = 0;
         const prior = await this.memory.findMergeableTemplate(topologyLiteral, scopeId);
         if (prior) {
           canonicalContent = await this.mergeRunbooks(prior.content, actionableContent);
           supersedePriorId = prior.id;
+          corroborationCount = prior.corroboration_count + 1;
         }
         const { id: templateId } = await this.memory.insertProceduralTemplate({
           scopeId,
@@ -206,6 +211,7 @@ export class TemplateProposalWorker {
           embeddingLiteral: topologyLiteral,
           intentEmbeddingLiteral,
           isAntiPattern: false,
+          corroborationCount,
         });
         // Supersede AFTER the new canonical row exists, so recall never sees a gap
         // (append-only: the old row is kept, just marked superseded_by the new id).

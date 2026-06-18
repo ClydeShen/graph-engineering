@@ -15,6 +15,7 @@ import { classifyProviderError } from '@graph/shared';
 import { countTokens } from '@shared/tokenizer';
 import { logger, LOG_EVENTS } from '@shared/logger';
 import type { TemplateStat } from './escalation.js';
+import { FRESHNESS } from './freshness-config.js';
 
 export interface MemReflectInput {
   query_text: string;
@@ -211,23 +212,26 @@ async function hybridSearchProcedural(
   queryText: string,
   limit: number,
   principal: string,
+  promoteThreshold: number,
 ): Promise<ProceduralRow[]> {
   // Three-signal rerank per P0-B decision: rrf_norm×0.6 + quality×0.3 + recency×0.1.
   // rrf_score is normalized against the pool max — raw RRF (~0.01 scale) would be
   // drowned by quality/recency (0..1 scale). See ADR-25 supplement 2 D-5.
+  // $5 = promotion gate (prevention): only recall runbooks whose topology has been
+  // re-derived >= promoteThreshold times. 0 → `>= 0` is a no-op (current behaviour).
   const { rows } = await pool.query<ProceduralRow>(
     `WITH
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY intent_embedding <=> $1::vector) AS vector_rank
          FROM procedural_memory
-         WHERE is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
+         WHERE is_anti_pattern = FALSE AND superseded_by IS NULL AND corroboration_count >= $5 AND ${visibilityFilter(4)}
          ORDER BY intent_embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM procedural_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
+         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND superseded_by IS NULL AND corroboration_count >= $5 AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -262,7 +266,7 @@ async function hybridSearchProcedural(
      FROM scored
      ORDER BY final_score DESC
      LIMIT $3`,
-    [queryEmbeddingLiteral, queryText, limit, principal],
+    [queryEmbeddingLiteral, queryText, limit, principal, promoteThreshold],
   );
   return rows;
 }
@@ -313,16 +317,17 @@ async function bm25SearchProcedural(
   queryText: string,
   limit: number,
   principal: string,
+  promoteThreshold: number,
 ): Promise<ProceduralRow[]> {
   // Three-signal rerank preserved (quality 0.3 + recency 0.1); the rrf_norm
-  // component degenerates to BM25-rank normalization.
+  // component degenerates to BM25-rank normalization. $4 = promotion gate (0 = no-op).
   const { rows } = await pool.query<ProceduralRow>(
     `WITH bm25_scored AS (
        SELECT p.id, p.intent_description, p.template_graph,
               p.success_count, p.failure_count, p.last_used_at,
               0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(p.ts_doc, query) DESC))) AS rrf_score
        FROM procedural_memory p, plainto_tsquery('english', $1) AS query
-       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND p.superseded_by IS NULL AND ${visibilityFilter(3)}
+       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND p.superseded_by IS NULL AND p.corroboration_count >= $4 AND ${visibilityFilter(3)}
        LIMIT 20
      ),
      scored AS (
@@ -339,7 +344,7 @@ async function bm25SearchProcedural(
      FROM scored
      ORDER BY (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) DESC
      LIMIT $2`,
-    [queryText, limit, principal],
+    [queryText, limit, principal, promoteThreshold],
   );
   return rows;
 }
@@ -491,9 +496,10 @@ export async function memReflect(
   let proceduralIds: string[] = [];
   let proceduralStats: TemplateStat[] = [];
   if (injectProcedural) {
+    const promote = FRESHNESS.recallPromoteThreshold;
     const procRows = degraded
-      ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
-      : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
+      ? await bm25SearchProcedural(pool, input.query_text, limit, principal, promote)
+      : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal, promote);
     ({ text: procText, ids: proceduralIds } = formatProcedural(procRows, budget));
     // Per-template freshness for the mid-flight gate (GH #33): only the templates
     // that actually made it into the output (proceduralIds), in that order.

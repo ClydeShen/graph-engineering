@@ -106,6 +106,17 @@ export const FRESHNESS = {
    * conformance-honest. Calibration-deferred (must be power-validated, ≥10 curves).
    */
   recallFailStreakRetire: num('FRESHNESS_RECALL_FAIL_STREAK', 0),
+
+  /**
+   * Prevention lever (from N7) — topology-corroboration admission control. A
+   * crystallization is recalled at full weight only once its WL topology has been
+   * independently RE-DERIVED >= this many times (corroboration_count). This LOADS
+   * the crystallization lottery (recall only corroborated runbooks) rather than
+   * re-rolling it, the one thing retirement structurally cannot do. 0 = DISABLED
+   * (default — recall filter becomes `corroboration_count >= 0`, byte-identical to
+   * current behaviour). Calibration-deferred (must be power-validated A/B).
+   */
+  recallPromoteThreshold: num('FRESHNESS_RECALL_PROMOTE_THRESHOLD', 0),
 } as const;
 
 export type FreshnessConfig = typeof FRESHNESS;

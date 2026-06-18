@@ -11,6 +11,12 @@ interface ProceduralTemplateParams {
   intentEmbeddingLiteral: string | null;
   /** When true, this row is a negative sample (anti-pattern). Default: false. */
   isAntiPattern?: boolean;
+  /**
+   * Independent-re-derivation count seeded on insert (prevention lever). A fresh
+   * crystallization is 0 (unproven); a merge of a re-derived topology carries the
+   * prior's corroboration_count + 1. Default 0.
+   */
+  corroborationCount?: number;
 }
 
 interface LessonRecord {
@@ -79,7 +85,7 @@ interface ProceduralRepository {
    * events → a different graph → it structurally cannot match (and so cannot poison)
    * the clean canonical. Non-superseded, positive, a different source scope.
    */
-  findMergeableTemplate(topologyEmbeddingLiteral: string, excludeScopeId: string): Promise<{ id: string; content: string } | null>;
+  findMergeableTemplate(topologyEmbeddingLiteral: string, excludeScopeId: string): Promise<{ id: string; content: string; corroboration_count: number } | null>;
   /** Logically supersede a positive template by a newer canonical one (append-only: old row kept). */
   supersedeTemplate(oldId: string, newId: string): Promise<void>;
   /**
@@ -276,8 +282,8 @@ export class PoolMemoryRepository implements MemoryRepository {
       `INSERT INTO procedural_memory
          (scope_id, content, intent_description, template_graph, topology_embedding,
           intent_embedding, success_count, reinforcement_count, last_used_at,
-          created_at, is_anti_pattern, source_scope_id)
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW(), $7, $1)
+          created_at, is_anti_pattern, source_scope_id, corroboration_count)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, NOW(), NOW(), $7, $1, $8)
        RETURNING id`,
       [
         params.scopeId,
@@ -287,6 +293,7 @@ export class PoolMemoryRepository implements MemoryRepository {
         params.embeddingLiteral,
         params.intentEmbeddingLiteral,
         params.isAntiPattern ?? false,
+        params.corroborationCount ?? 0,
       ],
     );
     return { id: rows[0]!.id };
@@ -309,9 +316,9 @@ export class PoolMemoryRepository implements MemoryRepository {
   async findMergeableTemplate(
     topologyEmbeddingLiteral: string,
     excludeScopeId: string,
-  ): Promise<{ id: string; content: string } | null> {
-    const { rows } = await this.pool.query<{ id: string; content: string }>(
-      `SELECT id, content
+  ): Promise<{ id: string; content: string; corroboration_count: number } | null> {
+    const { rows } = await this.pool.query<{ id: string; content: string; corroboration_count: number }>(
+      `SELECT id, content, corroboration_count
        FROM procedural_memory
        WHERE is_anti_pattern = FALSE
          AND superseded_by IS NULL
@@ -322,7 +329,9 @@ export class PoolMemoryRepository implements MemoryRepository {
        LIMIT 1`,
       [topologyEmbeddingLiteral, excludeScopeId],
     );
-    return rows.length > 0 ? { id: rows[0]!.id, content: rows[0]!.content } : null;
+    return rows.length > 0
+      ? { id: rows[0]!.id, content: rows[0]!.content, corroboration_count: rows[0]!.corroboration_count }
+      : null;
   }
 
   async supersedeTemplate(oldId: string, newId: string): Promise<void> {
@@ -630,19 +639,21 @@ export class StubMemoryRepository implements MemoryRepository {
     return { id: 'stub-procedural-id' };
   }
 
-  private _mergeableTemplate: { id: string; content: string } | null = null;
+  private _mergeableTemplate: { id: string; content: string; corroboration_count?: number } | null = null;
 
-  setMergeableTemplate(result: { id: string; content: string } | null): void {
+  setMergeableTemplate(result: { id: string; content: string; corroboration_count?: number } | null): void {
     this._mergeableTemplate = result;
   }
 
   async findMergeableTemplate(
     topologyEmbeddingLiteral: string,
     excludeScopeId: string,
-  ): Promise<{ id: string; content: string } | null> {
+  ): Promise<{ id: string; content: string; corroboration_count: number } | null> {
     this.maybeThrow('findMergeableTemplate');
     this.calls.findMergeableTemplate.push({ topologyEmbeddingLiteral, excludeScopeId });
-    return this._mergeableTemplate;
+    return this._mergeableTemplate === null
+      ? null
+      : { ...this._mergeableTemplate, corroboration_count: this._mergeableTemplate.corroboration_count ?? 0 };
   }
 
   async supersedeTemplate(oldId: string, newId: string): Promise<void> {
