@@ -2125,3 +2125,35 @@ itself is loaded, not just re-rolled. Also: the collapse appears dominated by ta
 difficulty on this model (run#1 crystallization quality + cooking), which a trust layer
 mitigates but cannot eliminate; the substrate's aggregate value may only show on tasks where
 collapse is genuinely INGREDIENT-driven. Branch stays UNMERGED; no effect claimed.
+
+### NEXT LEVER — prevention via topology-corroboration admission control (designed, data-earned)
+N7 proved retirement has a structural ceiling (re-rolls the lottery, can't beat baseline). The
+only lever that can beat baseline LOADS the lottery = prevention / admission control. Project-
+native design (uniquely enabled by our WL topology key):
+
+**Mechanism**: a freshly-crystallized runbook is UNPROVEN; it is promoted to full-weight recall
+only after its topology has been INDEPENDENTLY RE-DERIVED ≥k times. We already detect re-derivation
+via `findMergeableTemplate` (WL topology cosine > 0.95). Add `corroboration_count` (incremented each
+time a new converged scope crystallizes a matching topology → merge), and gate recall on
+`corroboration_count >= recallPromoteThreshold` (config; default 0 = no gate = current behaviour).
+
+**Why it breaks the deadlock**: promotion↔recall would deadlock if corroboration came from
+recall-success. It does NOT — it comes from independent re-derivation by COLD-START runs. So a
+clean topology re-derived by every clean run gets promoted fast; a one-off bad (stumbled) runbook
+is never re-derived → never promoted → never recalled → cannot cause collapse. This LOADS the
+lottery (only corroborated-clean runbooks are ever recalled) rather than re-rolling it — the one
+thing retirement structurally can't do. (= Live-Evo "commit only if it recurs", topology-grounded.)
+
+**Build surface (next focused effort, sensitive — recall asset)**:
+- migration: `procedural_memory.corroboration_count INT DEFAULT 0`.
+- `ProceduralTemplateParams.corroborationCount?`; `findMergeableTemplate` returns it; crystallizer
+  step 5 sets new canonical = prior.corroboration_count + 1 on merge.
+- `reflect.function` procedural CTEs: `AND corroboration_count >= $promoteThreshold` (both hybrid +
+  bm25), threaded from `FRESHNESS.recallPromoteThreshold` (default 0 → filter is `>= 0` = no-op,
+  byte-identical baseline). Config-gated, isolate-validate, then powered campaign (≥10 curves,
+  baseline vs prevention) — NO claim until the gate result. This is the recall asset, so treat it
+  as a frozen interface (§5.8 discipline) and do it with fresh budget, not at session tail.
+
+**Honest expectation**: prevention is the candidate that COULD beat baseline (loads the lottery);
+but the collapse also has a task-intrinsic floor on this model (run#1 crystallization quality +
+cooking), so even prevention may only narrow, not eliminate, the gap. Powered A/B will tell.
