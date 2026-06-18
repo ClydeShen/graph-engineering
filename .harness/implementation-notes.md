@@ -2019,3 +2019,29 @@ curves) + late-drift fix are N5/N6.
   "re-validate, don't trust forever" idea (prevention) applied to retirement.
 - **N6 (calibration + stats)**: run ≥5 curves per arm for a tight collapse-rate CI; sweep
   n_min / qualityBad / soften-increment; fit the 4 deferred constant classes; pin the model.
+
+### N5/N6 — research-validated design (2026-06-18, multi-source web research)
+Reframed: a crystallization's reliability is a NON-STATIONARY Bernoulli process; late
+drift = concept drift. Three independent literatures converge:
+- Non-stationary bandits: D-UCB / SW-UCB (discount past, weight recent) match the
+  non-stationary lower bound up to a log factor → simple discounting is near-optimal
+  (Garivier & Moulines arXiv 0805.3415). ⟹ no need for heavy change-point machinery.
+- Concept-drift detectors: ADWIN / Page-Hinkley (sustained gradual) / CUSUM — the
+  formal "circuit breaker", kept as a fallback only.
+- Agent-memory staleness is a NAMED open problem: high-relevance memories go
+  "confidently wrong"; recency + retrieval-frequency are "simple but powerful"
+  forgetting signals (arXiv 2603.07670; mem0 State-of-Memory-2026).
+- Stat power (N6): detecting a 2% gain at 80% power needs ~9 runs, 95% needs ~15;
+  single-run flips rankings in 83% of cases (arXiv 2602.07150). Our N4 n=3 is
+  underpowered for the AGGREGATE claim (the live mechanism evidence is the strong part).
+
+**N5 decision (4/4 confidence dimensions): recency-weighted quality (D-UCB-lite).**
+Add `procedural_memory.recent_quality` (EWMA float, same mutable-counter family as
+success_count/failure_count — does NOT touch the append-only event graph). Update on
+each harden/soften: recent_quality = (1-α)*recent_quality + α*outcome (outcome 1/0).
+Metabolism + mid-flight gate read recent_quality (with an evidence floor) instead of /
+alongside cumulative Laplace → late drift sinks recent_quality fast → retire. Chosen
+over ADWIN/Page-Hinkley because discounting is near-optimal AND honours the §5.7
+"don't over-build loop assets" discipline. α is a deferred constant (N6).
+**N6**: ~10 curves/arm powered collapse-rate CI + sweep α / bands / n_min (hours of
+compute — a deliberate campaign, not inline).
