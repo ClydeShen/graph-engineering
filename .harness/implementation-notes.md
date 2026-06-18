@@ -2085,3 +2085,14 @@ levers (future, must be gate-validated under power): faster retirement (lower n_
 brake (stop recalling a template that failed the last k scopes regardless of conformance) to
 also dampen cooking-collapse; and a properly powered run (≥10 curves/arm) before ANY
 collapse-rate claim. Do NOT re-assert an effect without that. Branch stays UNMERGED.
+
+### Lever 2 built (outcome-streak circuit-breaker) + N7 running
+Built + committed: migration 024 recall_fail_streak; registerRecallOutcome (reset on
+convergent recall, increment + reversible-retire at threshold on non-convergent),
+conformance-INDEPENDENT (covers cooking-collapse), config-gated OFF by default,
+live-validated (journey-n5: retires high-trust template on consecutive fails, resets on
+convergent recall). N7 campaign running: substrate+N5+streak(k=2), 6 curves × 8 runs,
+n_min=2, α=0.4, model-pinned — tests whether the breaker lets the loop escape collapse
+robustly (retire at run#3 → cold-start escape). Verdict deferred to N7; if it helps,
+this is the first variant to beat baseline; if not, the open question stands and the
+honest negative holds. NO claim until N7 (and ideally ≥10 curves) is in.
