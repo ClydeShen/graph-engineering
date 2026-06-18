@@ -2045,3 +2045,16 @@ over ADWIN/Page-Hinkley because discounting is near-optimal AND honours the §5.
 "don't over-build loop assets" discipline. α is a deferred constant (N6).
 **N6**: ~10 curves/arm powered collapse-rate CI + sweep α / bands / n_min (hours of
 compute — a deliberate campaign, not inline).
+
+### N5 DONE — recency-weighted retirement (late-drift fix), live-validated
+Built + committed (8d5eb903): migration 023 recent_quality EWMA column; harden/soften
+discount it (α=FRESHNESS.recencyAlpha=0.4); metabolizeByEvidence bad-band reads
+recent_quality (cumulative volume = evidence floor); recall rerank unchanged (validated
+asset). Live check (scripts/journey-n5.ts): late-drift template (lifetime Laplace 0.78,
+recent_quality 0.2) IS retired where cumulative would not; healthy kept; thin-evidence
+(< n_min) kept; EWMA moves correctly. The live check caught a real pg bug — `(1 - $3)`
+typed the alpha param as int4 → "0.4" rejected → fixed to `(1.0 - $3)` (a fake-pool unit
+test would have missed it; vindicates the live-journey discipline). 421/421 green.
+N6 validation (substrate+N5, 4 curves × 8 runs, n_min=2, α=0.4) running — measuring
+whether recency-aware retirement keeps/improves N4's 0.33 collapse-rate and rescues the
+late-drift curve.
