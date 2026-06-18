@@ -1,0 +1,213 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-17T09:22:54.690Z",
+    "commit": "6b9a53f8add5ef99586c01c81cb84283df199a29",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 10,
+    "events_by_run": [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8
+    ],
+    "discoveryFailures_by_run": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "installedFirst_by_run": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "first_third_events_mean": 8,
+    "last_third_events_mean": 8,
+    "improvement_pct": 0
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": false,
+      "ms": 7066
+    },
+    {
+      "label": "run#2",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5451
+    },
+    {
+      "label": "run#3",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 6726
+    },
+    {
+      "label": "run#4",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 7029
+    },
+    {
+      "label": "run#5",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 2781
+    },
+    {
+      "label": "run#6",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 7011
+    },
+    {
+      "label": "run#7",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4068
+    },
+    {
+      "label": "run#8",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 5683
+    },
+    {
+      "label": "run#9",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 7012
+    },
+    {
+      "label": "run#10",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 9224
+    }
+  ]
+}

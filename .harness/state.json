@@ -3,11 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-16T00:00:00.000Z",
-    "last_session": "2026-06-16T13:00:00.000Z",
-    "last_active": "2026-06-16T13:00:00.000Z"
+    "last_session": "2026-06-18T00:00:00.000Z",
+    "last_active": "2026-06-18T00:00:00.000Z"
   },
   "position": {
     "phase": "01-discuss",
-    "active": "Loop Engineering benchmark arc COMPLETE (GH #24). L1/L2/L3 all green: injection works; two latent defects fixed (D1 failure_count 11ef17e5, D2 convergence terminalizer ADR-58 9ebd175a); L2 corrected-order crystallization (08c2af7f) makes the learning curve decline. Academic benchmark + re-runnable harness + 5 raw JSON on master; README links it. Next direction = L2 template consolidation (research-mandated).",
+    "active": "Freshness substrate arc (GH #30-#35) + 'prove the loop' research sprint (N1-N6). Branch feat/freshness-substrate, UNMERGED.",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": 
+    "stopped_at": "Branch feat/freshness-substrate (UNMERGED, ~20 commits). CODE COMPLETE + no regression: #30-#34 + N1-N5 built; full suite 832/832, tsc clean, live journeys (triage 7/7, N5 4/4). SCIENCE honest verdict: the restoring-force MECHANISM is proven (metabolism escapes the collapse attractor live; conformance de-confounder + recency retirement work in isolation), but NO collapse-rate improvement is claimed: N4's 0.33 was an n=3 lucky draw, N6 (n=4) measured 1.00, combined 0.71 is not < 0.55 baseline. The statistical gate (N1) correctly caught the over-claim (the 5.7 lesson applied to ourselves). Records (paper 5.8, README, CHANGELOG, notes, memory) all corrected. OPEN (gate-gated, needs >=10 curves/arm): faster retirement + recall-side brake; whether the substrate can robustly cut collapse-rate is unresolved. Merge = human call."
+  }
+}
