@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-16T00:00:00.000Z",
-    "last_session": "2026-06-18T00:00:00.000Z",
-    "last_active": "2026-06-18T00:00:00.000Z"
+    "last_session": "2026-06-19T00:00:00.000Z",
+    "last_active": "2026-06-19T00:00:00.000Z"
   },
   "position": {
     "phase": "01-discuss",
-    "active": "Freshness substrate arc (GH #30-#35) + 'prove the loop' research sprint (N1-N6). Branch feat/freshness-substrate, UNMERGED.",
+    "active": "Freshness-substrate arc (#30-#35) + 'prove the loop' research sprint (N1-N8b) — CLOSED OUT. Branch feat/freshness-substrate pushed; PR #36 open (unmerged); issues #30-#35 commented.",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "Branch feat/freshness-substrate (UNMERGED, ~20 commits). CODE COMPLETE + no regression: #30-#34 + N1-N5 built; full suite 832/832, tsc clean, live journeys (triage 7/7, N5 4/4). SCIENCE honest verdict: the restoring-force MECHANISM is proven (metabolism escapes the collapse attractor live; conformance de-confounder + recency retirement work in isolation), but NO collapse-rate improvement is claimed: N4's 0.33 was an n=3 lucky draw, N6 (n=4) measured 1.00, combined 0.71 is not < 0.55 baseline. The statistical gate (N1) correctly caught the over-claim (the 5.7 lesson applied to ourselves). Records (paper 5.8, README, CHANGELOG, notes, memory) all corrected. OPEN (gate-gated, needs >=10 curves/arm): faster retirement + recall-side brake; whether the substrate can robustly cut collapse-rate is unresolved. Merge = human call."
+    "stopped_at": "ARC CLOSED + SYNCED. Branch feat/freshness-substrate (27 commits) pushed to origin; PR #36 open with honest body; issues #30-#35 each commented with status + arc verdict. CODE: #30-#34 + N1-N5 + streak-breaker + prevention all built, config-gated OFF, additive migrations 023/024/025, full suite 832/832, tsc clean, live journeys pass (triage 7/7, N5 6/6, prevention gate). SCIENCE (settled, honest): NO trust-layer lever beats the 0.55 baseline on gpt-oss-120b. Ladder: baseline 0.55(11) / conformance-retire 0.71(7) / +streak-breaker 0.50(6) / corroboration-prevention 0.75(8). Reason: every trust signal is downstream of the same crystallization coin-flip; ~0.5 collapse is intrinsic to CRYSTALLIZATION QUALITY (not trust-manageable; corroboration measures consistency not correctness). Trust layer re-scoped to ROBUSTNESS (streak-breaker, live-proven) + CLEANLINESS (de-confounder). Docs/§5.8/README/CHANGELOG/notes/memory all corrected to the honest verdict. Statistical collapse-rate gate (N1) + eval harness 504-retry shipped. NEXT real lever (out of arc scope) = improve crystallization/distillation or stronger model. Merge of PR #36 = human decision."
   }
 }
