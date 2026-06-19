@@ -32,6 +32,7 @@ import { penalizeInjectedTemplates } from '@graph/workers/memory/template-inject
 import { FRESHNESS } from '@graph/workers/memory/freshness-config';
 import { runOnce, cleanupScope, registerSkill, type RunRecord, type AgentDeps } from './agent.js';
 import { seedGoldenTemplate, GOLDEN_SENTINEL } from './seed.js';
+import { admitRunbook } from './admission.js';
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../.harness/analysis/faithful-ab');
 
@@ -106,7 +107,15 @@ async function runCurve(deps: AgentDeps, runs: number, model: string): Promise<v
   const reader = new PoolTrailReader(deps.pool);
   const memory = new PoolMemoryRepository(deps.pool);
   const writer = new OccEventWriter(deps.pool);
-  const crystallizer = new TemplateProposalWorker(reader, memory, writer, deps.llm, deps.embed);
+  // Experiment A: EVAL_LOOP_ADMISSION=1 supplies an INDEPENDENT admission verifier
+  // (deterministic ground-truth DAG check) so a DAG-contradicting crystallization
+  // is rejected before it enters memory. A = admission-ON, substrate-OFF (single
+  // variable vs the substrate-OFF 0.55 baseline). OFF = current behaviour.
+  const admission = process.env.EVAL_LOOP_ADMISSION === '1';
+  const crystallizer = new TemplateProposalWorker(
+    reader, memory, writer, deps.llm, deps.embed, admission ? admitRunbook : null,
+  );
+  if (admission) console.log('  [admission] independent DAG verifier ENABLED (reject contradictory crystallizations at admission)');
 
   // N3/N4: EVAL_LOOP_SUBSTRATE=1 closes the freshness loop — record injections, soften
   // conformed-but-failed templates on non-convergent terminals, and run the metabolism

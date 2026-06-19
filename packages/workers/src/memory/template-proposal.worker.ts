@@ -41,6 +41,16 @@ export class TemplateProposalWorker {
     private readonly writes: EventWriter,
     private readonly llm: LLMProvider,
     private readonly embed: EmbeddingProvider | null,
+    /**
+     * Experiment A — optional INDEPENDENT admission verifier. When supplied, a
+     * crystallized runbook is admitted to procedural memory only if this returns
+     * true; a rejected one is kept OUT (no insert, no supersede), so a bad runbook
+     * never becomes a recall attractor. Default null = admit all = byte-identical
+     * production behaviour (the verifier needs ground truth that only the benchmark
+     * has). This is the upstream/admission counterpart to the downstream trust
+     * signals (soften/retire), which the freshness arc proved cannot beat baseline.
+     */
+    private readonly admitRunbook: ((runbook: string) => boolean) | null = null,
   ) {}
 
   /**
@@ -203,6 +213,13 @@ export class TemplateProposalWorker {
           supersedePriorId = prior.id;
           corroborationCount = prior.corroboration_count + 1;
         }
+        // Experiment A — INDEPENDENT admission gate. When a verifier is supplied,
+        // a crystallization that contradicts ground truth is kept OUT of memory
+        // (no insert, no supersede): a bad runbook never becomes a recall attractor.
+        // This is the upstream counterpart to the downstream trust signals
+        // (soften/retire) the freshness arc proved cannot beat baseline. Default
+        // (no verifier) admits all → byte-identical production behaviour.
+        if (this.admitRunbook === null || this.admitRunbook(canonicalContent)) {
         const { id: templateId } = await this.memory.insertProceduralTemplate({
           scopeId,
           content: writeGuard(canonicalContent),
@@ -232,6 +249,7 @@ export class TemplateProposalWorker {
           },
           eventType: 'memory_updated',
         });
+        }
       } catch {
         /* positive skeleton failure must not break the scope_closed pass */
       }
