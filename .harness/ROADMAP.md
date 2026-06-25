@@ -868,3 +868,5 @@ Plans:
 - **Federated Trail Mesh**：多实例图同步、社区共享 procedural patterns——Bush "shared trails" 的终极形态；前置是 Lesson 可见性域（Phase 13）的跨实例扩展 + Skill 硬化（可验证工件）
 - **编辑器集成**（ACP 协议，hermes `hermes acp` 模式）：Memex 作为 IDE 内 agent 的记忆与 trail 后端
 - **SSH / cloud 执行后端**（Modal/Daytona 类）：Phase 14 明确 YAGNI 推迟的项
+- **Throwaway box with persistent trail**（2026-06-26，crabbox 对比启发；权威设计线 = `docs/LEARNING-ENGINE-REFRAME.md`）：把 `execute_bash` 容器化（已接线：`resolveExecBackend` docker / `network:none` / fail-closed，per-tool-call、宿主 docker）发展为 crabbox 式的**易逝执行盒子服务**——agent 租一个盒子跑自己的逻辑循环,用完即弃。**与 crabbox 的关键区别(也是它给不了的)：盒子易逝,但它留下的 Trail 永久——盒子死了,教训活着。** 缺口（非核心,核心隔离已具备）：lease 生命周期（warm/复用/弃 作一等资源,非 per-call）、证据采集（JUnit/截图/录屏,仿 crabbox "agent-ready evidence"）、per-box 网络策略（跑真实测试套件需出口）、provider 矩阵。直接服务 verifier 的执行 oracle（PoC-3 的 test-fallback,见 `docs/VALIDATION-PLAN.md`）。借鉴的工件概念：crabbox "failure capsule"（自包含可重放的失败包）= 错误轨迹/结晶输入的理想载体。
+  - **集成方向已决（2026-06-26）：** 多 agent 接入**沿用现有 connectors / MCP / `memex connect`**,接入 + 经共享黑板协调即可——**不**追求 crabbox 式"薄到 SSH 即用"的零适配接入(那是用放弃共享状态换来的,与我们共享 Trail Mesh 的命相悖)。先前标记的"外部 body 如何订阅图 delta/写痕迹"接缝,**以现有协议面解决,不立为新工作项**。
