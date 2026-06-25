@@ -34,13 +34,48 @@ across repeated runs — killing the variance the text-Lesson form had?**
 - Sample task = a coding task with an **objective test oracle** (containerize-before-tests
   gotcha) so verification is automatic — removes the human-oracle confound (that is PoC-3).
 
-## Tracer-bullet plan (sync the ONE design decision below before coding)
+## Design decision — RESOLVED 2026-06-25
 
-**Open decision (needs alignment before code — per repo "sync before writing code"):**
-what is the *executable skill* artifact form the crystallizer emits? Candidates:
-(a) a typed step-DAG / runbook the runtime can replay & assert against; (b) an actual
-executable program/script gated by a test; (c) a parameterized tool-call template.
-→ This choice sets what "executable + test-verified" means for the gate. **Decide first.**
+Skill artifact form = **typed step-DAG / runbook** (smallest bridge from the current
+crystallize path; directly assertable against the real `DEPS`; reuses the Experiment-A
+`runbookContradictsDag` idea).
+
+## Grounding findings (read from real code)
+
+- **Text-Lesson baseline already exists**: `faithful-ab/dag.ts` `GOLDEN_INTENT` is exactly
+  the free-form prose form ("write_api before db_schema; … Correct order: …"). That is the
+  control.
+- **Typed-graph infra exists** but at the wrong abstraction: `template-graph.ts`
+  `TemplateGraph` is canonical/WL-comparable, but labels are **event_type** topology, not
+  **domain step ordering**. PoC-1 needs the step-order layer (the 6 reversed rules).
+- **Experiment-A `admission.ts` (`runbookContradictsDag`) is NOT on this branch** (it lives
+  on `exp/admission-verifier`). Re-derived a minimal verifier in `step-dag.ts` from
+  `dag.ts` `DEPS` → keeps this branch clean off master, no cross-branch entanglement.
+
+## Result — step-1a (deterministic core) ✅ PASS
+
+`step-dag.ts` (run: `npx tsx .planning/spikes/010-skill-crystallization-quality/step-dag.ts`)
+proves the robustness **mechanism** without a live LLM: 4/4 assertions.
+
+- A correct crystallization passes both forms.
+- A corrupted rule (db_schema before write_api): the **step-DAG verifier rejects it
+  upstream** (order + rule contradiction caught); the **text Lesson passes silently** (no
+  checkable structure).
+- → Verifiability-at-crystallization-time is the lever: it converts "store an incorrect
+  lesson" (the prior arc's death) into a *rejectable event*.
+
+## Remaining — step-2 (statistical confirmation, needs live env)
+
+The deterministic core shows *why* the typed form is more robust; it does not yet show the
+*statistical* efficacy on real LLM runs. Step-2:
+
+1. Baseline: run text-Lesson crystallization on the faithful-ab trajectory M times →
+   variance/collapse profile via `npm run eval:loop` (control).
+2. Wire the step-DAG verifier as a crystallization gate; run the same trajectory M times.
+3. Compare variance; apply the kill-criterion.
+
+**Env needed**: live DB + reachable LLM (faithful-ab is real-MCP). Confirm
+`npm run eval:loop` runs green locally before step-2.
 
 1. Baseline capture: run the existing text-Lesson crystallization on the faithful-ab
    trajectory M times → record the variance/collapse profile via `eval:loop` (the control).
@@ -58,4 +93,5 @@ before step 1.
 
 ## Status
 
-SCAFFOLD — not started. Blocked on the one design decision (skill artifact form) above.
+IN PROGRESS — step-1a (deterministic core mechanism) PASS. Step-2 (statistical
+confirmation on live env) pending. Not yet VALIDATED until step-2's kill-criterion runs.
