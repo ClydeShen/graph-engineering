@@ -120,9 +120,41 @@ trips 16/18 steps, making "push everything" look 89%-precise. That models a *wea
 and hides the cue's value; the honest case is the strong agent whose only blind spots are
 the 6 quirks. Corrected.
 
+## PoC-3 result — end-to-end error-transfer + oracle gate (deterministic core) ✅ PASS
+
+(`error-transfer.ts` — integrates PoC-1 verifiability + PoC-2 cue into the full loop.) 7/7.
+
+Error-transfer curve (events-to-convergence, optimal = 18):
+
+```
+  run:          0  1  2  3  4  5  6
+  oracle ON:   24 23 22 21 20 19 18     monotone → optimal (越用越聪明)
+  oracle OFF:  24 23 22 21 22 21 20     poisoned at run 3, never reaches 18
+```
+
+- Verified-skill accumulation **transfers error**: cold start = 24 (18 steps + 6 quirk
+  reworks, matches the benchmark), falling monotonically to the optimal 18.
+- **The oracle gate is load-bearing**: remove it and one consistent-but-wrong
+  crystallization permanently poisons the skill set → the curve never converges (the prior
+  arc's bimodal collapse). This is PoC-1's verifiability proven *inside the loop*.
+
+## PoC-4 result — stigmergic multi-agent convergence (deterministic core) ✅ PASS
+
+(`stigmergy.ts` — exercises the split-control decision.) 9/9.
+
+- 3 agents coordinating **only through shared traces** (no central controller) complete the
+  whole DAG **exactly once**, **in parallel** (12 rounds < 18 steps), and **terminate**.
+- **Environment physics** (mechanical, never decides who acts): OCC arbitration → no step
+  executed twice; termination detected; an **injected cycle is caught as deadlock** (the
+  liveness floor) instead of hanging.
+- 1 agent also converges (18 rounds, no starvation). Confirms agent-firing = stigmergy,
+  control-floor = environment physics — exactly the split-control boundary.
+
 ## Status
 
-IN PROGRESS — PoC-1 step-1a (crystallization mechanism) PASS · PoC-2 deterministic core
-(meta-cue) PASS. Both prove their *mechanism* deterministically; neither is VALIDATED until
-the live statistical step (faithful-ab + eval:loop) runs the kill-criterion on real LLM
-trajectories.
+IN PROGRESS — all four mechanisms proven deterministically (no live LLM):
+PoC-1 (crystallization verifiability) · PoC-2 (meta-cue is a real signal) ·
+PoC-3 (error-transfer + load-bearing oracle gate) · PoC-4 (stigmergic convergence + physics
+floor). **None is VALIDATED** until the live statistical step (faithful-ab + `eval:loop` on
+real LLM trajectories) runs the kill-criterion. Next decision: go live, or stop here with
+the mechanisms de-risked. (Dir name is PoC-1-specific but now hosts all four cores.)
