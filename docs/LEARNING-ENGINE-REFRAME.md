@@ -180,6 +180,79 @@ Replaces the synthetic-DAG faithful-A/B as the *primary* metric:
 
 ---
 
+## 8. Loop-engineering positioning: Memex as a stigmergic blackboard
+
+The paradigm this reframe lives inside is **loop engineering** (Steinberger & Osmani,
+2026): the progression `prompt → context → loop → harness/orchestration` engineering.
+Prompt engineering tunes one turn; context engineering (horizontal) fills the window;
+**loop engineering (vertical) designs the generate→evaluate→refine cycle the agent runs
+inside** and wraps the other two. Its three load-bearing claims:
+
+1. **Unit of value = trajectory, not response.** A turn-1 bug is irrelevant if the system
+   detects→tests→fixes by turn 4. (= our error-transfer metric, §7.)
+2. **The verifier is the bottleneck, and must be structurally separate from the
+   generator.** (= our writer==verifier diagnosis, §1.)
+3. **Generator-Verifier asymmetry**: verifying is easier than generating; the gap widens
+   when the verifier has tooling the generator lacks; an imperfect verifier rewards
+   hackable patterns (false positives). (= our "~0.5 = consistency not correctness", §1;
+   and the deterministic DAG-admission verifier already built, Experiment A.)
+
+**We did not follow this paradigm — we arrived at its core independently and earlier.**
+Every wall the prior arcs hit is one of its central theorems. This is industry
+confirmation of the diagnosis, not a course correction.
+
+### What Memex *is*, precisely
+
+Memex is **not the verifier** (an earlier framing in this discussion was imprecise). The
+verifier is a **first-class participant on the blackboard** — an agent that holds
+asymmetric tooling (ground-truth DAG admission, tests, the human oracle) the generator
+lacks. Memex is the **stigmergic blackboard + event-sourced pub/sub substrate** they all
+share:
+
+```
+   planner ─┐                    Memex (graph = Trail Mesh)
+implementer ─┼─ write traces ──▶  · agents broadcast/leave traces, full autonomy
+   verifier ─┤  subscribe delta   · each agent runs its own loop
+   worker  ──┘  ◀── projection    · each sees a different PROJECTION of one graph
+```
+
+- **Blackboard** (no task assignment; agents broadcast and autonomously decide to
+  participate) empirically **beats both RAG and master-slave orchestration by 13–57%**
+  end-to-end — which is exactly why "Memex = memory/RAG" (the rejected option) is the
+  wrong altitude.
+- **Stigmergy** (indirect coordination via traces left in a shared environment, no
+  central controller — the ant-pheromone mechanism) is the formal name for the Trail
+  Mesh's founding metaphor (Bush's associative trails). The field formalized it for
+  multi-agent LLMs in 2025-26 (with ~80% token reductions reported).
+- **Projections of one graph** = the project's founding "Context is a trail projection /
+  Graph → Context" principle, now applied across agents (each a partial egocentric view
+  of a shared world state).
+- Substrate already largely built: event-sourced append-only log + OCC (the pub/sub
+  backbone), graph projection, agent-federation / ADR-42 / A2A, channel edges.
+
+### Split control (the load-bearing boundary)
+
+A blackboard classically needs a *control shell* ("which agent acts next?"), which
+collides with "Memex is a passive environment." Resolution — **control splits in two**:
+
+| Layer | Lives in | Nature | Examples (already built) |
+|-------|----------|--------|--------------------------|
+| **Environment physics** | **Memex** | mechanical, *non-intelligent* — does not decide which agent acts or what it does | convergence detection (ADR-58), OCC conflict arbitration, liveness floor (no-progress / starvation timeout) — watchdog, frontier scheduler |
+| **Agent firing & decisions** | **the agents** | intelligent, **pure stigmergy** | each agent subscribes to relevant graph deltas and self-fires via its **meta-reflex** (the family in §4) |
+
+The principle: *an environment has laws but does not make your decisions* (gravity makes
+you fall; it does not choose where you walk). This keeps the brain in the agents (the
+thesis) while giving the blackboard a mechanical floor against starvation/duplication/
+non-termination. **The §4 meta-crystallization family doubles as the stigmergic firing
+rules** — the retrieval/escalation reflexes are the pheromone thresholds that decide when
+an agent picks up a trace.
+
+This section does not overturn §1–§7; it positions them inside the loop-engineering
+paradigm and names the coordination substrate (§2's "runtime environment" made precise:
+a stigmergic blackboard with split control).
+
+---
+
 ## References
 
 - Voyager — *An Open-Ended Embodied Agent with LLMs* — arXiv:2305.16291
@@ -189,4 +262,9 @@ Replaces the synthetic-DAG faithful-A/B as the *primary* metric:
 - Meta-Cognitive Memory Management — arXiv:2601.07470
 - Choosing How to Remember: Adaptive Memory Structures — arXiv:2602.14038
 - Agent Skill Induction / procedural-memory survey — executable, verifiable skills
+- Loop Engineering (Steinberger & Osmani, 2026) — prompt→context→loop→harness; trajectory as unit; verifier as bottleneck
+- Verification-Generation Gap / verification asymmetry — arXiv:2606.03608, 2509.17995, 2510.00915
+- LLM-based Multi-Agent Blackboard System — arXiv:2510.01285 (beats RAG + master-slave 13–57%)
+- Stigmergy for multi-agent coordination — virtual stigmergy (ScienceDirect S016764231930139X); Emergent Collective Memory arXiv:2512.10166
+- Shared world models / partial-view projection — MultiWorld arXiv:2604.18564
 - Internal: `docs/benchmarks/emergence-loop-validation.md`, ADR-57, ADR-58
