@@ -10,18 +10,22 @@
 set -u
 export VITEST=1
 export TEST_DB="postgres://postgres:password@localhost:5432/graph_test"
-export EVAL_LOOP_CURVES=8
+export EVAL_LOOP_CURVES=6
 export EVAL_LOOP_RUNS=10
 export EVAL_LOOP_SKIP_B2=1
 export EVAL_LOOP_MAX_COLLAPSE_RATE=1.0
 export EVAL_LOOP_MODEL_PIN="openai/gpt-oss-120b"
 
-echo "############ ARM 1: BASELINE (admission OFF, substrate OFF) — $(date) ############"
-unset EVAL_LOOP_ADMISSION
+# A FIRST: the treatment is the decisive arm — running it first means a partial /
+# interrupted campaign still yields A data (baseline-first wasted a 2.5h run with
+# zero treatment data). Collapsed runs burn the full 60-turn cap (~9 min each), so
+# 6 curves/arm keeps the validated TURN_CAP/threshold while halving wall-clock.
+echo "############ ARM 1: A (admission ON, substrate OFF) — $(date) ############"
+export EVAL_LOOP_ADMISSION=1
 npx tsx scripts/eval/loop-gate.ts
 
-echo "############ ARM 2: A (admission ON, substrate OFF) — $(date) ############"
-export EVAL_LOOP_ADMISSION=1
+echo "############ ARM 2: BASELINE (admission OFF, substrate OFF) — $(date) ############"
+unset EVAL_LOOP_ADMISSION
 npx tsx scripts/eval/loop-gate.ts
 
 echo "############ DONE — $(date) ############"
