@@ -150,11 +150,23 @@ Error-transfer curve (events-to-convergence, optimal = 18):
 - 1 agent also converges (18 rounds, no starvation). Confirms agent-firing = stigmergy,
   control-floor = environment physics — exactly the split-control boundary.
 
-## Status
+## Status — PAUSED (decision 2026-06-26: stop at de-risked mechanisms)
 
-IN PROGRESS — all four mechanisms proven deterministically (no live LLM):
+All four mechanisms proven **deterministically** (no live LLM):
 PoC-1 (crystallization verifiability) · PoC-2 (meta-cue is a real signal) ·
 PoC-3 (error-transfer + load-bearing oracle gate) · PoC-4 (stigmergic convergence + physics
-floor). **None is VALIDATED** until the live statistical step (faithful-ab + `eval:loop` on
-real LLM trajectories) runs the kill-criterion. Next decision: go live, or stop here with
-the mechanisms de-risked. (Dir name is PoC-1-specific but now hosts all four cores.)
+floor). **None is VALIDATED** — that requires the live statistical step.
+
+**Live confirmation = a separate batch, deferred until the env is ready.** It is NOT
+abandoned; the deterministic cores de-risk the *logic*, the live batch confirms the
+*statistics* on real LLM trajectories.
+
+### Resume-here (the live batch)
+Preconditions: live DB + reachable LLM provider; `npm run eval:loop` runs green.
+1. Wire the step-DAG verifier (`step-dag.ts`) as a crystallization gate in the real path.
+2. Baseline: text-Lesson crystallization on the faithful-ab trajectory M times → variance
+   via `eval:loop`. Then the step-DAG-gated path M times. Compare (PoC-1/PoC-3 live).
+3. Apply each PoC's kill-criterion; record VALIDATED / INVALIDATED in `MANIFEST.md`.
+
+(Dir name is PoC-1-specific but now hosts all four deterministic cores: `step-dag.ts`,
+`meta-cue.ts`, `error-transfer.ts`, `stigmergy.ts`.)
