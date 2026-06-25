@@ -91,7 +91,38 @@ PoC-1 drives the real eval harness → needs the live DB + an LLM provider reach
 (faithful-ab is real-MCP, not stubbed). Confirm `npm run eval:loop` runs green locally
 before step 1.
 
+## PoC-2 result — meta-cue trigger reliability (deterministic core) ✅ PASS
+
+(Hosted in this dir for now; logically a separate PoC — `meta-cue.ts`. Run:
+`npx tsx .planning/spikes/010-skill-crystallization-quality/meta-cue.ts`)
+
+Models the 6 reversed-intuition quirks (dag.ts Q1–Q6) as the ground-truth trap points a
+*strong* agent trips on (minority: 6/18). 6/6 assertions:
+
+| strategy | precision | recall | F1 |
+|---|---|---|---|
+| always-on (push everything) | 33% | 100% | 50% — **noise** |
+| always-off (pure pull) | 0% | 0% | 0% — **blind** |
+| seed-prior (k=0, ≥2 prereqs) | 29% | 33% | 31% |
+| **learned (full traces)** | **100%** | **100%** | **100%** |
+
+- The cue fed by accumulated failure traces converges to fire **exactly** at the trap
+  points (P=R=100%), strictly dominating push-everything and pure-pull. Learning curve is
+  monotone 0→100% over 6 runs.
+- **Honest finding (refines reframe §4):** a *generic* seed prior is **weak** for
+  domain-specific reversed-intuition quirks (P=29%/R=33%, barely above noise). Pre-fab
+  seeds make cold-start *non-empty* but they are **not** the lever — **learning from real
+  failure traces is**. The §4 meta-crystallization family should lean on accumulation, not
+  expect strong hand-authored seeds.
+
+Modeling note: an earlier version used a naive *alphabetical* agent as ground truth → it
+trips 16/18 steps, making "push everything" look 89%-precise. That models a *weak* agent
+and hides the cue's value; the honest case is the strong agent whose only blind spots are
+the 6 quirks. Corrected.
+
 ## Status
 
-IN PROGRESS — step-1a (deterministic core mechanism) PASS. Step-2 (statistical
-confirmation on live env) pending. Not yet VALIDATED until step-2's kill-criterion runs.
+IN PROGRESS — PoC-1 step-1a (crystallization mechanism) PASS · PoC-2 deterministic core
+(meta-cue) PASS. Both prove their *mechanism* deterministically; neither is VALIDATED until
+the live statistical step (faithful-ab + eval:loop) runs the kill-criterion on real LLM
+trajectories.
