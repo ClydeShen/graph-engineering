@@ -14,6 +14,20 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
+// Load .env into process.env so the embedding probe + key check see real values
+// (the config's ${ENV_VAR} interpolation and profile.envVar both read process.env).
+try {
+  for (const line of readFileSync(join(ROOT, '.env'), 'utf8').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const i = t.indexOf('=');
+    if (i < 0) continue;
+    const k = t.slice(0, i).trim();
+    const v = t.slice(i + 1).trim().replace(/^["']|["']$/g, '');
+    if (process.env[k] === undefined) process.env[k] = v;
+  }
+} catch { /* .env optional */ }
+
 interface Check { name: string; pass: boolean; detail: string }
 const checks: Check[] = [];
 
