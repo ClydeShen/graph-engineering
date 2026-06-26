@@ -36,6 +36,24 @@ const checks: Check[] = [];
   });
 }
 
+// 2b. Embedding endpoint reachable — recall degrades to BM25-only without it, and the
+//     loop then does NOT learn (run.ts:47 probes embed('probe') and nulls on failure).
+async function embeddingCheck(): Promise<void> {
+  try {
+    const shared = await import('@graph/shared');
+    const cfg = shared.mergeLlmOverrides(shared.loadMemexConfig(), shared.readLlmOverrides());
+    const embed = shared.buildEmbeddingProvider(cfg);
+    if (!embed) {
+      checks.push({ name: 'embedding endpoint reachable (recall)', pass: false, detail: 'no embedding provider — set EMBEDDING_MODEL + a reachable /embeddings endpoint' });
+      return;
+    }
+    await embed.embed('probe');
+    checks.push({ name: 'embedding endpoint reachable (recall)', pass: true, detail: 'probe ok' });
+  } catch (e) {
+    checks.push({ name: 'embedding endpoint reachable (recall)', pass: false, detail: `probe failed (${String((e as Error).message).slice(0, 90)}) — degraded BM25, loop will NOT learn` });
+  }
+}
+
 // 2 + 3. Postgres reachable + migrations applied (execution_event_log present)
 async function dbChecks(): Promise<void> {
   const conn = process.env.TEST_DB ?? 'postgres://postgres:password@localhost:5432/graph_test';
@@ -60,6 +78,7 @@ async function dbChecks(): Promise<void> {
 
 async function main(): Promise<void> {
   await dbChecks();
+  await embeddingCheck();
   console.log('\n── live-batch preflight ──');
   for (const c of checks) console.log(`  ${c.pass ? 'READY ' : 'BLOCK '} ${c.name.padEnd(38)} ${c.detail}`);
   const ready = checks.every((c) => c.pass);
