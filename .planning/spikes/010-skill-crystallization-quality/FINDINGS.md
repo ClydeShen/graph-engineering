@@ -53,3 +53,33 @@ Candidate causes to investigate later:
    recall (a measurement artifact, not a learning failure).
 
 → Worth a separate spike / issue once the §5 gate experiment (PoC-1/3) concludes.
+
+## §5 admission-gate experiment (2026-06-27) — PoC-1/PoC-3 live, STRONG POSITIVE (n=1 paired)
+
+Ran on `exp/admission-verifier` (the complete Experiment-A harness: `EVAL_LOOP_ADMISSION`
+toggle in `run.ts` passes the independent DAG verifier `admitRunbook` to the
+TemplateProposalWorker). Paired, `graph_test` reset between arms, NVIDIA gpt-oss-120b +
+bge-m3. Evidence: `evidence/off-ungated-curve.json`, `evidence/on-gated-curve.json`.
+
+| run | OFF events / gateFails / converged | ON events / gateFails / converged |
+|-----|------------------------------------|-----------------------------------|
+| 1   | 44 / 3 / ✓                         | 40 / 1 / ✓                        |
+| 2   | 50 / 6 / ✓                         | 40 / 1 / ✓                        |
+| 3   | 54 / 8 / ✓                         | 42 / 2 / ✓                        |
+| 4–10| **121 / 52 / ✗ (locked)**          | 42→38 / 0 / ✓ (holds optimum)     |
+
+- **OFF (ungated)**: 49.3 → 121.0 mean (improvement **−145%**). A contradictory runbook
+  was crystallized + recalled and **locked the agent into total failure** (121=TURN_CAP,
+  converged=false) for runs 4–10.
+- **ON (gated)**: 40.7 → 38.0 (improvement **+7%**). The verifier **rejected 3
+  DAG-contradicting crystallizations** ("kept out of memory") → only valid templates
+  survive → converges to the optimum (38 / gateFails 0) and **holds** runs 5–10.
+- The deterministic-core claim ("verifiability-at-crystallization-time turns 'store an
+  incorrect lesson' into a rejectable event") is **confirmed on real LLM trajectories**:
+  the gate is the difference between lock-in collapse and stable optimum.
+
+**Honest scope — NOT yet statistically VALIDATED.** This is **one paired curve**. The OFF
+collapse is stochastic (documented baseline collapse-rate ~0.55), so a single OFF collapse
++ single clean ON is a strong *instance*, not a rate. Statistical VALIDATED needs the
+multi-curve campaign (`experiment-a.sh`: 8 curves/arm → compare collapse-rate OFF vs ON).
+→ MANIFEST 010 stays ◑ until the campaign runs.
