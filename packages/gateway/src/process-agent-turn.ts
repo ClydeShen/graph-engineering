@@ -36,6 +36,7 @@ import {
 import { memReflect, type MemReflectInput } from '@graph/workers/memory/reflect.function';
 import { insertWorkingMemory } from '@graph/workers/memory/working-memory';
 import { recordTemplateInjection, penalizeInjectedTemplates } from '@graph/workers/memory/template-injection';
+import { selectShakyTemplates, formatVerificationReport } from '@graph/workers/memory/escalation';
 
 /**
  * Extract a short, retrieval-relevant string from an event payload for mem::reflect's
@@ -192,6 +193,14 @@ export async function processAgentTurn(
         } satisfies MemReflectInput);
         context.reflectionContent = reflection.content;
         context.reflectionTokens = reflection.tokens;
+
+        // Mid-flight escalation gate (GH #33, P3): the freshness signal read a
+        // second time, before the agent acts. If the plan rests on shaky recalled
+        // procedures (well-evidenced yet below the quality floor), surface a
+        // sparse verification report; confidently-good / unproven ingredients
+        // proceed silently (no spurious cold-start escalation).
+        const report = formatVerificationReport(selectShakyTemplates(reflection.proceduralStats ?? []));
+        if (report !== null) context.verificationReport = report;
 
         // Reinforcement-loop write side (migration 013): record which templates
         // were injected so converged closure can credit them (success_count+1).

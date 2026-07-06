@@ -54,4 +54,5 @@ export const LOG_EVENTS = {
   EMBEDDING_BACKLOG_ENQUEUED: 'embedding.backlog.enqueued', // late projection queued (ADR 55)
   EMBEDDING_BACKLOG_DRAINED: 'embedding.backlog.drained',   // backfill progress (ADR 55)
   WATCHDOG_CHECK: 'watchdog.check',
+  MEMORY_METABOLIZED: 'memory.metabolized', // apoptosis: proven-bad crystallization retired (GH #32)
 } as const;

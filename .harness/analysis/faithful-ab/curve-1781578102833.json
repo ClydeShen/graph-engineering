@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-16T02:48:22.868Z",
+    "commit": "4dd2a7f2ed4a94d0b5635cfb5f079441e2a84004",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 1,
+    "events_by_run": [
+      44
+    ],
+    "gateFailures_by_run": [
+      3
+    ],
+    "first_third_mean": 44,
+    "last_third_mean": 44,
+    "improvement_pct": 0
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 44,
+      "converged": true,
+      "goalAchieved": true,
+      "steps": 21,
+      "gateFailures": 3,
+      "failedSteps": [
+        "db_schema",
+        "run_tests",
+        "run_tests"
+      ],
+      "order": [
+        "scaffold",
+        "add_deps",
+        "db_schema",
+        "write_api",
+        "db_schema",
+        "start_db",
+        "gen_migrations",
+        "write_tests",
+        "lint",
+        "security_scan",
+        "run_tests",
+        "containerize",
+        "run_tests",
+        "build_image",
+        "run_tests",
+        "run_migrations",
+        "push_registry",
+        "deploy",
+        "setup_monitoring",
+        "configure_alerts",
+        "smoke_test"
+      ],
+      "recallHit": false,
+      "ms": 66730
+    }
+  ]
+}

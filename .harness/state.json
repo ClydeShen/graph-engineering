@@ -3,13 +3,13 @@
   "session": {
     "status": "idle",
     "started_at": "2026-06-16T00:00:00.000Z",
-    "last_session": "2026-06-16T13:00:00.000Z",
-    "last_active": "2026-06-16T13:00:00.000Z"
+    "last_session": "2026-06-19T00:00:00.000Z",
+    "last_active": "2026-06-19T00:00:00.000Z"
   },
   "position": {
     "phase": "01-discuss",
-    "active": "Loop Engineering benchmark arc COMPLETE (GH #24). L1/L2/L3 all green: injection works; two latent defects fixed (D1 failure_count 11ef17e5, D2 convergence terminalizer ADR-58 9ebd175a); L2 corrected-order crystallization (08c2af7f) makes the learning curve decline. Academic benchmark + re-runnable harness + 5 raw JSON on master; README links it. Next direction = L2 template consolidation (research-mandated).",
+    "active": "Freshness-substrate arc (#30-#35) + 'prove the loop' research sprint (N1-N8b) — CLOSED OUT. Branch feat/freshness-substrate pushed; PR #36 open (unmerged); issues #30-#35 commented.",
     "resume_file": ".harness/phases/01-discuss/.continue-here.json",
-    "stopped_at": "Mirrored Claude session memory into .harness/memory/ and pushed (6a12ba8e). Wrote next-direction plan to memory (project_next_direction_l2_consolidation.md). Benchmark, README, and paper all on master; tree clean."
+    "stopped_at": "ARC CLOSED + SYNCED. Branch feat/freshness-substrate (27 commits) pushed to origin; PR #36 open with honest body; issues #30-#35 each commented with status + arc verdict. CODE: #30-#34 + N1-N5 + streak-breaker + prevention all built, config-gated OFF, additive migrations 023/024/025, full suite 832/832, tsc clean, live journeys pass (triage 7/7, N5 6/6, prevention gate). SCIENCE (settled, honest): NO trust-layer lever beats the 0.55 baseline on gpt-oss-120b. Ladder: baseline 0.55(11) / conformance-retire 0.71(7) / +streak-breaker 0.50(6) / corroboration-prevention 0.75(8). Reason: every trust signal is downstream of the same crystallization coin-flip; ~0.5 collapse is intrinsic to CRYSTALLIZATION QUALITY (not trust-manageable; corroboration measures consistency not correctness). Trust layer re-scoped to ROBUSTNESS (streak-breaker, live-proven) + CLEANLINESS (de-confounder). Docs/§5.8/README/CHANGELOG/notes/memory all corrected to the honest verdict. Statistical collapse-rate gate (N1) + eval harness 504-retry shipped. NEXT real lever (out of arc scope) = improve crystallization/distillation or stronger model. Merge of PR #36 = human decision."
   }
 }

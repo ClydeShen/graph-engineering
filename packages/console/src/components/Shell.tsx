@@ -25,6 +25,7 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
   { href: '/sessions', label: 'History', icon: 'clock' },
   { href: '/artifacts', label: 'Workspace', icon: 'box' },
   { href: '/emergence', label: 'Emergence', icon: 'zap' },
+  { href: '/review', label: 'Review', icon: 'check' },
   { href: '/skills', label: 'Plugins', icon: 'layers' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
@@ -37,6 +38,7 @@ const TITLES: Record<string, [string, string]> = {
   '/topology': ['Task tree', 'one task · its sub-tasks as they grow'],
   '/artifacts': ['Workspace', 'what the system has made for you'],
   '/emergence': ['Emergence', 'what the system has learned'],
+  '/review': ['Review', 'procedures the system is unsure about · your call teaches it'],
   '/skills': ['Plugins', 'installable skills · add or remove capabilities'],
   '/settings': ['Settings', 'active configuration'],
 };

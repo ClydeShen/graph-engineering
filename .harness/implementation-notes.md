@@ -1813,3 +1813,388 @@ making mistakes unattended" (Osmani — backs observable metabolism + mid-flight
 triage/edit surface (today `/memory` is read-only). **Loop-regression-gate (`npm run
 eval:loop`) before any change here, per CLAUDE.md.** Sequence: build → clean DB → re-run the
 18-step curve as the **falsification test** that also fits the calibration constants.
+
+## Freshness-substrate BUILD ARC execution (2026-06-17, autonomous /goal) — IN PROGRESS
+
+Executing the spec above (#30–#35). Decision frame (chosen for project-as-whole, ≥mid
+confidence, grounded in the benchmark's own §5.7 lesson): build every mechanism with
+**config-externalized constants** (`freshness-config.ts`, env-overridable) defaulted to
+**safe / behaviour-preserving** values; gate loop-asset changes with `npm run eval:loop`;
+defer exact-constant CALIBRATION to the clean re-run (#35), which the spec itself marks HITL.
+
+**Key schema finding driving the design.** The stored `template_graph` labels nodes by
+event_type only (every procedural run is a uniform `task_spawned` chain), so topology cannot
+judge step order. The step-order knowledge lives in the readable lesson prose ("X before Y",
+emitted verbatim by the crystallization/golden prompts), and the actual step order lives in
+`task_spawned` payload `.step`. So the conformance judge parses prose rules with a strict
+deterministic scan grounded in the vocabulary the ACTUAL DAG provides — fully deterministic,
+NOT a second LLM (stronger than the sources' "second nice model"; aligns with Anthropic
+external-verification).
+
+**Inertness boundary (important).** The eval harness (`scripts/eval/faithful-ab/agent.ts`)
+calls `memReflect` directly and NEVER writes `template_injection` rows, so its curve learns
+purely via crystallization + consolidation (`findMergeableTemplate` merge). Therefore the
+soften (#30) and graded-harden (#31) paths — both keyed on `template_injection` — are inert
+in the current curve and LIVE in production (`processAgentTurn` records injections + penalizes
+on OOM; `onScopeClosed` step 6 hardens). This is why the freshness changes are additive /
+behaviour-preserving for `eval:loop` (no regression) while being real in production. The #35
+falsification will wire injection-recording into the harness to exercise the substrate and fit
+the constants — deferred (live HITL), defaults set provisionally in `freshness-config.ts`.
+
+### #30 conformance comparator + per-template soften — DONE (unit-tested, typecheck clean)
+- NEW `conformance.ts`: `extractStepOrder` (task_spawned payload `.step`), `parseOrderingRules`
+  ("X before Y" + "a -> b -> c" chains, vocab-grounded), `checkConformance`
+  (conformed/violated/not-applicable; first-occurrence index; tolerance ratio). 11 tests.
+- NEW `freshness-config.ts`: all calibration dials, env-overridable, safe defaults documented.
+- `template-injection.ts` `penalizeInjectedTemplates` rewritten: per-template,
+  conformance-gated (conformed+failed → `failure_count += softenIncrement`; violated /
+  not-applicable / unparseable → untouched = fail-closed), trigger-generalized (works at any
+  non-convergent terminal; production's only one today is OOM, caller unchanged). 5 tests.
+
+### #31 token-efficiency-graded conformant harden — DONE (unit-tested, tsc clean)
+- Repo: added `getInjectedTemplates(scopeId)` (id+content join) and a graded
+  `reinforceTemplate(id, credit?)` (success_count += round(credit), default 1).
+- Crystallizer step 6 rewritten: credits ONLY conformant injected templates
+  (reuses the comparator), graded by events-to-converge via
+  `gradeHardenCredit` (config; disabled by default → +1 until #35 fits the band).
+  Violated / not-applicable → no credit (fail-closed, symmetric to soften).
+- success_count is INT; fractional grading deferred to #35 (would need a column
+  type change — a calibration decision, noted, not pre-empted).
+
+### #32 evidence-gated three-band metabolism — DONE (unit-tested, tsc clean)
+- Repo: `metabolizeByEvidence({nMin,qualityBad})` apoptosis (strong-bad →
+  superseded_by=id, RETURNING evidence so it's observable); `getMetabolismTriage`
+  (the ambiguous middle: live, used, neither proven-good nor -bad, with
+  success-rate, for #34); `reinstateTemplate` (human override — only un-supersedes
+  SELF-superseded rows, so consolidation merges are never resurrected).
+- Synthesizer `runDecay` now runs atrophy (90d) AND apoptosis on the same cron
+  sweep, logging each retirement (LOG_EVENTS.MEMORY_METABOLIZED). Ambiguous band
+  is never auto-decided — surfaced to triage instead.
+- Bands are config (n_min=5, bad≤0.3, good≥0.7 provisional); #35 fits them.
+
+### #33 mid-flight escalation gate + memReflect quality return — DONE (unit-tested, tsc clean)
+- memReflect now returns `proceduralStats: TemplateStat[]` (per-injected-template
+  Laplace quality_score + evidence volume, for the templates that made the output).
+  Both procedural SQL paths (hybrid + bm25-degraded) now SELECT success/failure_count.
+- NEW `escalation.ts`: `selectShakyTemplates` (well-evidenced ≥ gateEvidenceFloor
+  yet quality < gateQualityFloor) + `formatVerificationReport` (sparse — only the
+  shaky template's "before"/"->" constraint lines + success-rate). 7 tests.
+- `AssembledContext.verificationReport?` added; `processAgentTurn` sets it after
+  reflection when the plan rests on shaky ingredients. Defensive `?? []` at the
+  call site — an absent stat list never crashes a turn.
+- DEFAULT POLICY (calibration-deferred): unproven (thin-evidence) templates stay
+  silent so a freshly seeded cold start never escalates spuriously (satisfies the
+  AC). #35 may lower the evidence floor.
+- DB was down at suite time (only github-mcp-server container ran); brought up
+  pgvector/pgvector:pg16 via `docker compose --env-file /dev/null up -d` (the .env
+  has a malformed Slack-token line that breaks compose's env parser) + migrated
+  graph + graph_test. Full workers+gateway suite: 415/415 green.
+
+### #34 human triage/edit surface (write-half of /memory) — DONE (tsc clean, route + console tests green)
+- Gateway `memory.ts` route gains the write-half: `GET /memory/triage` (ambiguous
+  candidates + success-rate, bands from FRESHNESS), `POST /memory/templates/:id/feedback`
+  {outcome:success|failure} (accept/correct → clean attribution, no numeric entry),
+  `POST .../retire` (reversible logical-delete), `POST .../reinstate` (human override,
+  self-superseded only). 6 new route tests (13 total in file).
+- Console: NEW `/review` page (ui-ux-pro-max guidance applied — success-rate leads
+  each card as tabular figure + bar; one primary CTA Keep; Needs work secondary;
+  Retire danger-toned + spatially separated + inline confirm since the delete is
+  reversible; optimistic removal with restore-on-error; empty/loading/error states
+  mirror Emergence; aria-labels on every action; text left-aligned). Nav + crumb
+  entry added in Shell.tsx. api.ts gains triage/triageFeedback/triageRetire/
+  triageReinstate + postJson helper + TriageCandidate type.
+- The skill's Quick Reference (loaded in-context) supplied the rules; its CLI
+  symlink doesn't resolve on Windows, so the design intelligence came from the
+  loaded guidance, not a fresh search.
+- Console tsc clean; gateway 228/228 green.
+
+### #35 falsification gate + verification — RESULT (no regression; calibration deferred)
+**Build of #30–#34 is complete, committed, and verified** at the logic level:
+workers+gateway 415/415 · full suite 832/832 (one parallel-DB deadlock flake,
+passes isolated) · console tsc + `next build` green (`/review` in route manifest)
+· live triage write-half journey 7/7 on the dev DB.
+
+**`npm run eval:loop` (behavioral gate) FAILED in absolute terms**, BUT the failure
+is NOT a regression from this change. Evidence:
+- Branch curve (gpt-oss-120b): `48,121,121,121,121,121,121,121,121,121` — run #1
+  converges, then collapses (the documented L2 bimodal failure: a messy run-#1
+  trace crystallizes a misleading runbook that every later run recalls).
+- SAME-SESSION baseline (master, none of these changes): `48,121,...` — IDENTICAL
+  signature. master collapses the same way.
+- In-repo prior curve JSONs on the same model already show baseline collapses
+  (`46,121,106,121…`, `42,40,40,42,54,118,121,121,121,121`) alongside good holds
+  (`26×`, `42→38`, `46→40`) — the curve is bimodal on this model (paper §5.7).
+- **Code-path proof of inertness on the curve harness**: the eval agent calls
+  `memReflect` directly and never writes `template_injection`, so soften is never
+  called and graded-harden step-6 sees `getInjectedTemplates → []` (identical to
+  master's `getInjectedTemplateIds → []` no-op); the metabolism cron isn't run.
+  The `reflect.function.ts` edit only ADDED columns to the SELECT — `final_score`,
+  `ORDER BY`, `formatProcedural`, and `proceduralIds` are unchanged, so the recall
+  content the agent sees is byte-identical to master. ⟹ the freshness changes
+  cannot have caused the collapse.
+
+**Gate-design finding** (worth a follow-up): a single 10-run curve is ~one
+Bernoulli trial of "did run-#1 crystallize a good runbook"; on a bimodal model the
+absolute last-3 threshold cannot separate a bad draw from a regression. The gate
+needs either a pinned validated model or a multi-sample collapse-RATE criterion.
+
+**#35 constant calibration (the 4 deferred classes) remains HITL/deferred** — the
+spec marked it so, and it requires wiring injection-recording into the harness +
+deliberate multi-run fitting. All dials are externalized in `freshness-config.ts`
+with safe behaviour-preserving defaults, so calibration needs no code change.
+
+**Disposition**: branch `feat/freshness-substrate` is build-complete and
+regression-free (proven), NOT merged to master (gate red on a model-bimodality
+basis, and #35 calibration pending — a human merge decision).
+
+## Post-arc direction — "prove the loop" research sprint (2026-06-17, fuller + research)
+Autonomous decision (/goal authority supplies the priority dimension): near-term is
+SINGLE-THREADED on proving the learning loop is falsifiably stable; the product arc
+(MemexTerminal X-beam #25, console trail-mesh) waits until the loop is proven.
+
+**Research grounding (validates the direction):**
+- The bimodal collapse we hit is the literature's "error avalanche" / model collapse /
+  "curse of recursion"; reflective memory's central risk is "self-reinforcing error"
+  (arXiv 2601.05280; 2603.07670). Our run#1-bad-runbook→recalled→amplified IS this.
+- The field's emerging cure = evidence-gated ACQUISITION: Live-Evo commits an experience
+  only if it yields statistically significant improvement (arXiv 2602.02369). = our N5
+  evidence-gated canonical promotion → promoted from "conditional" to "expected-needed".
+- Quality gates (confidence/contradiction/expiry) are "necessary but underdeveloped";
+  SSGM governance framework (arXiv 2603.11768). Our 3-band metabolism + Review fit here.
+  Our deterministic conformance de-confounder (DAG-vs-rules, NOT a 2nd LLM) appears NOVEL
+  vs the literature's success/fail signals + LLM-judge — a potential contribution.
+- Statistical eval: single-seed is "highly unstable"; need multi-sample/variance
+  (arXiv 2504.07086; ICLR-2026 non-determinism blog). Backs N1/N2.
+
+**Plan (dependency order):**
+- N1 DONE — loop-gate.ts → statistical multi-curve COLLAPSE-RATE + model pin
+  (EVAL_LOOP_CURVES/RUNS/COLLAPSE_EVENTS/MAX_COLLAPSE_RATE/MODEL_PIN). Backward-compat
+  at CURVES=1.
+- N2 — measure baseline collapse-rate (current loop is inert-on-curve = baseline) to
+  calibrate MAX_COLLAPSE_RATE (the null to beat).
+- N3 — wire substrate into the eval closed loop (harness records template_injection +
+  softens on non-convergent terminal) so soften/harden/metabolism actually fire.
+- N4 — falsify substrate: branch vs baseline collapse-rate. cure-first (substrate built +
+  conformance de-confounder is our novel angle); if insufficient → N5.
+- N5 — prevention: evidence-gated canonical promotion (≥k consistent before full-weight
+  recall) — directly attacks run#1 single point; research says likely needed.
+- N6 — calibrate the 4 deferred constant classes (original #35) now that the gate is statistical.
+
+**Mid-term (gated on loop proof):** M1 MemexTerminal X-beam (the #33 verificationReport +
+ #34 /review ARE the approval surface — research line pre-builds product geometry), M2
+console trail-mesh, M3 Review graduation (flying + resting timescales in one HITL surface).
+
+### N2 RESULT — baseline collapse-rate ≈ 0.55 (measured from existing data, no new compute)
+Across 11 in-repo §5 curves on gpt-oss-120b: 5 held (24-43 band), 6 collapsed
+(last-3 mean > 80) → **baseline collapse-rate ≈ 0.55**. The validated "38/0 holds"
+runs were the lucky ~45%. So the loop is barely-better-than-coinflip at baseline on
+this model — this is the null the substrate (N3/N4) must beat. Gate bar set to 0.34
+(≈ halve baseline). A clean same-config N2 run would tighten the estimate but the
+direction is unambiguous. N1✓ N2✓(from data). NEXT: N3 (wire substrate into the eval
+closed loop — code only) then N4 (measure collapse-rate with substrate, target ≪ 0.55).
+
+### N4 RESULT — substrate FALSIFICATION PASSED (cure validated, ≥mid confidence)
+Ran the substrate-wired loop (EVAL_LOOP_SUBSTRATE=1, n_min=2, 3 curves × 8 runs,
+model-pinned gpt-oss-120b):
+- collapse-rate **0.33** (1/3) vs **baseline ~0.55** → substrate roughly halves it; gate PASS.
+- **Mechanism proven live (curve 2)**: run#1 crystallize → run#2-5 collapse (recall bad
+  runbook) → **run#6 apoptosis retires it (metabolized=1, live_templates→0)** → run#7 cold
+  re-converge (42) → run#8 recall new good runbook (44). The loop ESCAPED the collapse
+  attractor via the substrate — the first live demonstration of the restoring force.
+- curve 3: clean "越用越聪明" to the optimum (48→38→38→38…hold).
+- **Residual mode (curve 1, NEW finding)**: "late drift" — a 6-success template fails at
+  run#7-8 but cumulative Laplace quality (0.78) masks it → apoptosis doesn't fire. Cumulative
+  quality is insensitive to recent degradation. This is what N5 must address.
+
+**Conclusion**: the freshness substrate (cure) MATERIALLY works and the mechanism is
+empirically demonstrated — the direction is validated with DATA, not just reasoning. n=3 is
+suggestive on the aggregate; the live mechanism evidence is decisive. Tighter stats (more
+curves) + late-drift fix are N5/N6.
+
+### N5/N6 — data-motivated next steps (designed, not yet built)
+- **N5 (recency-aware retirement)**: cumulative Laplace can't catch late drift. Add a
+  recency signal — simplest: a consecutive-failure circuit breaker (k conformed-failures in
+  a row → retire regardless of cumulative quality), or a windowed/decayed quality. Needs a
+  small state field (recent-outcome streak) — schema decision. This is the Live-Evo
+  "re-validate, don't trust forever" idea (prevention) applied to retirement.
+- **N6 (calibration + stats)**: run ≥5 curves per arm for a tight collapse-rate CI; sweep
+  n_min / qualityBad / soften-increment; fit the 4 deferred constant classes; pin the model.
+
+### N5/N6 — research-validated design (2026-06-18, multi-source web research)
+Reframed: a crystallization's reliability is a NON-STATIONARY Bernoulli process; late
+drift = concept drift. Three independent literatures converge:
+- Non-stationary bandits: D-UCB / SW-UCB (discount past, weight recent) match the
+  non-stationary lower bound up to a log factor → simple discounting is near-optimal
+  (Garivier & Moulines arXiv 0805.3415). ⟹ no need for heavy change-point machinery.
+- Concept-drift detectors: ADWIN / Page-Hinkley (sustained gradual) / CUSUM — the
+  formal "circuit breaker", kept as a fallback only.
+- Agent-memory staleness is a NAMED open problem: high-relevance memories go
+  "confidently wrong"; recency + retrieval-frequency are "simple but powerful"
+  forgetting signals (arXiv 2603.07670; mem0 State-of-Memory-2026).
+- Stat power (N6): detecting a 2% gain at 80% power needs ~9 runs, 95% needs ~15;
+  single-run flips rankings in 83% of cases (arXiv 2602.07150). Our N4 n=3 is
+  underpowered for the AGGREGATE claim (the live mechanism evidence is the strong part).
+
+**N5 decision (4/4 confidence dimensions): recency-weighted quality (D-UCB-lite).**
+Add `procedural_memory.recent_quality` (EWMA float, same mutable-counter family as
+success_count/failure_count — does NOT touch the append-only event graph). Update on
+each harden/soften: recent_quality = (1-α)*recent_quality + α*outcome (outcome 1/0).
+Metabolism + mid-flight gate read recent_quality (with an evidence floor) instead of /
+alongside cumulative Laplace → late drift sinks recent_quality fast → retire. Chosen
+over ADWIN/Page-Hinkley because discounting is near-optimal AND honours the §5.7
+"don't over-build loop assets" discipline. α is a deferred constant (N6).
+**N6**: ~10 curves/arm powered collapse-rate CI + sweep α / bands / n_min (hours of
+compute — a deliberate campaign, not inline).
+
+### N5 DONE — recency-weighted retirement (late-drift fix), live-validated
+Built + committed (8d5eb903): migration 023 recent_quality EWMA column; harden/soften
+discount it (α=FRESHNESS.recencyAlpha=0.4); metabolizeByEvidence bad-band reads
+recent_quality (cumulative volume = evidence floor); recall rerank unchanged (validated
+asset). Live check (scripts/journey-n5.ts): late-drift template (lifetime Laplace 0.78,
+recent_quality 0.2) IS retired where cumulative would not; healthy kept; thin-evidence
+(< n_min) kept; EWMA moves correctly. The live check caught a real pg bug — `(1 - $3)`
+typed the alpha param as int4 → "0.4" rejected → fixed to `(1.0 - $3)` (a fake-pool unit
+test would have missed it; vindicates the live-journey discipline). 421/421 green.
+N6 validation (substrate+N5, 4 curves × 8 runs, n_min=2, α=0.4) running — measuring
+whether recency-aware retirement keeps/improves N4's 0.33 collapse-rate and rescues the
+late-drift curve.
+
+### N6 RESULT — CORRECTS N4: no robust collapse-rate improvement (the gate caught the over-claim)
+N6 (substrate + N5, 4 curves × 8 runs, n_min=2, α=0.4, model-pinned) → collapse-rate
+**1.00 (4/4)**, gate FAIL. This OVERTURNS N4's 0.33: N4 (n=3) was an underpowered lucky
+draw (the reproducibility lit said ~9-15 curves needed; we had 3). Combined N4+N6 = 5/7
+≈ 0.71 collapsed WITH the substrate — NOT better than the ~0.55 baseline. **The statistical
+gate (N1) did exactly its job: caught an over-claim a single curve hid.** This is §5.7's
+own lesson ("don't encode causal stories on noisy/small data") applied to our own result.
+
+What is and isn't true now:
+- TRUE (still): the mechanism EXISTS and fires — curve 1 retired the bad template at run#8
+  and N4 curve 2 escaped the attractor. The conformance de-confounder and recency
+  retirement work as specified (N5 live check 4/4).
+- FALSE (retracted): "substrate cuts collapse-rate 0.55→0.33". Not shown under power.
+- WHY it doesn't robustly help: (a) retirement fires TOO LATE — by the time enough
+  conformed-failures accumulate to retire, the curve's last-3 window is already collapsed;
+  (b) many collapses are COOKING failures (model fails to follow even a correct runbook →
+  conformance=violated → soften correctly does NOT fire → nothing to retire). The substrate
+  only addresses INGREDIENT-caused collapse; cooking-caused collapse is out of scope BY
+  DESIGN and dominates some samples (metabolized=0 across collapsed runs confirms this).
+
+Open (honest): whether the substrate can robustly cut collapse-rate is UNRESOLVED. Candidate
+levers (future, must be gate-validated under power): faster retirement (lower n_min / higher
+α / retire on first conformed-failure) so recovery beats the last-3 window; a RECALL-side
+brake (stop recalling a template that failed the last k scopes regardless of conformance) to
+also dampen cooking-collapse; and a properly powered run (≥10 curves/arm) before ANY
+collapse-rate claim. Do NOT re-assert an effect without that. Branch stays UNMERGED.
+
+### Lever 2 built (outcome-streak circuit-breaker) + N7 running
+Built + committed: migration 024 recall_fail_streak; registerRecallOutcome (reset on
+convergent recall, increment + reversible-retire at threshold on non-convergent),
+conformance-INDEPENDENT (covers cooking-collapse), config-gated OFF by default,
+live-validated (journey-n5: retires high-trust template on consecutive fails, resets on
+convergent recall). N7 campaign running: substrate+N5+streak(k=2), 6 curves × 8 runs,
+n_min=2, α=0.4, model-pinned — tests whether the breaker lets the loop escape collapse
+robustly (retire at run#3 → cold-start escape). Verdict deferred to N7; if it helps,
+this is the first variant to beat baseline; if not, the open question stands and the
+honest negative holds. NO claim until N7 (and ideally ≥10 curves) is in.
+
+### N7 RESULT — the structural ceiling of retirement (the sprint's key finding)
+N7 (substrate + N5 + streak-breaker k=2, 6 curves) → collapse-rate **0.50 (3/6)**, gate FAIL.
+Clean comparison on gpt-oss-120b: baseline 0.55 (11 curves) · substrate-alone 0.71 (7) ·
+substrate+breaker 0.50 (6). The breaker DEMONSTRABLY works (recovery-after-`broken`
+observed repeatedly; curve 2 recovered twice and held) and pulled the substrate back from
+0.71 to ~baseline — but **no variant beats baseline**, for a STRUCTURAL reason:
+
+**Retirement → cold-start → re-crystallize just RE-ROLLS the same ~50/50 crystallization
+lottery. Re-rolling a coin-flip is still a coin-flip.** Retirement (apoptosis, recency,
+streak-breaker — all three) can RESTORE the base convergence rate (turn "stuck collapsed
+forever" into "recoverable"), but it is structurally INCAPABLE of beating it. To beat
+baseline you must raise the QUALITY of what gets crystallized/recalled — i.e. PREVENTION /
+admission control (don't promote a runbook to full-weight recall until it has re-validated;
+the Live-Evo "commit only if it helps" idea), not post-hoc retirement.
+
+**Two distinct values, don't conflate them:**
+- *Aggregate convergence rate* (越用越聪明): retirement can't move it. Open lever = prevention.
+- *Robustness / no permanent lock-in*: the breaker is a REAL win the collapse-rate metric
+  doesn't capture — in production, "permanently recalling a bad runbook" is the catastrophic
+  unrecoverable state, and the breaker provably converts it to recoverable. Worth keeping
+  (config-gated) as a safety net independent of the aggregate metric.
+
+**Strategic redirect (data-earned)**: stop adding retirement variants; the next real lever is
+PREVENTION — improve crystallization quality and/or evidence-gated promotion so the lottery
+itself is loaded, not just re-rolled. Also: the collapse appears dominated by task-intrinsic
+difficulty on this model (run#1 crystallization quality + cooking), which a trust layer
+mitigates but cannot eliminate; the substrate's aggregate value may only show on tasks where
+collapse is genuinely INGREDIENT-driven. Branch stays UNMERGED; no effect claimed.
+
+### NEXT LEVER — prevention via topology-corroboration admission control (designed, data-earned)
+N7 proved retirement has a structural ceiling (re-rolls the lottery, can't beat baseline). The
+only lever that can beat baseline LOADS the lottery = prevention / admission control. Project-
+native design (uniquely enabled by our WL topology key):
+
+**Mechanism**: a freshly-crystallized runbook is UNPROVEN; it is promoted to full-weight recall
+only after its topology has been INDEPENDENTLY RE-DERIVED ≥k times. We already detect re-derivation
+via `findMergeableTemplate` (WL topology cosine > 0.95). Add `corroboration_count` (incremented each
+time a new converged scope crystallizes a matching topology → merge), and gate recall on
+`corroboration_count >= recallPromoteThreshold` (config; default 0 = no gate = current behaviour).
+
+**Why it breaks the deadlock**: promotion↔recall would deadlock if corroboration came from
+recall-success. It does NOT — it comes from independent re-derivation by COLD-START runs. So a
+clean topology re-derived by every clean run gets promoted fast; a one-off bad (stumbled) runbook
+is never re-derived → never promoted → never recalled → cannot cause collapse. This LOADS the
+lottery (only corroborated-clean runbooks are ever recalled) rather than re-rolling it — the one
+thing retirement structurally can't do. (= Live-Evo "commit only if it recurs", topology-grounded.)
+
+**Build surface (next focused effort, sensitive — recall asset)**:
+- migration: `procedural_memory.corroboration_count INT DEFAULT 0`.
+- `ProceduralTemplateParams.corroborationCount?`; `findMergeableTemplate` returns it; crystallizer
+  step 5 sets new canonical = prior.corroboration_count + 1 on merge.
+- `reflect.function` procedural CTEs: `AND corroboration_count >= $promoteThreshold` (both hybrid +
+  bm25), threaded from `FRESHNESS.recallPromoteThreshold` (default 0 → filter is `>= 0` = no-op,
+  byte-identical baseline). Config-gated, isolate-validate, then powered campaign (≥10 curves,
+  baseline vs prevention) — NO claim until the gate result. This is the recall asset, so treat it
+  as a frozen interface (§5.8 discipline) and do it with fresh budget, not at session tail.
+
+**Honest expectation**: prevention is the candidate that COULD beat baseline (loads the lottery);
+but the collapse also has a task-intrinsic floor on this model (run#1 crystallization quality +
+cooking), so even prevention may only narrow, not eliminate, the gap. Powered A/B will tell.
+
+### Prevention lever BUILT (clean focused round) + N8 powered A/B running
+Built + committed: migration 025 corroboration_count; crystallizer increments it on
+topology merge (independent re-derivation); reflect.function recall gates on
+corroboration_count >= FRESHNESS.recallPromoteThreshold (default 0 = no-op byte-identical
+baseline — recall asset frozen by default). Live-validated (journey-prevention): at
+threshold=1 recall returns the promoted template, excludes the unproven. tsc clean; 421/421.
+N8 powered A/B running: prevention-only (threshold=1, NO retirement levers — isolated),
+8 curves × 8 runs, model-pinned, vs the 0.55 baseline (11 curves). Verdict deferred to N8;
+if prevention's collapse-rate is clearly < 0.55 it's the first lever to beat baseline (loads
+the lottery, as predicted); if not, the honest null stands and collapse is task-intrinsic on
+this model. NO claim until N8 + the gate line.
+
+### N8b RESULT — prevention is WORSE (0.75); the arc's settled conclusion
+N8b (prevention-only, recall gate threshold=1, no retirement, 8 curves, model-pinned) →
+collapse-rate **0.75 (6/8)**, gate FAIL — WORSE than the 0.55 baseline. Curves 4-8 stayed
+collapsed (121 sustained): prevention-only has no retirement escape, and the design's core
+assumption is FALSIFIED — **corroboration measures CONSISTENCY, not CORRECTNESS.** At temp=0
+the model deterministically re-derives its own consistent MISTAKES, so a stumbled topology
+gets corroborated (re-derived ≥2×) → promoted → locked in → permanent collapse.
+
+**Complete ladder (gpt-oss-120b):** baseline 0.55 (11) · substrate/conformance 0.71 (7) ·
+substrate+streak-breaker 0.50 (6) · prevention/corroboration 0.75 (8). **No trust-layer lever
+beats baseline.** The reason is now clear and general: every trust signal (conformance,
+recency, corroboration) is DOWNSTREAM of the same crystallization coin-flip; you cannot beat a
+coin-flip by re-weighting its outputs. The ~0.5 collapse-rate is INTRINSIC to crystallization
+quality on this task/model. To beat it you must improve the CRYSTALLIZATION itself (the LLM
+distillation step — better prompt/model/structured extraction) or use a stronger model — not
+manage trust over its outputs.
+
+**What the trust layer IS good for (re-scoped, honest):** not raising the aggregate convergence
+rate, but (a) ROBUSTNESS — the streak breaker provably converts permanent lock-in to
+recoverable (a real production win the collapse-rate metric misses); (b) CLEANLINESS — the
+conformance de-confounder keeps trust honest (don't blame the ingredient for cooking). Both are
+worth keeping, config-gated OFF by default. Prevention (corroboration) is built but should stay
+OFF — it can lock in consistent-wrong runbooks; keep the code as a studied negative result.
+
+**Arc closed.** No further retirement/admission variants — the conclusion is robust across
+baseline + 3 retirement variants + prevention. Next real lever (out of this arc's scope) =
+crystallization quality, not trust management. Branch UNMERGED; no effect claimed. Raw:
+eval-loop-N8b-prevention.log.

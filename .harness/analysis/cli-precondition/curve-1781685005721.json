@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "mode": "curve",
+    "generated_at": "2026-06-17T08:30:05.752Z",
+    "commit": "1bd51a99cb422e44af999d0dbd077ca421a642ff",
+    "model": "openai/gpt-oss-120b",
+    "node": "v22.22.3"
+  },
+  "summary": {
+    "runs": 10,
+    "events_by_run": [
+      8,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      12,
+      8
+    ],
+    "discoveryFailures_by_run": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      1
+    ],
+    "installedFirst_by_run": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ],
+    "first_third_events_mean": 6.666666666666667,
+    "last_third_events_mean": 8.666666666666666,
+    "improvement_pct": -0.2999999999999999
+  },
+  "records": [
+    {
+      "label": "run#1",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": false,
+      "ms": 5606
+    },
+    {
+      "label": "run#2",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 4591
+    },
+    {
+      "label": "run#3",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3197
+    },
+    {
+      "label": "run#4",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 2033
+    },
+    {
+      "label": "run#5",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 3432
+    },
+    {
+      "label": "run#6",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 2357
+    },
+    {
+      "label": "run#7",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 2,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 7051
+    },
+    {
+      "label": "run#8",
+      "events": 6,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 3,
+      "discoveryFailures": 0,
+      "installedFirst": true,
+      "order": [
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 11212
+    },
+    {
+      "label": "run#9",
+      "events": 12,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 10,
+      "discoveryFailures": 3,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "use_skill",
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 25555
+    },
+    {
+      "label": "run#10",
+      "events": 8,
+      "converged": true,
+      "goalAchieved": true,
+      "turns": 5,
+      "discoveryFailures": 1,
+      "installedFirst": false,
+      "order": [
+        "use_skill",
+        "install_cli",
+        "use_skill"
+      ],
+      "recallHit": true,
+      "ms": 17428
+    }
+  ]
+}

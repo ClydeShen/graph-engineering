@@ -463,6 +463,92 @@ narrower "quality-gated canonical updates" framing: the loop does not have to st
 in isolation, it has to keep the ingredients it supplies fresh and make their drift cheap for a
 human to see and correct.
 
+### 5.8 Implementing and falsifying the restoring force
+
+The §5.7 direction was built and tested as a falsifiable experiment. Three pieces were needed.
+
+**A deterministic conformance comparator.** The de-confounder is a pure function of the
+ledger, not a second model: it parses a template's prescribed ordering rules ("X before Y")
+from the lesson prose, grounds them in the step vocabulary the actual `task_spawned` DAG used,
+and compares against the actual step order — verdict *conformed* / *violated* / *not-applicable*
+(fail-closed when unjudgeable). This is stronger than the "second nice model judges the output"
+pattern common in the loop-engineering literature and aligns with external-verification practice.
+Soften (on a non-convergent terminal) and graded harden (on convergence) are gated on this
+verdict per template; a cron metabolism sweep retires templates with strong failure evidence
+(Laplace quality ≤ band, evidence ≥ n_min) via reversible logical-delete, surfacing the
+ambiguous middle to a human triage surface rather than deciding it silently.
+
+**A statistical gate.** Because the curve is bimodal (§5.7), a single curve's absolute threshold
+cannot separate a bad draw from a regression. The gate was reframed to run *K* independent
+curves and judge the **collapse-rate** (fraction whose last-three-run mean exceeds the
+turn-cap band), model-pinned. Measured over the eleven curves already on record for this model,
+the **baseline collapse-rate is ≈ 0.55** — the loop collapses more often than not when left to
+crystallize-and-recall alone; the validated "38/0 holds" runs were the favourable ~45%.
+
+**The result — mechanism yes, aggregate effect not shown under power.** With the substrate wired
+in (injections recorded, conformance soften on non-convergence, metabolism between runs), one
+3-curve run measured a collapse-rate of 0.33, *but a subsequent 4-curve run measured 1.00*.
+Combined (5 of 7 curves collapsed ≈ 0.71) this is **not** an improvement over the ~0.55 baseline,
+and the 3-curve 0.33 is best read as an underpowered favourable draw — exactly the single-sample
+trap this benchmark exists to catch (the reproducibility literature puts the requirement at
+~9–15 curves to detect a small effect; three is far short). **The statistical gate did its job:
+it flagged the over-claim that any single curve would have hidden.** No collapse-rate improvement
+is claimed.
+
+What *is* evidenced is **mechanistic**: the restoring force fires and can work. In two separate
+curves a scope crystallized a misleading runbook, later scopes recalled it and collapsed, the
+metabolism sweep then retired it on accumulated failure evidence, and a subsequent cold scope
+re-converged without the bad ingredient — the loop **escaped the collapse attractor** rather than
+amplifying its first mistake forever. The deterministic conformance comparator and the
+recency-weighted retirement behave exactly as specified in isolation (unit + live checks).
+
+**Why the mechanism does not (yet) move the aggregate.** Two reasons, both visible in the logs.
+(1) *Retirement is lagged*: by the time enough conformed-failures accumulate to retire a bad
+ingredient, the curve's last-three-run window has already collapsed — recovery arrives after the
+metric is decided. (2) *Cooking-caused collapse is out of scope by design and dominates some
+samples*: when a collapse comes from the model failing to follow an otherwise-correct runbook,
+the conformance check correctly reads *violated* and the substrate correctly does NOT soften or
+retire the ingredient — so it cannot fix that collapse (the logs show `metabolized=0` across such
+collapsed runs). The substrate addresses ingredient-caused collapse; the residual is composition,
+which the system deliberately does not own.
+
+**The structural ceiling of retirement (settled).** The recall-side brake was then built and
+tested: a template recalled into *k* consecutive non-convergent scopes is retired regardless of
+conformance, so the loop cold-starts. It demonstrably works — recovery immediately after a
+break was observed repeatedly (a curve that recalled a bad runbook, broke it, cold-started, and
+re-converged, twice, and held). It pulled the substrate's collapse-rate back from 0.71 (substrate
+alone, 7 curves) to 0.50 (with the brake, 6 curves) — but **did not beat the ~0.55 baseline**, and
+there is a structural reason it never could: *retirement → cold-start → re-crystallize re-rolls the
+same crystallization lottery, and re-rolling a coin-flip is still a coin-flip.* Every
+retirement-based mechanism (evidence apoptosis, recency, the streak brake) can **restore** the base
+convergence rate — turning "stuck recalling a bad runbook forever" into "recoverable" — but is
+structurally incapable of **exceeding** it. To beat baseline the loop must raise the *quality* of
+what gets crystallized and recalled (prevention / admission control — promote a runbook to
+full-weight recall only after it re-validates), not retire the bad after the fact.
+
+**Prevention, too, fails — and shows why the whole class fails.** The "open lever" was then
+built and tested: topology-corroboration admission control, recalling a runbook at full weight
+only once its WL topology has been independently re-derived (the consolidation merge is the
+corroboration signal). Powered (8 curves) it scored **0.75 — worse than baseline.** The reason is
+decisive: at temperature 0 the model deterministically re-derives its own *consistent mistakes*,
+so a stumbled topology gets corroborated and promoted exactly as a good one would. **Corroboration
+measures consistency, not correctness.** With no retirement escape, a promoted-but-wrong runbook
+locks the loop into sustained collapse.
+
+**The settled conclusion.** Complete ladder on this model: baseline 0.55 · conformance retirement
+0.71 · retirement + streak-brake 0.50 · corroboration admission 0.75. *No trust-layer lever beats
+the baseline*, and the reason is general: every trust signal — conformance, recency, corroboration
+— is **downstream of the same crystallization coin-flip**, and you cannot beat a coin-flip by
+re-weighting its outputs. The ~0.5 collapse-rate is intrinsic to *crystallization quality* on this
+task and model; beating it requires improving the distillation step itself (prompt, structured
+extraction, or a stronger model), not managing trust over its outputs. What the trust layer is
+genuinely for is therefore re-scoped, and on firmer ground: **robustness** (the streak-brake
+provably converts permanent lock-in into recoverable — a production win the collapse-rate metric
+cannot see) and **cleanliness** (the conformance de-confounder keeps trust honest). All mechanisms
+ship config-gated OFF; prevention stays off as a documented negative result. Raw runs:
+`.harness/analysis/eval-loop-substrate-N4.log`, `.../eval-loop-N6-substrate-n5.log`,
+`.../eval-loop-N7-streak.log`, `.../eval-loop-N8b-prevention.log`.
+
 ## 6. Threats to validity
 
 - Model capability; effect scales with hidden structure, not task size. A strong model

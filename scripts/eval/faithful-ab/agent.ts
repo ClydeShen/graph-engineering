@@ -14,6 +14,7 @@ import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
 import type { EmbeddingProvider, LLMProvider } from '@graph/shared';
 import { memReflect } from '@graph/workers/memory/reflect.function';
+import { recordTemplateInjection } from '@graph/workers/memory/template-injection';
 import { checkConvergence, writeScopeClosed } from '@graph/gateway/watchdog-sql';
 import { STEPS, GOAL_TEXT, isReady, missingDeps, type Step } from './dag.js';
 
@@ -75,6 +76,34 @@ function parseAction(raw: string): Action {
   return { kind: 'invalid' };
 }
 
+/**
+ * Bounded retry around an LLM chat call so a transient endpoint hiccup (504 / timeout /
+ * connection reset) does not abort a multi-hour curve campaign. Production already
+ * degrades on transient faults (ADR-55); the eval harness must be at least as robust,
+ * else one upstream 5xx throws away hours of runs (it killed an 8-curve campaign after 2).
+ * Non-transient errors rethrow immediately; transient ones retry with linear backoff.
+ */
+async function chatWithRetry(
+  llm: LLMProvider,
+  messages: Parameters<LLMProvider['chat']>[0],
+  opts: Parameters<LLMProvider['chat']>[1],
+  tries = 4,
+): Promise<string> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await llm.chat(messages, opts);
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const transient = /\b(429|5\d\d|timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|fetch failed|socket hang up)\b/i.test(msg);
+      if (!transient || i === tries - 1) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function decideStep(
   llm: LLMProvider,
   ctx: { injected: string; completed: ReadonlySet<Step>; lastFailure: string | null },
@@ -90,7 +119,8 @@ async function decideStep(
   ];
   if (ctx.lastFailure) parts.push(`Last attempt: ${ctx.lastFailure}`);
   if (ctx.injected) parts.push(`Relevant runbook from past experience:\n${ctx.injected}`);
-  const text = await llm.chat(
+  const text = await chatWithRetry(
+    llm,
     [{ role: 'system', content: system }, { role: 'user', content: parts.join('\n\n') }],
     { temperature: 0 },
   );
@@ -103,8 +133,16 @@ async function countEvents(pool: Pool, scopeId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
-/** Run the task once to (attempted) convergence. Returns a detailed record. */
-export async function runOnce(deps: AgentDeps, label: string, inject: boolean): Promise<{ rec: RunRecord; scopeId: string; head: string }> {
+/**
+ * Run the task once to (attempted) convergence. Returns a detailed record.
+ *
+ * `substrate` (GH #30-#35 → N3) closes the freshness loop the harness used to skip:
+ * it records template_injection for the recalled templates, so converged closure can
+ * conformance-grade the harden AND non-convergent closure can conformance-soften
+ * (both in run.ts). Without it the harness only crystallizes+consolidates (the
+ * pre-substrate baseline).
+ */
+export async function runOnce(deps: AgentDeps, label: string, inject: boolean, substrate = false): Promise<{ rec: RunRecord; scopeId: string; head: string }> {
   const { pool, embed, llm, app, skill } = deps;
   const t0 = Date.now();
   const { scopeId, planHash } = await createScope(app, pool);
@@ -114,6 +152,12 @@ export async function runOnce(deps: AgentDeps, label: string, inject: boolean): 
   });
   const injected = reflection.content;
   const recallHit = inject && /containerize/i.test(injected) && /run_tests/i.test(injected);
+
+  // N3: record which templates were injected (production does this in processAgentTurn;
+  // the harness used to skip it, leaving soften/graded-harden inert on the curve).
+  if (substrate && inject && reflection.proceduralIds.length > 0) {
+    await recordTemplateInjection(pool, scopeId, reflection.proceduralIds, 'cold_start');
+  }
 
   const completed = new Set<Step>();
   const order: string[] = [];

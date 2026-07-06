@@ -14,6 +14,8 @@ import type { EmbeddingProvider } from '@graph/shared';
 import { classifyProviderError } from '@graph/shared';
 import { countTokens } from '@shared/tokenizer';
 import { logger, LOG_EVENTS } from '@shared/logger';
+import type { TemplateStat } from './escalation.js';
+import { FRESHNESS } from './freshness-config.js';
 
 export interface MemReflectInput {
   query_text: string;
@@ -56,6 +58,14 @@ export interface MemReflectOutput {
    * so converged scope closure can reinforce them (Phase 10 reinforcement loop).
    */
   proceduralIds: string[];
+  /**
+   * Per-injected-template freshness, for the mid-flight escalation gate (GH #33):
+   * the Laplace quality_score and the evidence volume (success+failure) of each
+   * template that made it into the output. The gate reads the SAME evidence
+   * signal as the P2 metabolism, at a second read-time (before-act) — a plan that
+   * rests on shaky ingredients surfaces a sparse verification report.
+   */
+  proceduralStats: TemplateStat[];
   /**
    * True when retrieval ran lexical-only (BM25) because the embedding provider
    * was absent or unreachable (ADR 55 D-3). Trail deviation signal — the
@@ -100,6 +110,8 @@ interface ProceduralRow {
   intent_description: string | null;
   template_graph: unknown;
   rrf_score: number;
+  success_count: number;
+  failure_count: number;
 }
 
 async function hybridSearchEpisodic(
@@ -200,23 +212,26 @@ async function hybridSearchProcedural(
   queryText: string,
   limit: number,
   principal: string,
+  promoteThreshold: number,
 ): Promise<ProceduralRow[]> {
   // Three-signal rerank per P0-B decision: rrf_norm×0.6 + quality×0.3 + recency×0.1.
   // rrf_score is normalized against the pool max — raw RRF (~0.01 scale) would be
   // drowned by quality/recency (0..1 scale). See ADR-25 supplement 2 D-5.
+  // $5 = promotion gate (prevention): only recall runbooks whose topology has been
+  // re-derived >= promoteThreshold times. 0 → `>= 0` is a no-op (current behaviour).
   const { rows } = await pool.query<ProceduralRow>(
     `WITH
        vector_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY intent_embedding <=> $1::vector) AS vector_rank
          FROM procedural_memory
-         WHERE is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
+         WHERE is_anti_pattern = FALSE AND superseded_by IS NULL AND corroboration_count >= $5 AND ${visibilityFilter(4)}
          ORDER BY intent_embedding <=> $1::vector
          LIMIT 20
        ),
        bm25_candidates AS (
          SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(ts_doc, query) DESC) AS bm25_rank
          FROM procedural_memory, plainto_tsquery('english', $2) AS query
-         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND superseded_by IS NULL AND ${visibilityFilter(4)}
+         WHERE ts_doc @@ query AND is_anti_pattern = FALSE AND superseded_by IS NULL AND corroboration_count >= $5 AND ${visibilityFilter(4)}
          LIMIT 20
        ),
        all_candidates AS (
@@ -236,6 +251,7 @@ async function hybridSearchProcedural(
        scored AS (
          SELECT
            p.id, p.intent_description, p.template_graph, r.rrf_score,
+           p.success_count, p.failure_count,
            r.rrf_score / NULLIF(MAX(r.rrf_score) OVER (), 0)              AS rrf_norm,
            ((p.success_count::FLOAT + 1.0) /
             (p.success_count + p.failure_count + 1.0))                    AS quality_score,
@@ -245,12 +261,12 @@ async function hybridSearchProcedural(
          FROM rrf_scored r
          JOIN procedural_memory p ON r.id = p.id
        )
-     SELECT id, intent_description, template_graph, rrf_score,
+     SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count,
             (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) AS final_score
      FROM scored
      ORDER BY final_score DESC
      LIMIT $3`,
-    [queryEmbeddingLiteral, queryText, limit, principal],
+    [queryEmbeddingLiteral, queryText, limit, principal, promoteThreshold],
   );
   return rows;
 }
@@ -301,20 +317,21 @@ async function bm25SearchProcedural(
   queryText: string,
   limit: number,
   principal: string,
+  promoteThreshold: number,
 ): Promise<ProceduralRow[]> {
   // Three-signal rerank preserved (quality 0.3 + recency 0.1); the rrf_norm
-  // component degenerates to BM25-rank normalization.
+  // component degenerates to BM25-rank normalization. $4 = promotion gate (0 = no-op).
   const { rows } = await pool.query<ProceduralRow>(
     `WITH bm25_scored AS (
        SELECT p.id, p.intent_description, p.template_graph,
               p.success_count, p.failure_count, p.last_used_at,
               0.4 * (1.0 / (60 + ROW_NUMBER() OVER (ORDER BY ts_rank_cd(p.ts_doc, query) DESC))) AS rrf_score
        FROM procedural_memory p, plainto_tsquery('english', $1) AS query
-       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND p.superseded_by IS NULL AND ${visibilityFilter(3)}
+       WHERE p.ts_doc @@ query AND p.is_anti_pattern = FALSE AND p.superseded_by IS NULL AND p.corroboration_count >= $4 AND ${visibilityFilter(3)}
        LIMIT 20
      ),
      scored AS (
-       SELECT id, intent_description, template_graph, rrf_score,
+       SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count,
               rrf_score / NULLIF(MAX(rrf_score) OVER (), 0)         AS rrf_norm,
               ((success_count::FLOAT + 1.0) /
                (success_count + failure_count + 1.0))               AS quality_score,
@@ -323,11 +340,11 @@ async function bm25SearchProcedural(
               ))                                                    AS recency_score
        FROM bm25_scored
      )
-     SELECT id, intent_description, template_graph, rrf_score
+     SELECT id, intent_description, template_graph, rrf_score, success_count, failure_count
      FROM scored
      ORDER BY (COALESCE(rrf_norm, 0) * 0.6 + quality_score * 0.3 + recency_score * 0.1) DESC
      LIMIT $2`,
-    [queryText, limit, principal],
+    [queryText, limit, principal, promoteThreshold],
   );
   return rows;
 }
@@ -477,11 +494,26 @@ export async function memReflect(
   // Step 1 — Procedural (positive templates, three-signal rerank)
   let procText = '';
   let proceduralIds: string[] = [];
+  let proceduralStats: TemplateStat[] = [];
   if (injectProcedural) {
+    const promote = FRESHNESS.recallPromoteThreshold;
     const procRows = degraded
-      ? await bm25SearchProcedural(pool, input.query_text, limit, principal)
-      : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal);
+      ? await bm25SearchProcedural(pool, input.query_text, limit, principal, promote)
+      : await hybridSearchProcedural(pool, queryEmbeddingLiteral!, input.query_text, limit, principal, promote);
     ({ text: procText, ids: proceduralIds } = formatProcedural(procRows, budget));
+    // Per-template freshness for the mid-flight gate (GH #33): only the templates
+    // that actually made it into the output (proceduralIds), in that order.
+    const byId = new Map(procRows.map((r) => [r.id, r]));
+    proceduralStats = proceduralIds.map((id) => {
+      const r = byId.get(id)!;
+      const evidence = r.success_count + r.failure_count;
+      return {
+        id,
+        quality_score: (r.success_count + 1) / (evidence + 1), // Laplace
+        evidence,
+        intent_description: r.intent_description,
+      };
+    });
   }
   const pTokens = countTokens(procText);
 
@@ -521,6 +553,7 @@ export async function memReflect(
     tokens: pTokens + aTokens + eTokens + sTokens,
     sections: { procedural: procText, antiPatterns: antiText, episodic: epiText, semantic: semText },
     proceduralIds,
+    proceduralStats,
     degraded,
   };
 }

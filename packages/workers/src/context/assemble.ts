@@ -93,6 +93,13 @@ export interface AssembledContext {
    * only — the agent chooses; the system orders the evidence.
    */
   capabilityContent?: string;
+  /**
+   * Mid-flight verification report (GH #33, P3): present only when the plan rests
+   * on shaky recalled procedures (well-evidenced but below the quality floor).
+   * Sparse — the shaky templates' key steps + success-rate — for human
+   * verification before the agent commits. Absent → proceed silently.
+   */
+  verificationReport?: string;
 }
 
 /**

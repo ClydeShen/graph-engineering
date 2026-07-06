@@ -193,9 +193,33 @@ export interface LlmOverridesInput {
   embedding?: LlmOverrideSlotInput;
 }
 
+/** An ambiguous crystallization surfaced for human triage (GH #32/#34). */
+export interface TriageCandidate {
+  id: string;
+  content: string | null;
+  intent_description: string | null;
+  success_count: number;
+  failure_count: number;
+  quality_score: number;
+  injection_count: number;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `${path} → ${res.status}`);
+  }
   return (await res.json()) as T;
 }
 
@@ -214,6 +238,12 @@ export const api = {
   lineage: (scopeId: string) =>
     getJson<LineageResponse>(`/v1/scopes/${encodeURIComponent(scopeId)}/lineage`),
   emergence: (limit = 100) => getJson<EmergenceResponse>(`/v1/emergence?limit=${limit}`),
+  triage: () => getJson<{ triage: TriageCandidate[] }>('/v1/memory/triage'),
+  triageFeedback: (id: string, outcome: 'success' | 'failure') =>
+    postJson<{ ok: boolean }>(`/v1/memory/templates/${encodeURIComponent(id)}/feedback`, { outcome }),
+  triageRetire: (id: string) => postJson<{ retired: boolean }>(`/v1/memory/templates/${encodeURIComponent(id)}/retire`),
+  triageReinstate: (id: string) =>
+    postJson<{ reinstated: boolean }>(`/v1/memory/templates/${encodeURIComponent(id)}/reinstate`),
   allArtifacts: (limit = 200) => getJson<ArtifactMeta[]>(`/v1/artifacts?limit=${limit}`),
   sysConfig: () => getJson<SysConfig>('/v1/sys/config'),
   saveLlmOverrides: async (body: LlmOverridesInput): Promise<{ ok: boolean; applied: string }> => {
